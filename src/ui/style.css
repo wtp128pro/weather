@@ -1,0 +1,149 @@
+/* Style of the weather main window (loaded by WxApp at start-up). The charts, the hour strip and
+ * the day list colour themselves (src/widgets); only the rest is styled here. */
+
+/* ---- place list ---------------------------------------------------------------------------- */
+
+.wx-row {
+  padding: 10px 12px;
+}
+
+.wx-row .wx-row-name {
+  font-weight: 700;
+}
+
+.wx-row .wx-row-region,
+.wx-row .wx-row-hint {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.wx-row .wx-row-temp {
+  font-size: 1.6em;
+  font-weight: 300;
+  font-feature-settings: "tnum";
+}
+
+.wx-row .wx-row-marker {
+  font-size: 0.75em;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #5e4400;
+  background: #f6d32d;
+}
+
+/* Data that is not up to date (offline or a failed refresh): shown, but dimmed. */
+.wx-row.dim .wx-row-temp,
+.wx-row.dim .wx-row-hint,
+.wx-row.dim .wx-row-icon {
+  opacity: 0.55;
+}
+
+.wx-row.empty .wx-row-temp {
+  opacity: 0.4;
+}
+
+/* Dropping another row here moves it to this position. */
+.wx-row:drop(active) {
+  box-shadow: inset 0 2px 0 0 #3584e4;
+}
+
+/* ---- first run ----------------------------------------------------------------------------- */
+
+.wx-empty-title {
+  font-size: 1.6em;
+  font-weight: 700;
+}
+
+.wx-chip {
+  padding: 6px 16px;
+  border-radius: 999px;
+}
+
+/* ---- picker -------------------------------------------------------------------------------- */
+
+.wx-picker .wx-picker-label {
+  font-weight: 600;
+}
+
+.wx-picker .wx-picker-added {
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+
+/* ---- sources page -------------------------------------------------------------------------- */
+
+.wx-sources-title {
+  font-weight: 700;
+}
+
+/* ---- detail pane --------------------------------------------------------------------------- */
+
+.wx-detail-content {
+  padding: 16px 20px;
+}
+
+.wx-detail-placeholder {
+  padding: 48px 24px;
+}
+
+.wx-detail-placeholder-title {
+  font-size: 1.4em;
+  font-weight: 700;
+}
+
+.wx-detail-place {
+  font-size: 1.4em;
+  font-weight: 700;
+}
+
+.wx-detail-temp {
+  font-size: 56px;
+  font-weight: 300;
+  font-feature-settings: "tnum";
+}
+
+.wx-detail-condition {
+  font-size: 1.2em;
+  font-weight: 600;
+}
+
+.wx-detail-feels,
+.wx-detail-highlow,
+.wx-detail-wind {
+  opacity: 0.75;
+}
+
+.wx-card {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: alpha(currentColor, 0.06);
+}
+
+.wx-card-title,
+.wx-section-title {
+  font-weight: 700;
+}
+
+.wx-detail-rain-headline {
+  font-size: 1.15em;
+  font-weight: 700;
+}
+
+.wx-badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+  color: #5e4400;
+  background: #f6d32d;
+}
+
+.wx-detail-footer,
+.wx-detail-attribution,
+.wx-detail-partial {
+  font-size: 0.85em;
+}
+
+.wx-detail-partial {
+  color: #9a6700;
+}

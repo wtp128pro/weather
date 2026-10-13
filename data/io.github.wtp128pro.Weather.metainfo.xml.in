@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.wtp128pro.Weather</id>
+  <name>Weather</name>
+  <summary>Weather forecasts blended from several free sources</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="io.github.wtp128pro">
+    <name>wtp128pro</name>
+  </developer>
+  <description>
+    <p>
+      Weather is a small GTK4 desktop weather app. It keeps a list of places
+      you add by searching worldwide, and shows for each the current
+      conditions, when rain starts or ends, an hourly forecast and a daily
+      forecast. In the contiguous United States (a bounding box that also
+      covers parts of Canada, Mexico and the Caribbean) it also shows a
+      15-minute rain nowcast for the next two hours. Temperatures use
+      Fahrenheit, mph and inches by default; one switch changes to Celsius,
+      km/h and millimetres.
+    </p>
+    <p>
+      Each forecast blends several free sources: Open-Meteo, the US National
+      Weather Service (United States only) and MET Norway. The blend uses
+      fixed weights that are rules of thumb, not statistics measured from past
+      accuracy; no accuracy figure is claimed. Any source can be switched off,
+      and a local cache keeps the last forecast visible when offline.
+    </p>
+    <p>
+      Weather needs no account and no API key, sends no telemetry and reads no
+      location by itself: it only asks the sources about the places you add.
+      It is not affiliated with, endorsed by or sponsored by Open-Meteo, MET
+      Norway or NOAA.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.wtp128pro.Weather.desktop</launchable>
+  <provides>
+    <binary>weather</binary>
+  </provides>
+  <url type="homepage">https://github.com/wtp128pro/weather</url>
+  <url type="bugtracker">https://github.com/wtp128pro/weather/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-10-13">
+      <description>
+        <p>First release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
