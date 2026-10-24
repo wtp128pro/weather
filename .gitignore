@@ -35,3 +35,4 @@ vgcore.*
 
 # Orchestration work directory
 .omp_wip/
+.wip/

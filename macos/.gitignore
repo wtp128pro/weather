@@ -1,0 +1,6 @@
+# Xcode per-user IDE state: written by Xcode for each user, never shared.
+xcuserdata/
+*.xcuserstate
+
+# Finder metadata
+.DS_Store
