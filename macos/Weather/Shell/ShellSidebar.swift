@@ -4,15 +4,18 @@
 // ShellSidebar.swift - the "main" page: the place list beside the detail pane
 // (wx-window.c:928-947, 1125-1137; ui-widgets.md §2 items 5, 14, 15). Sidebar minimum 340 and
 // detail minimum 480 (wx-window.c:11-12). The GTK paned's start child cannot shrink
-// (wx-window.c:1135): NavigationSplitView lets a divider drag to the edge or toggleSidebar:
-// collapse the sidebar, so the column visibility is forced back to .all whenever it changes
-// (no toolbar toggle; SidebarCommands is not added, so there is no Hide Sidebar menu item).
+// (wx-window.c:1135): SidebarSplitViewGuard sets the sidebar NSSplitViewItem.canCollapse = false
+// and strips the hidden Toggle Sidebar (⌥⌘S) key equivalent so toggleSidebar: validates disabled
+// and never collapses or bounces the sidebar, while the column visibility binding is also forced
+// back to .all whenever it changes as a backstop (no toolbar toggle; SidebarCommands is not added,
+// so there is no Hide Sidebar menu item).
 // Single selection that cannot be emptied (GtkSingleSelection, wx-window.c:928-930): the List
 // uses the non-optional selection binding, so the table keeps a highlighted row, and only a
 // saved place's key is passed to AppModel.select (nil or an unknown key would empty the
 // selection, test-window.c:2351-2356); AppModel itself selects the first row / a neighbour
 // (autoselect, wx-window.c:929-930, 1150).
 
+import AppKit
 import SwiftUI
 import WeatherCore
 
@@ -41,6 +44,7 @@ struct ShellSidebar: View {
             }
             .accessibilityLabel(RowViewModel.listAccessibilityLabel)
             .navigationSplitViewColumnWidth(min: Self.sidebarMinWidth, ideal: Self.sidebarMinWidth)
+            .background(SidebarSplitViewGuard())
         } detail: {
             DetailView(place: model.selectedPlace)
                 .frame(minWidth: Self.detailMinWidth)
@@ -49,6 +53,61 @@ struct ShellSidebar: View {
         .onChange(of: columns) { _, new in
             if new != .all {
                 columns = .all
+            }
+        }
+    }
+
+    /// Prevents the enclosing NSSplitViewController from collapsing the sidebar on divider drag or
+    /// toggleSidebar: (⌥⌘S), and disables the hidden Toggle Sidebar key equivalent in the main menu.
+    private struct SidebarSplitViewGuard: NSViewRepresentable {
+        func makeNSView(context: Context) -> GuardView {
+            GuardView()
+        }
+
+        func updateNSView(_ nsView: GuardView, context: Context) {
+            nsView.configureSplitView()
+        }
+
+        final class GuardView: NSView {
+            override func viewDidMoveToWindow() {
+                super.viewDidMoveToWindow()
+                configureSplitView()
+            }
+
+            override func layout() {
+                super.layout()
+                configureSplitView()
+            }
+
+            func configureSplitView() {
+                var current: NSView? = self
+                while let view = current {
+                    if let splitView = view as? NSSplitView,
+                       let controller = splitView.delegate as? NSSplitViewController,
+                       let sidebarItem = controller.splitViewItems.first
+                    {
+                        if sidebarItem.canCollapse {
+                            sidebarItem.canCollapse = false
+                        }
+                        break
+                    }
+                    current = view.superview
+                }
+                if let mainMenu = NSApp?.mainMenu {
+                    Self.disableToggleSidebarMenuItems(in: mainMenu)
+                }
+            }
+
+            private static func disableToggleSidebarMenuItems(in menu: NSMenu) {
+                for item in menu.items {
+                    if item.action == #selector(NSSplitViewController.toggleSidebar(_:)) {
+                        item.allowsKeyEquivalentWhenHidden = false
+                        item.keyEquivalent = ""
+                    }
+                    if let submenu = item.submenu {
+                        disableToggleSidebarMenuItems(in: submenu)
+                    }
+                }
             }
         }
     }

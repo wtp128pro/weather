@@ -76,11 +76,16 @@ public final class METNorwayProvider: WxProvider {
     let http: HTTPClient
     /// The provider's time source (C: clock_now_s).
     let clock: any WxClock
+#if DEBUG
     /// Test-only probe run when a fetch has its outcome, right before the
     /// cancellation check that decides what it returns (lets a test cancel a
     /// fetch "between completion and finish", test-metno.c:3654-3670). Always
     /// nil in production; immutable once constructed.
     private let outcomeProbe: (@Sendable () -> Void)?
+    /// Test-only probe run in `runFlight` after parsing the response and before
+    /// the final lock that commits the result to the cache.
+    private let parseProbe: (@Sendable () -> Void)?
+#endif
     private let state = Mutex(State())
 
     // MARK: Construction (wx-metno.c:1248-1270)
@@ -100,9 +105,10 @@ public final class METNorwayProvider: WxProvider {
             // C: g_assert_no_error - constants the HTTP client accepts.
             preconditionFailure("METNorwayParse.baseURL refused: \(error)")
         }
-        self.init(http: http, clock: clock, outcomeProbe: nil)
+        self.init(http: http, clock: clock)
     }
 
+#if DEBUG
     /// wx_metno_new_custom (TEST ONLY, reached through @testable): another
     /// origin or timing, e.g. a loopback fake server and short delays. The
     /// origin is validated by HTTPClientPolicy ("https://" origins, "http://"
@@ -112,7 +118,8 @@ public final class METNorwayProvider: WxProvider {
     init(
         testingBaseURL baseURL: String, timeoutMs: Int, backoffBaseMs: Int,
         clock: any WxClock, httpClock: any WxClock = SystemClock(),
-        outcomeProbe: (@Sendable () -> Void)? = nil
+        outcomeProbe: (@Sendable () -> Void)? = nil,
+        parseProbe: (@Sendable () -> Void)? = nil
     ) throws(WxError) {
         let http = try HTTPClient(
             baseURL: baseURL, userAgent: METNorwayParse.userAgent, timeoutMs: timeoutMs,
@@ -120,12 +127,17 @@ public final class METNorwayProvider: WxProvider {
         self.http = http
         self.clock = clock
         self.outcomeProbe = outcomeProbe
+        self.parseProbe = parseProbe
     }
+#endif
 
-    private init(http: HTTPClient, clock: any WxClock, outcomeProbe: (@Sendable () -> Void)?) {
+    private init(http: HTTPClient, clock: any WxClock) {
         self.http = http
         self.clock = clock
-        self.outcomeProbe = outcomeProbe
+#if DEBUG
+        self.outcomeProbe = nil
+        self.parseProbe = nil
+#endif
     }
 
     // MARK: WxProvider
@@ -157,7 +169,9 @@ public final class METNorwayProvider: WxProvider {
         } onCancel: {
             self.cancelWaiter(call)
         }
+#if DEBUG
         outcomeProbe?()
+#endif
         // A cancelled task always gets CancellationError (wx-provider.h:32-35).
         try Task.checkCancellation()
         switch outcome {
@@ -443,10 +457,15 @@ public final class METNorwayProvider: WxProvider {
                 }
             }
         }
-        let resolved = outcome
-        let continuations: [CheckedContinuation<Outcome, Never>] = state.withLock { s in
+#if DEBUG
+        parseProbe?()
+#endif
+        let resolvedOutcome = outcome
+        let (continuations, resolved): ([CheckedContinuation<Outcome, Never>], Outcome) = state.withLock { s in
             s.delist(flightID)
-            switch resolved {
+            let cancelled = (s.flights[flightID]?.waiters.isEmpty ?? true) || Task.isCancelled
+            let finalOutcome = cancelled ? .cancelled : resolvedOutcome
+            switch finalOutcome {
             case .member(let member):
                 if let response {
                     s.store(key, member, lastModified: storeLastModified, expiresS: response.expiresS, nowS: now)
@@ -463,13 +482,13 @@ public final class METNorwayProvider: WxProvider {
                     ready.append(continuation)
                     s.waiters[call] = nil
                 case .added:
-                    s.waiters[call] = .finished(resolved)
+                    s.waiters[call] = .finished(finalOutcome)
                 case .finished, nil:
                     break
                 }
             }
             s.flights[flightID] = nil
-            return ready
+            return (ready, finalOutcome)
         }
         for continuation in continuations {
             continuation.resume(returning: resolved)
@@ -478,6 +497,7 @@ public final class METNorwayProvider: WxProvider {
         state.withLock { $0.outstanding -= 1 }
     }
 
+#if DEBUG
     // MARK: Test support
 
     /// The number of requests whose HTTP operation is not yet released (C: outstanding).
@@ -485,4 +505,8 @@ public final class METNorwayProvider: WxProvider {
 
     /// The number of fetches waiting for a request in flight.
     var waiterCount: Int { state.withLock { s in s.flights.values.reduce(0) { $0 + $1.waiters.count } } }
+
+    /// The number of cached entries currently held.
+    var cacheEntryCount: Int { state.withLock { $0.cache.count } }
+#endif
 }

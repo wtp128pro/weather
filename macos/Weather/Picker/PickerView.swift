@@ -90,7 +90,7 @@ struct PickerView: View {
             // on the next turn: an update made while the field is still delivering the edit is
             // dropped by the field.
             Task { @MainActor in
-                if draft != viewModel.text {
+                if !draft.utf8.elementsEqual(viewModel.text.utf8) {
                     draft = viewModel.text
                 }
             }
@@ -104,7 +104,7 @@ struct PickerView: View {
     private func edit(_ newText: String) {
         viewModel.textChanged(to: newText)
         draft = newText
-        if viewModel.text != newText {
+        if !viewModel.text.utf8.elementsEqual(newText.utf8) {
             Task { @MainActor in
                 draft = viewModel.text
                 fieldAnchor.show(viewModel.text)
@@ -168,7 +168,7 @@ extension PickerView {
         /// editor recorded no longer match its text (Undo would raise NSRangeException): they are
         /// dropped, and the field's undo history starts again after a cut edit.
         func show(_ text: String) {
-            guard let editor, editor.string != text else {
+            guard let editor, !editor.string.utf8.elementsEqual(text.utf8) else {
                 return
             }
             let removed = (editor.string as NSString).length - (text as NSString).length

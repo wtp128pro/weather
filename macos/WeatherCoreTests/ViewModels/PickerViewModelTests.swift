@@ -1497,4 +1497,36 @@ struct PickerViewModelTests {
         #expect(page.addSuggestion(at: -1) == nil)
         #expect(fx.model.places.count == 1)
     }
+
+    @Test("utf8 byte equality: replacing NFC with NFD updates bytes and triggers a fresh search")
+    func utf8ByteEqualityNfcAndNfd() async throws {
+        let fx = try await Fx.make("utf8-nfc-nfd")
+        defer { fx.finish() }
+        let nfc = "\u{00E9}"          // [0xC3, 0xA9] (2 UTF-8 bytes, 1 letter -> searchable)
+        let nfd = "e\u{0301}"         // [0x65, 0xCC, 0x81] (3 UTF-8 bytes)
+        #expect(nfc == nfd)
+        #expect(!nfc.utf8.elementsEqual(nfd.utf8))
+
+        fx.vm.setText(nfc)
+        #expect(Array(fx.vm.text.utf8) == [0xC3, 0xA9])
+        fx.vm.submit()
+        #expect(await fx.waitRequests(1))
+        #expect(fx.geocoder.text(0).map { Array($0.utf8) } == [0xC3, 0xA9])
+
+        // Replacing NFC with NFD via textChanged updates the stored UTF-8 bytes and triggers a
+        // fresh search on submit (not suppressed by repeatsLatestSearch).
+        fx.vm.textChanged(to: nfd)
+        #expect(Array(fx.vm.text.utf8) == [0x65, 0xCC, 0x81])
+        fx.vm.submit()
+        #expect(await fx.waitRequests(2))
+        #expect(fx.geocoder.text(1).map { Array($0.utf8) } == [0x65, 0xCC, 0x81])
+
+        // Replacing NFD back with NFC via setText also updates the stored UTF-8 bytes and searches
+        // after the debounce timer fires.
+        fx.vm.setText(nfc)
+        #expect(Array(fx.vm.text.utf8) == [0xC3, 0xA9])
+        await fx.clock.advance(by: delayUs)
+        #expect(await fx.waitRequests(3))
+        #expect(fx.geocoder.text(2).map { Array($0.utf8) } == [0xC3, 0xA9])
+    }
 }

@@ -1172,6 +1172,13 @@ struct HTTPClientTests {
             #expect(Self.milliseconds(ContinuousClock.now - begin) < 1000)         // test-http.c:4329
             #expect(server.requestCount == sentBefore)                              // test-http.c:4331
             #expect(server.requestCount <= HTTPPolicy.maxInflight)                  // test-http.c:4332
+            // A pre-cancelled caller at the cap gets CancellationError, not RATE_LIMITED (wx-http.c:2054, 2080).
+            let cancelledAtCap = await Task {
+                withUnsafeCurrentTask { $0?.cancel() }
+                return await Self.fetch(http)
+            }.value
+            #expect(Self.isCancelled(cancelledAtCap))
+            #expect(server.requestCount == sentBefore)
             for task in tasks { task.cancel() }
             for task in tasks { #expect(Self.isCancelled(await task.value)) }
             let again = Self.start(http)

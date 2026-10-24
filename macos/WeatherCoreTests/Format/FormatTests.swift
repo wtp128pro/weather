@@ -403,10 +403,10 @@ import Testing
 
     /// One zone of /format/local-day-end/all-zones: mismatches as text.
     static func allZonesCheck(_ name: String) -> (checked: Int, failures: [String]) {
-        guard let z = TimeZone(identifier: name) else {
+        let zone = WxFormat.Zone(timezone: name)
+        guard zone.resolved, let z = TimeZone(identifier: name) else {
             return (0, [])
         }
-        let zone = WxFormat.Zone(timezone: name)
         // test-format.c:584-593
         var offs: [Int64] = stride(from: -30, through: 30, by: 6).map { Int64($0) * 3600 }
         offs += [-1, 1, -3600, 3600, -13 * 3600, 13 * 3600]
@@ -1046,17 +1046,26 @@ import Testing
     // PINNED DIFFERENCES of THE TIME ZONE RULE (DECISIONS #41, shared with
     // WxDaily.lookedUpName): case variants are UTC (as test-blend.c:4907
     // asserts; unmodified C on case-insensitive APFS opens the zone), and
-    // the ICU-only legacy names resolve (C: UTC, unresolved). SystemV/AST4 is
-    // a fixed UTC-4 zone, so 19:00Z is 3 PM there.
-    @Test("pinned: zone names are case sensitive; ICU-only legacy names resolve (DECISIONS #41)") func pinnedZoneNames() {
+    // the 15 ICU-only legacy names absent from /usr/share/zoneinfo are
+    // rejected so they fall back to UTC (unresolved) as in C.
+    @Test("pinned: zone names are case sensitive; ICU-only legacy names fall back to UTC (DECISIONS #41)") func pinnedZoneNames() {
         let t = Self.ts(2026, 10, 11, 19, 0, 0)
         for name in ["america/new_york", "AMERICA/NEW_YORK", "asia/kathmandu"] {
             #expect(WxFormat.hourLabel(t, timezone: name) == "7 PM", "\(name)")
             #expect(!WxFormat.Zone(timezone: name).resolved, "\(name)")
         }
-        let ast4 = WxFormat.Zone(timezone: "SystemV/AST4")
-        #expect(ast4.resolved)
-        #expect(WxFormat.hourLabel(t, zone: ast4) == "3 PM")
+        let legacyNames = [
+            "SystemV/AST4", "SystemV/AST4ADT", "SystemV/CST6", "SystemV/CST6CDT",
+            "SystemV/EST5", "SystemV/EST5EDT", "SystemV/HST10", "SystemV/MST7",
+            "SystemV/MST7MDT", "SystemV/PST8", "SystemV/PST8PDT", "SystemV/YST9",
+            "SystemV/YST9YDT", "US/Pacific-New", "Canada/East-Saskatchewan",
+        ]
+        #expect(Set(legacyNames) == WxFormat.Zone.legacyICUTimezones)
+        for name in legacyNames {
+            let zone = WxFormat.Zone(timezone: name)
+            #expect(!zone.resolved, "\(name)")
+            #expect(WxFormat.hourLabel(t, zone: zone) == "7 PM", "\(name)")
+        }
     }
 
     // C contract: WxHeldZone (src/widgets/wx-widget-util.h:52-104,

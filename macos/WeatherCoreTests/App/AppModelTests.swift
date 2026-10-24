@@ -215,6 +215,25 @@ private final class Fx {
         return m
     }
 
+    /// Runs `m.flush()` while arming a real-time watchdog that advances `clock` by
+    /// `AppModel.shutdownWaitMs * 1000` if `flush()` stays suspended on `clock` past a real-time
+    /// grace window (so a mutant that fails to drain or cancel requests trips its 5 s drain timer
+    /// and fails `#expect(ok)` and `#expect(elapsedUs < ...)` instead of hanging the test runner;
+    /// a healthy slow worker still finishes with 0 us on `clock`).
+    func flushWithLiveDeadline(_ m: AppModel) async -> (ok: Bool, elapsedUs: Int64) {
+        let clock = self.clock
+        let t0 = clock.monotonicMicroseconds
+        let watchdog = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            await clock.advance(by: AppModel.shutdownWaitMs * 1000)
+        }
+        defer { watchdog.cancel() }
+        let ok = await m.flush()
+        let elapsedUs = clock.monotonicMicroseconds - t0
+        return (ok, elapsedUs)
+    }
+
     /// fx_stop (test-window.c:648-661): flush (the shutdown) and release the model; returns the
     /// flush result and how long it took in milliseconds on the fixture clock - the clock the
     /// model's 5 s limit runs on, as C measures g_get_monotonic_time() for its own limit
@@ -224,9 +243,7 @@ private final class Fx {
         guard let m = model else {
             return (true, 0)
         }
-        let t0 = clock.monotonicMicroseconds
-        let ok = await m.flush()
-        let elapsedUs = clock.monotonicMicroseconds - t0
+        let (ok, elapsedUs) = await flushWithLiveDeadline(m)
         model = nil
         return (ok, elapsedUs / 1000)
     }
@@ -472,16 +489,20 @@ struct AppModelTests {
         try fx.storePlaces([try miami()])
         let m = AppModel(registry: fx.registry, storage: fx.storage, clock: fx.clock, online: true)
         fx.model = m
-        let loader = Task.immediate { @MainActor in await m.load() }  // the load is running on its worker
+        var loadReturned = false
+        let loader = Task.immediate { @MainActor in
+            await m.load()
+            loadReturned = true
+        }  // the load is running on its worker
         m.setVisible(true)
-        let t0 = fx.clock.monotonicMicroseconds  // the clock of the model's limit, test-window.c:3412
-        let ok = await m.flush()
-        let elapsedUs = fx.clock.monotonicMicroseconds - t0
+        let (ok, elapsedUs) = await fx.flushWithLiveDeadline(m)  // the clock of the model's limit, test-window.c:3412-3413
+        #expect(loadReturned)  // shutdown waits for the load to finish (wx-app.c:325, test-window.c:3409)
         await loader.value
         #expect(ok)
         #expect(elapsedUs < AppModel.shutdownWaitMs * 1000)  // test-window.c:3414
         #expect(m.places.isEmpty)  // test-window.c:3415
         #expect(!m.isLoaded)
+        #expect(!FileManager.default.fileExists(atPath: fx.storage.settingsPath))
         #expect(fx.a.fetchCount == 0)  // test-window.c:3417
         #expect(m.requestsStarted == 0)
         fx.model = nil
@@ -1513,16 +1534,20 @@ struct AppModelTests {
         let m = AppModel(registry: fx.registry, storage: fx.storage, clock: fx.clock, online: true)
         fx.model = m
         m.testLoadWorkerFirst = true
-        let loader = Task.immediate { @MainActor in await m.load() }  // the worker has already finished
+        var loadReturned = false
+        let loader = Task.immediate { @MainActor in
+            await m.load()
+            loadReturned = true
+        }  // the worker has already finished
         m.setVisible(true)
-        let t0 = fx.clock.monotonicMicroseconds  // the clock of the model's limit, test-window.c:3412
-        let ok = await m.flush()  // test-window.c:3413
-        let elapsedUs = fx.clock.monotonicMicroseconds - t0
+        let (ok, elapsedUs) = await fx.flushWithLiveDeadline(m)  // test-window.c:3412-3413
+        #expect(loadReturned)  // wx-app.c:325, test-window.c:3409
         await loader.value
         #expect(ok)
         #expect(elapsedUs < AppModel.shutdownWaitMs * 1000)  // test-window.c:3414
         #expect(m.places.isEmpty)  // test-window.c:3415
         #expect(!m.isLoaded)
+        #expect(!FileManager.default.fileExists(atPath: fx.storage.settingsPath))
         #expect(fx.a.fetchCount == 0)  // test-window.c:3417
         #expect(m.requestsStarted == 0)
         fx.model = nil
@@ -1542,23 +1567,62 @@ struct AppModelTests {
         m.setVisible(true)
         let flushed = FlushBox()
         m.testLoadWorkerFirst = true
-        m.testLoadAfterWorkerResume = { [m] in
+        m.testLoadAfterWorkerResume = { [weak m, fx] in
             Task { @MainActor in  // queued on the main actor from the worker thread
+                guard let m else { return }
                 flushed.started = true
-                flushed.ok = await m.flush()
+                flushed.ok = (await fx.flushWithLiveDeadline(m)).ok
             }
         }
         let t0 = fx.clock.monotonicMicroseconds  // test-window.c:3412
         await m.load()
+        m.testLoadAfterWorkerResume = nil
         #expect(await waitFor { flushed.ok != nil })
         #expect(flushed.started)
         #expect(flushed.ok == true)
         #expect(fx.clock.monotonicMicroseconds - t0 < AppModel.shutdownWaitMs * 1000)  // test-window.c:3414
         #expect(m.places.isEmpty)  // test-window.c:3415
         #expect(!m.isLoaded)
+        #expect(!FileManager.default.fileExists(atPath: fx.storage.settingsPath))
         #expect(fx.a.fetchCount == 0)  // test-window.c:3417
         #expect(m.requestsStarted == 0)
         fx.model = nil
+    }
+
+    @Test func cancelledLoadTaskWritesNoSettingsAndRemainderFlushLogsFiveSeconds() async throws {
+        let fx = try Fx("cancelled-load-and-remainder-log")
+        try fx.storePlaces([try miami()])
+        let m = AppModel(registry: fx.registry, storage: fx.storage, clock: fx.clock, online: true,
+                         log: { level, message in fx.logs.lines.append((level, message)) })
+        fx.model = m
+        let loadTask = Task { @MainActor in
+            await m.load()
+            return m
+        }
+        loadTask.cancel()
+        _ = await loadTask.value
+        let ok = await m.flush(timeout: 3.0)
+        #expect(ok)
+        #expect(m.isShuttingDown)
+        #expect(!m.isLoaded)
+        #expect(m.places.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: fx.storage.settingsPath))
+        fx.model = nil
+
+        // A remainder flush(timeout: 3.0) that times out logs the full 5000 ms budget (wx-app.c:2004).
+        let fx2 = try Fx("remainder-flush-log")
+        let m2 = await fx2.start()
+        #expect(m2.add(try miami()) == .added)
+        let hold = Hold()
+        m2.testSaveHook = { _ in await hold.wait() }
+        let flushing = Task.immediate { @MainActor in await m2.flush(timeout: 3.0) }
+        #expect(await waitFor { hold.entered >= 1 })
+        await fx2.clock.advance(by: 3_000_000)
+        #expect(await flushing.value == false)
+        #expect(fx2.logs.warnings.last == "Gave up waiting for pending saves/requests after 5000 ms")
+        hold.release()
+        #expect(await waitFor { m2.savesInFlight == 0 })
+        fx2.model = nil
     }
 
     // C: /window/refresh/rate-limit-cool-down (test_rate_limited_place_waits_for_the_cool_down,

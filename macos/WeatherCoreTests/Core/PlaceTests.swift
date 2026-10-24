@@ -418,7 +418,7 @@ private func message(_ body: () throws(WxError) -> WxPlace) -> String? {
     // Locale.current cannot be switched per test, so this checks the C literals
     // and that a comma-decimal formatter WOULD change the inputs (non-vacuity).
     @Test func placeKeyLocaleIndependent() throws {
-        // src/core/test-core.c:431-437
+        // src/core/test-core.c:417-438
         let p = try makeMiami()
         #expect(p.key == "25.7617,-80.1918")
         #expect(WxTime.parseISO8601("2026-10-11T00:00:00.5Z") == placeT0)

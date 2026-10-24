@@ -334,6 +334,7 @@ public final class HTTPClient: Sendable {
     {
         let plan = try policy.plan(pathAndQuery: pathAndQuery, accept: accept, ifModifiedSince: ifModifiedSince)
         let request = try makeRequest(plan)
+        try Task.checkCancellation()  // a cancelled caller sends nothing (wx-http.c:2054, 2080: before the cap)
         let admitted = state.withLock { s -> Bool in
             guard s.inflight < HTTPPolicy.maxInflight else { return false }
             s.inflight += 1
@@ -341,7 +342,6 @@ public final class HTTPClient: Sendable {
         }
         guard admitted else { throw WxError(.rateLimited, HTTPPolicy.Message.tooManyOutstanding) }
         defer { state.withLock { $0.inflight -= 1 } }
-        try Task.checkCancellation()  // a cancelled caller sends nothing
 
         let totalDeadline = clock.monotonicMicroseconds + Int64(totalDeadlineMs) * 1000
         // Requests on the wire so far. C makes one request per attempt; CFNetwork re-sends a

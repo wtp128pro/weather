@@ -121,15 +121,17 @@ directory so that Foundation's per-user caches stay out of `~/Library`):
 
 - `build` on empty derived data: `** BUILD SUCCEEDED **` (about 16 s);
 - the one-suite command: 9 tests in 1 suite passed, `** TEST SUCCEEDED **`;
-- the full `test` command: "Test run with 1113 tests in 45 suites passed
+- the full `test` command: "Test run with 1117 tests in 45 suites passed
   after 165.736 seconds", `** TEST SUCCEEDED **`, exit 0 (`HTTPClientTests`:
   80 tests, including `reservedEscapesReachTheWireAsCWritesThem`). A first
   full run in a copy of `macos/` without `src/` beside it failed the two NWS
   fixture comparisons (see "Requirements");
-- `build` again after `test`: `** BUILD SUCCEEDED **`, and the app's
+- `build` again after `test`: `** BUILD SUCCEEDED **`, and the Debug app's
   entitlements were back to the three listed under "Sandbox and signing";
 - the Release `build` on empty derived data: `** BUILD SUCCEEDED **`, with
-  the same three entitlements.
+  only the two production entitlements (`com.apple.security.app-sandbox` and
+  `com.apple.security.network.client`; `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO`
+  suppresses `get-task-allow` in Release).
 
 The time differs between machines and with machine load: the suite includes
 timing-sensitive tests on the loopback server, and some suites run
@@ -191,8 +193,9 @@ the port:
   selection survives a relaunch;
 - the sidebar cannot be hidden: drag the divider to the left edge; there is no
   View > Hide Sidebar item and no ⌃⌘S; no flicker when it springs back;
-- ⌥⌘S (SwiftUI's hidden Toggle Sidebar): the sidebar slides out and comes
-  straight back;
+- ⌥⌘S (SwiftUI's hidden Toggle Sidebar): disabled along with sidebar
+  collapsing (`NSSplitViewItem.canCollapse = false`), with the column
+  visibility binding as a backstop, so the sidebar never collapses;
 - drag the divider to the far right;
 - closing the main window while the picker is open closes the picker and
   quits; ⌘W quits;
@@ -349,17 +352,15 @@ differences that remain are listed after it, item by item.
 
 - App Sandbox on (`ENABLE_APP_SANDBOX = YES`) with outgoing network
   connections as the only resource (`ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES`;
-  no incoming connections, no user-selected file access). The
-  entitlements are generated from these build settings; there is no
-  `.entitlements` file. An app made by the `build` command above, in Debug
-  and in Release (`-configuration Release`), is signed with exactly
-  `com.apple.security.app-sandbox`, `com.apple.security.network.client` and
-  `com.apple.security.get-task-allow`. Xcode adds `get-task-allow` to the
-  Release build too, because the project leaves
-  `CODE_SIGN_INJECT_BASE_ENTITLEMENTS` at its default; whether setting it to
-  `NO` removes the entitlement was not tried. The Release build carries no
-  temporary exception. `get-task-allow` grants no sandbox capability, but it
-  lets a debugger running as the same user attach to the app (DECISIONS #67).
+  no incoming connections, no user-selected file access, declared in
+  `Weather/Weather.entitlements`). An app made by the Release `build` command
+  above (`-configuration Release`) sets
+  `CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO` on the `Weather` target and is
+  signed with only `com.apple.security.app-sandbox` and
+  `com.apple.security.network.client` (no `com.apple.security.get-task-allow`
+  and no temporary exceptions, DECISIONS #67). The Debug `build` keeps
+  `com.apple.security.get-task-allow` so a debugger running as the same user
+  can attach during development.
 - Caution: the scheme builds the app for testing too, so `xcodebuild test`
   re-signs `Weather.app` in the same derived-data folder with Xcode's testing
   exceptions:
@@ -732,12 +733,12 @@ heads CFNetwork hands over.
   (`AppModel.saveDelayMs`) and at quit. Quitting (⌘Q, closing the window,
   SIGTERM or SIGINT) saves and waits up to 5 s for the work in flight
   (`AppModel.shutdownWaitMs`; with the real clock the wait can overshoot by
-  about 6.5%, DECISIONS #60 item 3). A quit during the start-up load is
-  bounded by the same 5 s: if the load has not finished by then, the app
-  gives up with C's log line "Gave up waiting for pending saves/requests
-  after 5000 ms", and the flush that follows gets only the time left
-  (DECISIONS #72; see "macOS platform conventions" for what such a quit
-  saves).
+  about 6.5%, DECISIONS #60 item 3). A quit during the start-up load cancels
+  the load task so `loadDone` takes its shutting-down branch without
+  autoselecting or saving `settings.json`, and is bounded by the same 5 s: if
+  the load or the remainder flush has not finished by then, the app gives up
+  with C's log line "Gave up waiting for pending saves/requests after 5000 ms"
+  (DECISIONS #72).
 
 ## Other documented differences from the C app
 
@@ -766,10 +767,10 @@ port reproduces the unfused C, not every C build.
   `src/blend/test-blend.c:4907` asserts (the unmodified C on case-insensitive
   APFS opens Tokyo; on case-sensitive Linux it gives UTC too). Consequence:
   none for the providers, which send correctly cased names.
-- 15 legacy names that only ICU still knows (the 13 `SystemV/*` names,
-  `US/Pacific-New`, `Canada/East-Saskatchewan`) resolve to a real zone where
-  C gives UTC. Consequence: none known; the providers and the geocoder never
-  send these IDs.
+- The 15 legacy names that only ICU still knows (the 13 `SystemV/*` names,
+  `US/Pacific-New`, `Canada/East-Saskatchewan`) are rejected by
+  `WxFormat.Zone.legacyICUTimezones` so they fall back to UTC (unresolved) as
+  in C.
 - The port ignores `TZDIR` (C honours it). Consequence: the zone data is the
   system's.
 
@@ -782,12 +783,10 @@ port reproduces the unfused C, not every C build.
   1 RATE_LIMITED. Consequence: the port never refuses a fetch C accepts here;
   the total of 16 per provider and the 2-slot rule for the contiguous US
   still hold.
-- MET Norway cancel during parse (DECISIONS #49). If the last waiter cancels
-  while the answer is being parsed, the answer is still stored in the cache
-  (C: "a cancelled one included changes no entry", `wx-metno.h:56-58`).
-  Consequence: a just-fetched answer is cached instead of discarded; it never
-  shows stale or wrong data, never sends an extra request and never blocks a
-  later fetch beyond C's own 10-minute floor.
+- MET Norway cancel during parse (DECISIONS #49, resolved). `METNorwayProvider`
+  re-checks whether all waiters cancelled while the response was being parsed
+  before storing into the cache or arming the throttle, matching C
+  (`wx-metno.h:56-58`, "a cancelled one included changes no entry").
 
 ### Service orchestration (DECISIONS #50)
 
@@ -797,11 +796,11 @@ port reproduces the unfused C, not every C build.
   every resume, so the app does not see it.
 - Providers run concurrently after a start in registration order.
   Consequence: none for the result; each provider owns its state.
-- The internal test hooks `testDeadlineMs` and `completionProbe` are compiled
-  into the production `WeatherCore` (internal, reachable only from
-  `@testable` tests, never set by the app), contrary to
-  `wx-service-testing.h:7-11` ("no hook in production"). Consequence: dead
-  code in the shipped framework.
+- The internal test hooks `testDeadlineMs` and `completionProbe` in
+  `ServiceOrchestrator.swift` (as well as the test hooks in
+  `METNorwayProvider.swift`) are wrapped in `#if DEBUG` and compiled out of
+  Release builds, matching `wx-service-testing.h:7-11` ("no hook in
+  production").
 - The 30 s service deadline starts before the providers' `covers()` checks run
   (C starts it after). Consequence: visible only with a slow `covers()`,
   which the provider protocol forbids.
@@ -831,12 +830,10 @@ port reproduces the unfused C, not every C build.
 8. Places are republished as a new array instead of a `GListStore` splice.
    Consequence: none visible.
 9. Internal `@testable`-only seams (`testSaveHook`, `testRefresh`,
-   `testSearch`, `testLoadWorkerFirst` with a `DispatchSemaphore` that is dead
-   in production, `testLoadAfterWorkerResume`, read only when
-   `testLoadWorkerFirst` is true and so dead in production as well, and
-   read-only counters) are compiled into the production `WeatherCore`,
-   contrary to `test-window.c:76` ("The production code has no hook for it").
-   Consequence: dead code in the shipped framework.
+   `testSearch`, `testLoadWorkerFirst`, `testLoadAfterWorkerResume`,
+   `requestsStarted`, and internal test views) in `AppModel.swift` are wrapped
+   in `#if DEBUG` and compiled out of Release builds, matching
+   `test-window.c:76` ("The production code has no hook for it").
 10. Exact main-queue deferral of the load's completion was not adopted: the
     model defers it with `Task.yield`, which hops to the generic executor. A
     flush sent from another thread during that hop races, exactly as C's quit
@@ -854,12 +851,10 @@ port reproduces the unfused C, not every C build.
   without modifiers" are recollections of GTK behaviour that C does not pin
   (C pins: plain Escape closes, Control+Escape does not). Consequence: these
   key combinations may differ from the GTK app.
-- Text comparisons use Swift string equality, which treats NFC and NFD forms
-  as equal: replacing NFC text with its NFD form neither keeps the typed
-  bytes nor restarts the search, where C keeps exactly what was typed and
-  searches again (`wx-picker.h:38`). Consequence: replacing the text with a
-  canonically equivalent form changes nothing in the picker. A byte
-  comparison would fix it (offered at sign-off).
+- Text and repeat-query comparisons in `PickerViewModel` and `PickerView` use
+  UTF-8 byte equality (`utf8.elementsEqual`), so replacing NFC text with its
+  NFD form preserves the typed UTF-8 bytes and restarts the search as in C
+  (`wx-picker.h:38`).
 
 ### macOS platform conventions (DECISIONS #13, #59, #62, #70, #72 and #73)
 
@@ -885,20 +880,20 @@ differs from the GTK app, with its consequence:
 - Standard macOS menus (app, Edit, View, Window), with Refresh and the unit
   switch in the View menu; ⌘Q quits. Consequence: menu items the GTK app does
   not have.
-- SwiftUI's hidden "Toggle Sidebar" command (⌥⌘S, no visible menu item) still
-  fires (DECISIONS #72). Consequence: the sidebar slides out and comes straight
-  back; it cannot stay hidden.
+- SwiftUI's hidden "Toggle Sidebar" command (⌥⌘S, no visible menu item) is
+  disabled and the sidebar split item sets `canCollapse = false`
+  (`ShellSidebar.swift`), with the column visibility binding kept as a
+  backstop, so the sidebar never collapses (DECISIONS #72).
 - The window frame is restored on relaunch (the C app persists no size).
   Consequence: the window should reopen where you left it (a manual check).
 - While the stored places load, the window shows a blank, neutral page, never
   the first-run page (DECISIONS #62; the C app builds the window only after
   the load). Consequence: a short blank window at start.
-- A quit during the start-up load saves the place the app selected
-  automatically, the first one (DECISIONS #72; C writes nothing then,
-  `wx-app.c:1815-1816`, `:2044-2045`), and a flush that also runs out of time
-  logs the time that was left (for example "after 3000 ms") where C always
-  says 5000 ms. Consequence: not visible to the user, since the next launch
-  selects the same place.
+- A quit during the start-up load cancels the load task so `loadDone` takes its
+  shutting-down branch without autoselecting or saving `settings.json` (as in
+  C, `wx-app.c:1815-1816`, `:2044-2045`), and any timed-out flush logs
+  "Gave up waiting for pending saves/requests after 5000 ms" as in C
+  (DECISIONS #72).
 - In the "Add a City…" search field, when the picker cuts an entry at its
   limit (64 characters or 64 bytes), the field's undo history is dropped: the
   edit that hit the limit, and the typing before it, cannot be undone; edits
@@ -919,15 +914,12 @@ differs from the GTK app, with its consequence:
   reader refuses hand-edited JSON `json-glib` may accept (D-O4); foreign error
   message is `localizedDescription` and an escaping `URLError(.cancelled)` maps
   to `NETWORK` (D-O5); async save throws `PENDING`, completes on the caller's
-  actor, and checks cancellation at job start (D-O6); `HTTPClient.get` throws
-  its outstanding-cap refusal (`RATE_LIMITED`) before checking the caller's
-  cancellation where C checks `CANCELLED` first — NWS re-checks (pinned by
-  `cancelledCapRefusalStartsNoPause`), while for MET Norway (whose
-  `RATE_LIMITED` branch sets `throttleUntilS`) and the service the consequence
-  of a fetch cancelled while at the cap is unverified (D-O7); zone LRU,
-  negative ring and loader/clock hooks not ported (D-O8); whole-page change
-  granularity (D-O9); `Link.url` via `URL(string:)` and recalled GTK About
-  strings (D-O10); `AppModel.add` schedules the save (D-O11); `fsync(2)`
+  actor, and checks cancellation at job start (D-O6); `HTTPClient.get` checks
+  `Task.checkCancellation()` after path/accept validation and before the
+  16-slot cap refusal as in C (`wx-http.c:2054, 2080`, D-O7 resolved); zone
+  LRU, negative ring and loader/clock hooks not ported (D-O8); whole-page
+  change granularity (D-O9); `Link.url` via `URL(string:)` and recalled GTK
+  About strings (D-O10); `AppModel.add` schedules the save (D-O11); `fsync(2)`
   fallback after `fcntl(F_FULLFSYNC)` (D-O12); 2-h chart keeps 4 of 5 labels
   at 336 pt by C's overlap rule, all 5 from 358 pt (D-V1); partial-sources
   line uses a system orange mixed toward the label colour (5.85:1 light,

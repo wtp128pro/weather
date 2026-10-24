@@ -14,10 +14,11 @@
 // #41): a name is looked up only when it has the shape Area/Location (at
 // most 64 bytes, components [A-Za-z][A-Za-z0-9_+-]*, at least one '/');
 // "UTC", nil, "" and every other string are UTC without a lookup, and a
-// well-shaped name that the zone database does not know is UTC too. The
-// documented differences of that rule (case variants are UTC; 15 ICU-only
-// legacy names such as SystemV/AST4 resolve; TZDIR is ignored) are those of
-// DECISIONS #41.
+// well-shaped name that the zone database does not know is UTC too. Case
+// variants are UTC (matching the contract of test-blend.c:4907), and the 15
+// ICU-only legacy identifiers absent from macOS /usr/share/zoneinfo are
+// rejected by `legacyICUTimezones` so they fall back to UTC as in C
+// (DECISIONS #41).
 //
 // Not ported (GLib mechanics, no Swift analogue): the 8-entry LRU cache of
 // GTimeZone objects, the 4-entry negative ring with its 30-second expiry and
@@ -46,6 +47,25 @@ extension WxFormat {
         /// UTC, resolved.
         public static let utc = Zone(tz: nil, resolved: true)
 
+        /// The 15 legacy IANA identifiers that ICU's built-in table still
+        /// accepts (`TimeZone(identifier:) != nil`) after macOS's
+        /// `/usr/share/zoneinfo` (`tzdata.zi`) removed them (DECISIONS #41).
+        static let legacyICUTimezones: Set<String> = [
+            "SystemV/AST4", "SystemV/AST4ADT", "SystemV/CST6", "SystemV/CST6CDT",
+            "SystemV/EST5", "SystemV/EST5EDT", "SystemV/HST10", "SystemV/MST7",
+            "SystemV/MST7MDT", "SystemV/PST8", "SystemV/PST8PDT", "SystemV/YST9",
+            "SystemV/YST9YDT", "US/Pacific-New", "Canada/East-Saskatchewan",
+        ]
+
+        /// Looks up a shape-validated zone identifier while rejecting the 15
+        /// ICU-only legacy identifiers absent from `/usr/share/zoneinfo`.
+        static func resolveTimeZone(_ name: String) -> TimeZone? {
+            guard !legacyICUTimezones.contains(name) else {
+                return nil
+            }
+            return TimeZone(identifier: name)
+        }
+
         private init(tz: TimeZone?, resolved: Bool) {
             self.tz = tz
             self.resolved = resolved
@@ -58,7 +78,7 @@ extension WxFormat {
                 self = .utc
                 return
             }
-            if let tz = TimeZone(identifier: name) {
+            if let tz = Self.resolveTimeZone(name) {
                 self.init(tz: tz, resolved: true)
             } else {
                 self.init(tz: nil, resolved: false)

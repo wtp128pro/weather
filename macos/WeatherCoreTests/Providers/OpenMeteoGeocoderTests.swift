@@ -527,6 +527,7 @@ struct OpenMeteoGeocoderTests {
     @Test("/openmeteo/geocoder/scalar-sweep-exhaustive (sampled unless WEATHER_SLOW_TESTS)")
     func geocoderScalarSweepExhaustive() async throws {
         let full = TestEnvironment.slowTestsEnabled
+            || ProcessInfo.processInfo.environment["WEATHER_SLOW_TESTS"] == "1"
         let scalarStride: UInt32 = full ? 1 : 4099
         let rawStride = full ? 1 : 211
         let (fake, geo) = try Self.makeSweep()

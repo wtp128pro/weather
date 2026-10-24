@@ -687,13 +687,14 @@ import Testing
     }
 
     // PINNED DIFFERENCES (executor rows, not C literals): the platform zone
-    // database is Foundation's (ICU), not the TZif files GLib opens.
+    // database is Foundation's (ICU), filtered by WxFormat.Zone.legacyICUTimezones.
     //  - Case: C on a case-insensitive APFS volume opens "asia/tokyo" (its own
     //    test row test-blend.c:4903 fails there); Swift keeps the contract
     //    ("names are case sensitive") and gives UTC.
     //  - ICU-only legacy names with a '/' that macOS' zoneinfo (2026e) lacks
-    //    ("SystemV/AST4", "US/Pacific-New") are UTC in C there and resolved here.
-    @Test("pinned: zone names are case sensitive; ICU-only legacy names resolve") func pinnedZoneDatabase() {
+    //    ("SystemV/AST4", "US/Pacific-New", etc.) are rejected and give UTC
+    //    just as C does (DECISIONS #41).
+    @Test("pinned: zone names are case sensitive; ICU-only legacy names fall back to UTC") func pinnedZoneDatabase() {
         let a = Self.dailyHours(Self.t0, 120)
         func dayOfMid(_ tz: String) -> Int64 {
             var got: Int64 = 0
@@ -705,7 +706,8 @@ import Testing
         for tz in ["asia/tokyo", "AMERICA/NEW_YORK", "america/new_york"] {
             #expect(dayOfMid(tz) == Self.utcDayStart, "\(tz)")  // test-blend.c:4869, :4903
         }
-        // UTC-4 all year, like America/New_York in October (test-blend.c:4884)
-        #expect(dayOfMid("SystemV/AST4") == 1_791_777_600)
+        for tz in WxFormat.Zone.legacyICUTimezones {
+            #expect(dayOfMid(tz) == Self.utcDayStart, "\(tz)")
+        }
     }
 }

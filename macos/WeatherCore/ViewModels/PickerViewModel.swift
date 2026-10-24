@@ -245,8 +245,8 @@ public final class PickerViewModel {
     /// into an empty field. A different `newText` is a delete plus an insert, so the "changed"
     /// handler runs even when the cut text equals the old one.
     public func setText(_ newText: String) {
-        guard newText != text else {
-            return  // gtk_text_set_text returns early for the same text
+        guard !newText.utf8.elementsEqual(text.utf8) else {
+            return  // gtk_text_set_text returns early for the same UTF-8 bytes
         }
         apply(Self.fitting(Array(newText.unicodeScalars)[...], into: []), always: true)
     }
@@ -308,7 +308,7 @@ public final class PickerViewModel {
         var view = String.UnicodeScalarView()
         view.append(contentsOf: scalars)
         let newText = String(view)
-        guard always || newText != text else {
+        guard always || !newText.utf8.elementsEqual(text.utf8) else {
             return
         }
         text = newText
@@ -418,10 +418,10 @@ public final class PickerViewModel {
         }
     }
 
-    /// repeats_latest_search: the same query as the latest search, which is in flight or was
-    /// answered less than `searchDelayMs` ago.
+    /// repeats_latest_search: the same query (by UTF-8 bytes, g_strcmp0) as the latest search,
+    /// which is in flight or was answered less than `searchDelayMs` ago.
     private func repeatsLatestSearch(_ query: String) -> Bool {
-        guard let lastQuery, lastQuery == query else {
+        guard let lastQuery, lastQuery.utf8.elementsEqual(query.utf8) else {
             return false
         }
         return currentRequest != nil

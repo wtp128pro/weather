@@ -108,11 +108,12 @@ struct METNorwayProviderTests {
     /// metno_for (test-metno.c:1881-1890): loopback origin, 3000 ms, 1 ms back-off.
     static func provider(
         _ server: LoopbackServer, clock: any WxClock, timeoutMs: Int = 3000,
-        probe: (@Sendable () -> Void)? = nil
+        probe: (@Sendable () -> Void)? = nil,
+        parseProbe: (@Sendable () -> Void)? = nil
     ) throws -> METNorwayProvider {
         try METNorwayProvider(
             testingBaseURL: "http://127.0.0.1:\(server.port)", timeoutMs: timeoutMs, backoffBaseMs: 1,
-            clock: clock, outcomeProbe: probe)
+            clock: clock, outcomeProbe: probe, parseProbe: parseProbe)
     }
 
     /// ok_reply (test-metno.c:2003-2007).
@@ -1784,5 +1785,62 @@ struct METNorwayProviderTests {
         for pending in fresh {
             try Self.member(await pending.wait())
         }
+    }
+
+    // C: none (contract wx-http.c:2054, 2080 + wx-metno.c:980-981, DECISIONS #68 D-O7): a
+    // pre-cancelled fetch at the 16-request cap throws CancellationError and starts no throttle.
+    @Test func netCancelledCapRefusalStartsNoThrottle() async throws {
+        let clock = Self.clockAt(Self.realNowS())
+        let hang = LoopbackServer.Shared(true)
+        let body = try Self.miami()
+        let server = try LoopbackServer { _, _ in hang.value ? .hang : .respond(status: 200, body: body) }
+        defer { server.stop() }
+        let provider = try Self.provider(server, clock: clock)
+        let places = try (0...Self.maxInflight).map { try Self.place(40.0 + 0.1 * Double($0), 10.0) }
+        let outs = places.prefix(Self.maxInflight).map { Pending(provider, $0) }
+        #expect(await Self.waitUntil { server.requestCount >= 1 && provider.http.outstandingCount == Self.maxInflight })
+        await Self.spin(100)
+        let onWire = server.requestCount
+        // Pre-cancelled at the provider and HTTP client cap: CancellationError, no throttle.
+        Self.expectCancelled(await Pending(provider, places[Self.maxInflight], preCancelled: true).wait())
+        let cancelledClient: Result<HTTPClient.Response, any Error> = await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                return .success(try await provider.http.get(Self.miamiPath, accept: METNorwayParse.accept))
+            } catch {
+                return .failure(error)
+            }
+        }.value
+        #expect(throws: CancellationError.self) { _ = try cancelledClient.get() }
+        await Self.expectRequests(server, onWire)
+        for out in outs { out.cancel() }
+        for out in outs { Self.expectCancelled(await out.wait()) }
+        #expect(await Self.waitUntil { provider.outstandingCount == 0 && provider.http.outstandingCount == 0 })
+        hang.value = false
+        try await Self.fetchOK(provider, try Self.place(Self.miamiLat, Self.miamiLon))
+    }
+
+    // C: none (contract wx-metno.h:56-58 "a cancelled one included changes no entry", DECISIONS #49):
+    // when the sole waiter cancels while the response is being parsed, nothing is stored in the cache.
+    @Test func netCancelledDuringParseStoresNothing() async throws {
+        let clock = Self.clockAt(Self.realNowS())
+        let server = try LoopbackServer([try Self.ok(), try Self.ok()])
+        defer { server.stop() }
+        let holder = LoopbackServer.Shared<Pending?>(nil)
+        let provider = try Self.provider(server, clock: clock, parseProbe: {
+            holder.value?.cancel()
+        })
+        let miami = try Self.place(Self.miamiLat, Self.miamiLon)
+        let pending = Pending(provider, miami)
+        holder.value = pending
+        Self.expectCancelled(await pending.wait())
+        #expect(await Self.waitUntil { provider.outstandingCount == 0 })
+        #expect(provider.cacheEntryCount == 0)
+        // Because the request was sent and nothing was cached, the 10-minute floor refuses a re-fetch.
+        await Self.expectFloorRefusal(provider, miami, server, 1)
+        Self.set(clock, Self.realNowS() + 600)
+        try await Self.fetchOK(provider, miami)
+        #expect(provider.cacheEntryCount == 1)
+        await Self.expectRequests(server, 2)
     }
 }

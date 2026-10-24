@@ -126,7 +126,7 @@ public enum WxDaily {
 
         init(_ bytes: [UInt8]?) {
             // not looked up, or unknown to the database: UTC (wx-daily.c:277-279)
-            tz = lookedUpName(bytes).flatMap { TimeZone(identifier: $0) }
+            tz = lookedUpName(bytes).flatMap { WxFormat.Zone.resolveTimeZone($0) }
         }
 
         /// Offset east of UTC in effect at the UTC instant `t`.

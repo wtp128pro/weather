@@ -230,7 +230,8 @@ public final class AppModel {
     @ObservationIgnored private var drainTimers: [UInt64: Task<Void, Never>] = [:]
     @ObservationIgnored private var drainToken: UInt64 = 0
 
-    // MARK: - Test seams (reached only through @testable import; nil in production)
+    #if DEBUG
+    // MARK: - Test seams (reached only through @testable import in DEBUG builds)
 
     /// Runs before each save starts (the counted-save hook of test-window.c:82-147).
     @ObservationIgnored var testSaveHook: (@MainActor (SaveKind) async -> Void)?
@@ -245,6 +246,7 @@ public final class AppModel {
     /// With testLoadWorkerFirst: runs on the load worker after it resumed the continuation and
     /// before it releases the waiting main actor (e.g. to queue main-actor work in that window).
     @ObservationIgnored var testLoadAfterWorkerResume: (@Sendable () -> Void)?
+    #endif
 
     /// Forwards the engine's callbacks to the model without a retain cycle.
     @MainActor
@@ -330,23 +332,40 @@ public final class AppModel {
         loading = true
         let paths = (storage.placesPath, storage.settingsPath, storage.cachePath)
         let clock = self.clock
+        #if DEBUG
         let workerFirst = testLoadWorkerFirst
         let afterResume = workerFirst ? testLoadAfterWorkerResume : nil
+        #endif
         let outcome: LoadOutcome = await withCheckedContinuation { continuation in
+            #if DEBUG
             let resumed = workerFirst ? DispatchSemaphore(value: 0) : nil
+            #endif
             DispatchQueue.global(qos: .userInitiated).async {
                 continuation.resume(returning: Self.loadFiles(paths, clock: clock))
+                #if DEBUG
                 afterResume?()
                 resumed?.signal()
+                #endif
             }
+            #if DEBUG
             // Test seam only: wait until the worker has resumed the continuation, so the await
             // below finds the result ready and does not suspend (an order the scheduler can produce).
             resumed?.wait()
+            #endif
         }
         // load_done is a GTask callback, always dispatched by a later main-loop iteration
         // (wx-app.c:1914-1931): a continuation resumed before it is awaited does not suspend, so
         // yield once - a flush(timeout:) requested in the same turn is then always seen first.
+        // If the task running load() was cancelled during startup (e.g. ShellState.quit /
+        // requestTermination), enter shutdown before loadDone so loadDone takes its shutting-down
+        // branch without autoselecting or dirtying settings (wx-app.c:1815-1816).
+        if Task.isCancelled {
+            enterShutdown()
+        }
         await Task.yield()
+        if Task.isCancelled {
+            enterShutdown()
+        }
         loadDone(outcome)
     }
 
@@ -756,10 +775,14 @@ public final class AppModel {
 
     /// The place search on the raw bytes of a C string.
     public func search(textBytes: [UInt8]) async throws -> [WxPlace] {
+        #if DEBUG
         let search: @MainActor ([UInt8]) async throws -> [WxPlace] = testSearch ?? { [service] bytes in
             try await service.search(textBytes: bytes)
         }
         let hits = try await search(textBytes)
+        #else
+        let hits = try await service.search(textBytes: textBytes)
+        #endif
         if Task.isCancelled {
             throw CancellationError()
         }
@@ -840,10 +863,17 @@ public final class AppModel {
         }
         let place = places[i].place
         log(.debug, "request #\(id) \(key)")
+        #if DEBUG
         requestsStarted += 1
         let refresh: @MainActor (WxPlace) async throws -> WxForecast = testRefresh ?? { [service] place in
             try await service.refresh(place)
         }
+        #else
+        let service = self.service
+        let refresh: @MainActor (WxPlace) async throws -> WxForecast = { place in
+            try await service.refresh(place)
+        }
+        #endif
         requests[id] = Request(key: key)
         let task = Task { @MainActor [relay] in
             let result: Result<WxForecast, any Error>
@@ -983,15 +1013,19 @@ public final class AppModel {
     private func startSaves() {
         for kind in SaveKind.allCases where isDirty(kind) && !saving.contains(kind) {
             saving.insert(kind)
+            #if DEBUG
             let hook = testSaveHook
+            #endif
             let log = self.log
             let places = placeList
             let settings = self.settings
             let cache = self.cache
             Task.immediate { @MainActor [relay] in
+                #if DEBUG
                 if let hook {
                     await hook(kind)
                 }
+                #endif
                 var failure: String?
                 do throws(WxStoreError) {
                     switch kind {
@@ -1055,16 +1089,7 @@ public final class AppModel {
     ///   abandoned saves still finish and write their files.
     @discardableResult
     public func flush(timeout: TimeInterval = TimeInterval(AppModel.shutdownWaitMs) / 1000) async -> Bool {
-        if !isShuttingDown {
-            isShuttingDown = true
-            log(.debug, "shutdown: saving and waiting for \(requests.count) request(s)")
-            saveTask?.cancel()
-            saveTask = nil
-            engine.shutdown()
-            if isLoaded {
-                startSaves()
-            }
-        }
+        enterShutdown()
         guard pendingIO else {
             return true
         }
@@ -1088,21 +1113,36 @@ public final class AppModel {
                 } catch {
                     return
                 }
-                relay.model?.drainTimedOut(token: token, limitMs: limitMs)
+                relay.model?.drainTimedOut(token: token)
             }
         }
     }
 
+    private func enterShutdown() {
+        guard !isShuttingDown else {
+            return
+        }
+        isShuttingDown = true
+        log(.debug, "shutdown: saving and waiting for \(requests.count) request(s)")
+        saveTask?.cancel()
+        saveTask = nil
+        engine.shutdown()
+        if isLoaded {
+            startSaves()
+        }
+    }
+
     /// drain_timeout (wx-app.c:1999-2006).
-    private func drainTimedOut(token: UInt64, limitMs: Int64) {
+    private func drainTimedOut(token: UInt64) {
         drainTimers[token] = nil
         guard let waiter = drainWaiters.removeValue(forKey: token) else {
             return
         }
-        log(.warning, "Gave up waiting for pending saves/requests after \(limitMs) ms")
+        log(.warning, "Gave up waiting for pending saves/requests after \(Self.shutdownWaitMs) ms")
         waiter.resume(returning: false)
     }
 
+    #if DEBUG
     // MARK: - Internal views for tests
 
     /// The RefreshEngine (read-only use in tests).
@@ -1113,4 +1153,5 @@ public final class AppModel {
     var savesInFlight: Int { saving.count }
     /// Whether the save debounce timer is armed.
     var saveTimerArmed: Bool { saveTask != nil }
+    #endif
 }

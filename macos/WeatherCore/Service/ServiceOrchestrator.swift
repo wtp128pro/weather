@@ -89,6 +89,7 @@ public final class ServiceOrchestrator {
 
     private let registry: WxRegistry
     private let clock: any WxClock
+    #if DEBUG
     private var deadlineOverrideMs: UInt32 = ServiceOrchestrator.deadlineMs
 
     /// TEST SEAM (wx_service_test_set_deadline_ms, wx-service-testing.h:20-36):
@@ -105,6 +106,7 @@ public final class ServiceOrchestrator {
     /// its caller - the window between C's callback and wx_service_refresh_finish
     /// (test-service.c:2035-2064). nil in production.
     var completionProbe: (@MainActor () -> Void)?
+    #endif
 
     /// wx_service_new: a service over `registry`, timing on `clock` (the
     /// deadline on its monotonic time, the forecast's generatedS from its
@@ -143,7 +145,13 @@ public final class ServiceOrchestrator {
             return .failure(CancellationError())
         }
         let startUs = clock.monotonicMicroseconds  // the deadline runs from the call
+        #if DEBUG
         let deadlineMs = deadlineOverrideMs  // op_new: the deadline this refresh started with
+        let probe = completionProbe
+        #else
+        let deadlineMs = Self.deadlineMs
+        let probe: (@MainActor () -> Void)? = nil
+        #endif
 
         // Covering first: a covers() that adds a provider is then listed too (wx-service.c:1139-1141).
         let covering = registry.listCovering(place)
@@ -165,7 +173,7 @@ public final class ServiceOrchestrator {
 
         let operation = RefreshOperation(
             place: place, slots: slots, fetched: fetches.map(\.index), deadlineMs: deadlineMs,
-            clock: clock, probe: completionProbe)
+            clock: clock, probe: probe)
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<Result<WxForecast, any Error>, Never>) in
                 operation.start(continuation, fetches: fetches, deadlineUs: Self.deadline(startUs, deadlineMs))

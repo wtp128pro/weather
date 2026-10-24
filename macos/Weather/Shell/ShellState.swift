@@ -124,6 +124,7 @@ final class ShellState {
         guard !isQuitting else {
             return
         }
+        loadTask?.cancel()
         // Both callers run inside a main-queue block (the signal source, the willClose
         // notification on OperationQueue.main). terminate() answered with terminateLater waits in
         // a nested run loop, and the serial main queue - which runs the MainActor flush task -
@@ -149,6 +150,7 @@ final class ShellState {
         isQuitting = true
         pathMonitor.cancel()
         let task = loadTask
+        task?.cancel()
         let loaded = model
         let clock = self.clock
         let log = self.log
@@ -165,7 +167,8 @@ final class ShellState {
     /// Waits for the start-up load for at most `limit` seconds on `clock`, without blocking.
     /// - Returns: the loaded model and the seconds left of `limit`; nil when there is no load or
     ///   the limit passed first (then logged "Gave up waiting for pending saves/requests after
-    ///   <ms> ms", like AppModel.flush; the load itself is not cancelled).
+    ///   5000 ms", like AppModel.flush; the load itself finishes its worker I/O and takes its
+    ///   shutting-down branch).
     static func awaitLoad(_ task: Task<AppModel, Never>?, within limit: TimeInterval, clock: any WxClock,
                           log: @escaping AppModel.LogSink) async -> (model: AppModel, remaining: TimeInterval)? {
         guard let task else {
@@ -188,7 +191,7 @@ final class ShellState {
             }
         }
         guard let model else {
-            log(.warning, "Gave up waiting for pending saves/requests after \(limitMs) ms")
+            log(.warning, "Gave up waiting for pending saves/requests after \(AppModel.shutdownWaitMs) ms")
             return nil
         }
         let elapsedMs = (clock.monotonicMicroseconds - start) / 1000
