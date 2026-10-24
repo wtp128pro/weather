@@ -119,9 +119,14 @@ public final class WxPlaces {
 
     /// True iff `a` and `b` lie closer than `duplicateKm` (great circle,
     /// WxGeo.distanceKm); the same key always qualifies (is_duplicate,
-    /// wx-places.c:281-291).
+    /// wx-places.c:281-291). When either place is a user-specified address or
+    /// custom-named location (`isCustomLocation`), multiple locations within the
+    /// same city (< 5 km) are permitted as long as their coordinate keys differ.
     public static func isDuplicate(_ a: WxPlace, _ b: WxPlace) -> Bool {
-        WxGeo.distanceKm(aLat: a.lat, aLon: a.lon, bLat: b.lat, bLon: b.lon) < duplicateKm
+        if a.isCustomLocation || b.isCustomLocation {
+            return a.key == b.key
+        }
+        return WxGeo.distanceKm(aLat: a.lat, aLon: a.lon, bLat: b.lat, bLon: b.lon) < duplicateKm
     }
 
     /// True iff `add(place)` would succeed: the list holds fewer than
@@ -182,6 +187,26 @@ public final class WxPlaces {
         }
         let moved = entries.remove(at: from)
         entries.insert(moved, at: to)
+        generation &+= 1
+        onChanged?()
+        return true
+    }
+
+    /// Updates the saved place at `key` in-place (e.g. when renaming a location to "Home", "Work",
+    /// "Friend's place", or updating its street address). Returns false if `key` is not found or
+    /// the place is unchanged.
+    @discardableResult
+    public func updatePlace(key: String?, with updated: WxPlace) -> Bool {
+        guard let i = index(ofKey: key) else {
+            return false
+        }
+        if updated.key != entries[i].key && index(ofKey: updated.key) != nil {
+            return false
+        }
+        guard entries[i].place != updated else {
+            return false
+        }
+        entries[i] = Entry(place: updated, key: updated.key)
         generation &+= 1
         onChanged?()
         return true

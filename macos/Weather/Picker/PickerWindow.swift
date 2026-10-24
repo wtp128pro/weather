@@ -24,7 +24,7 @@ struct PickerScene: Scene {
                 PickerWindow(model: model)
             }
         }
-        .defaultSize(width: CGFloat(PickerViewModel.defaultWidth), height: CGFloat(PickerViewModel.defaultHeight))
+        .defaultSize(width: CGFloat(PickerViewModel.defaultWidth) + 60, height: CGFloat(PickerViewModel.defaultHeight) + 90)
         .windowResizability(.contentMinSize)
         .restorationBehavior(.disabled)
     }
@@ -44,13 +44,13 @@ struct PickerWindow: View {
     var body: some View {
         Group {
             if let viewModel {
-                PickerView(viewModel: viewModel)
+                PickerView(viewModel: viewModel, model: model, onDismiss: { dismiss() })
                     .background(PickerKeyMonitor(viewModel: viewModel))
             } else {
                 Color.clear
             }
         }
-        .frame(minWidth: 320, minHeight: 240)
+        .frame(minWidth: 380, minHeight: 340)
         .onAppear {
             guard viewModel == nil else {
                 return

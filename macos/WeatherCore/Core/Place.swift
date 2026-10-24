@@ -36,6 +36,13 @@ public struct WxPlace: Equatable, Hashable, Sendable {
     public let lon: Double
     /// "" or an IANA-shaped zone name of at most 64 bytes.
     public let timezone: String
+    /// True when this place represents a user-specified street address or custom-named location
+    /// (such as "Home", "Work", "Friend's place"), allowing multiple locations within the same city.
+    public var isCustomLocation: Bool = false
+    /// Optional user-assigned label (e.g. "Home", "Work", "Friend's place").
+    public var customName: String = ""
+    /// Optional resolved street address or locality description (e.g. "1600 Pennsylvania Ave NW, Washington, DC").
+    public var streetAddress: String = ""
 
     /// wx_place_new() on Swift strings: validates and creates a place. A nil
     /// optional argument becomes "".
@@ -125,6 +132,119 @@ public struct WxPlace: Equatable, Hashable, Sendable {
             label += ", " + country
         }
         return label
+    }
+
+    /// Primary display title (e.g. "Home", "Work", "Friend's place", street line, or city name).
+    public var displayTitle: String {
+        !customName.isEmpty ? customName : name
+    }
+
+    /// Subtitle describing the street address or region/country underneath the primary title.
+    public var displayAddressSubtitle: String {
+        var parts: [String] = []
+        if !admin1.isEmpty {
+            parts.append(admin1)
+        } else if !streetAddress.isEmpty && streetAddress != name {
+            parts.append(streetAddress)
+        }
+        if !country.isEmpty {
+            let lastPart = parts.last ?? ""
+            if !lastPart.localizedCaseInsensitiveContains(country) {
+                parts.append(country)
+            }
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    /// Returns a copy of this place with a custom location label (e.g. "Home", "Work", "Friend's place")
+    /// and/or resolved street address, preserving the underlying address so the custom name can be
+    /// edited or cleared at any time.
+    public func withCustomLocation(
+        customName: String?,
+        streetAddress: String? = nil,
+        isCustomLocation: Bool = true
+    ) throws(WxError) -> WxPlace {
+        let cleanCustom = WxText.sanitize(
+            customName?.trimmingCharacters(in: .whitespacesAndNewlines),
+            maxBytes: WxLimits.placeNameMax
+        )
+        let underlyingAddress: String = {
+            if let streetAddress {
+                let s = WxText.sanitize(
+                    streetAddress.trimmingCharacters(in: .whitespacesAndNewlines),
+                    maxBytes: WxLimits.placeNameMax
+                )
+                if !s.isEmpty { return s }
+            }
+            if !self.streetAddress.isEmpty {
+                return self.streetAddress
+            }
+            if !self.customName.isEmpty && !self.admin1.isEmpty {
+                return self.admin1
+            }
+            if !self.admin1.isEmpty {
+                return WxText.sanitize("\(self.name), \(self.admin1)", maxBytes: WxLimits.placeNameMax)
+            }
+            return self.name
+        }()
+
+        let newName: String
+        let newAdmin1: String
+        if !cleanCustom.isEmpty && WxText.isUsableName(cleanCustom, maxBytes: WxLimits.placeNameMax) {
+            newName = cleanCustom
+            newAdmin1 = WxText.isUsableName(underlyingAddress, maxBytes: WxLimits.placeNameMax)
+                ? underlyingAddress
+                : self.admin1
+        } else {
+            if let comma = underlyingAddress.firstIndex(of: ",") {
+                let head = String(underlyingAddress[..<comma]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let tail = String(underlyingAddress[underlyingAddress.index(after: comma)...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                newName = WxText.isUsableName(head, maxBytes: WxLimits.placeNameMax) ? head : self.name
+                newAdmin1 = WxText.isUsableName(tail, maxBytes: WxLimits.placeNameMax) ? tail : ""
+            } else {
+                newName = WxText.isUsableName(underlyingAddress, maxBytes: WxLimits.placeNameMax)
+                    ? underlyingAddress
+                    : self.name
+                newAdmin1 = self.admin1
+            }
+        }
+
+        var updated = try WxPlace(
+            name: newName,
+            admin1: newAdmin1.isEmpty ? nil : newAdmin1,
+            country: self.country.isEmpty ? nil : self.country,
+            countryCode: self.countryCode.isEmpty ? nil : self.countryCode,
+            lat: self.lat,
+            lon: self.lon,
+            timezone: self.timezone.isEmpty ? nil : self.timezone
+        )
+        updated.customName = (!cleanCustom.isEmpty && WxText.isUsableName(cleanCustom, maxBytes: WxLimits.placeNameMax))
+            ? cleanCustom
+            : ""
+        updated.streetAddress = WxText.isUsableName(underlyingAddress, maxBytes: WxLimits.placeNameMax)
+            ? underlyingAddress
+            : ""
+        updated.isCustomLocation = isCustomLocation || !updated.customName.isEmpty
+        return updated
+    }
+
+    /// Returns a copy of this place at slightly adjusted coordinates (used when two distinct custom
+    /// locations share the exact same 4-decimal-place rounded coordinate key).
+    public func withCoordinates(lat: Double, lon: Double) throws(WxError) -> WxPlace {
+        var updated = try WxPlace(
+            name: self.name,
+            admin1: self.admin1.isEmpty ? nil : self.admin1,
+            country: self.country.isEmpty ? nil : self.country,
+            countryCode: self.countryCode.isEmpty ? nil : self.countryCode,
+            lat: lat,
+            lon: lon,
+            timezone: self.timezone.isEmpty ? nil : self.timezone
+        )
+        updated.isCustomLocation = self.isCustomLocation
+        updated.customName = self.customName
+        updated.streetAddress = self.streetAddress
+        return updated
     }
 
     // MARK: - Private helpers

@@ -37,12 +37,17 @@ struct ShellSidebar: View {
             List(selection: selection) {
                 // Recomputed from model.places on every change; never cached (U28).
                 ForEach(liveRows) { row in
-                    ShellRow(row: row,
-                             onAction: { action in _ = row.perform(action, in: model) },
-                             onDrop: { text in row.acceptDrop(text, in: model) })
-                        .tag(row.key)
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                    ShellRow(
+                        row: row,
+                        onAction: { action in _ = row.perform(action, in: model) },
+                        onDrop: { text in row.acceptDrop(text, in: model) },
+                        onRename: { customName, streetAddress in
+                            _ = model.renamePlace(key: row.key, customName: customName, streetAddress: streetAddress)
+                        }
+                    )
+                    .tag(row.key)
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
                 }
             }
             .scrollContentBackground(.hidden)
@@ -61,8 +66,14 @@ struct ShellSidebar: View {
             .navigationSplitViewColumnWidth(min: Self.sidebarMinWidth, ideal: Self.sidebarMinWidth)
             .background(SidebarSplitViewGuard())
         } detail: {
-            DetailView(place: model.selectedPlace)
-                .frame(minWidth: Self.detailMinWidth)
+            DetailView(
+                place: model.selectedPlace,
+                onRename: { customName, streetAddress in
+                    guard let key = model.selectedKey else { return }
+                    _ = model.renamePlace(key: key, customName: customName, streetAddress: streetAddress)
+                }
+            )
+            .frame(minWidth: Self.detailMinWidth)
         }
         .toolbar(removing: .sidebarToggle)
         .onChange(of: columns) { _, new in

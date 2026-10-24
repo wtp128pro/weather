@@ -495,7 +495,14 @@ public final class AppModel {
         next.reserveCapacity(placeList.count)
         for place in placeList.places {
             let key = place.key
-            if let item = old[key] {
+            if var item = old[key] {
+                if item.place != place {
+                    item = Place(
+                        place: place, key: key, forecast: item.forecast, fetchedS: item.fetchedS,
+                        loading: item.loading, stale: item.stale, offline: item.offline,
+                        units: item.units, nowS: item.nowS, errorText: item.errorText
+                    )
+                }
                 next.append(item)
                 continue
             }
@@ -595,6 +602,93 @@ public final class AppModel {
         }
         selectInternal(place.key)
         return .added
+    }
+
+    /// Saves a user-specified street address or custom-named location (e.g. "Home", "Work",
+    /// "Friend's place") and selects it. Multiple named locations within the same city (< 5 km)
+    /// are supported; if another location with a different name shares the exact 4-decimal
+    /// coordinate key, the coordinate is nudged by 0.0001° (~10 m) so both keys remain distinct.
+    public func addCustomLocation(
+        _ place: WxPlace,
+        customName: String? = nil,
+        streetAddress: String? = nil
+    ) -> AddResult {
+        guard isLoaded, !isShuttingDown else {
+            return .failed
+        }
+        if placeList.count >= WxPlaces.maxPlaces {
+            return .full
+        }
+        let trimmedCustom = customName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedStreet = streetAddress?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let isCustom = place.isCustomLocation || !trimmedCustom.isEmpty || !trimmedStreet.isEmpty
+
+        guard var candidate = try? (isCustom
+            ? place.withCustomLocation(
+                customName: trimmedCustom.isEmpty ? (place.customName.isEmpty ? nil : place.customName) : trimmedCustom,
+                streetAddress: trimmedStreet.isEmpty ? (place.streetAddress.isEmpty ? nil : place.streetAddress) : trimmedStreet,
+                isCustomLocation: true
+            )
+            : place)
+        else {
+            return .failed
+        }
+
+        if !candidate.isCustomLocation {
+            return add(candidate)
+        }
+
+        // Reject only if an identical custom place (same name and same rounded coordinate) is already saved.
+        if placeList.places.contains(where: {
+            WxGeo.distanceKm(aLat: $0.lat, aLon: $0.lon, bLat: candidate.lat, bLon: candidate.lon) < 0.05
+                && $0.name.caseInsensitiveCompare(candidate.name) == .orderedSame
+                && $0.admin1.caseInsensitiveCompare(candidate.admin1) == .orderedSame
+        }) {
+            return .duplicate
+        }
+
+        // Ensure a distinct 4-decimal coordinate key if another place with a different name is at the exact same rounded key.
+        var step = 1
+        while placeList.index(ofKey: candidate.key) != nil && step <= 25 {
+            let delta = Double(step) * 0.0001
+            let newLon = candidate.lon + (candidate.lon < 179.99 ? delta : -delta)
+            if let nudged = try? candidate.withCoordinates(lat: candidate.lat, lon: newLon) {
+                candidate = nudged
+            }
+            step += 1
+        }
+
+        guard placeList.add(candidate) else {
+            return refusal(for: candidate)
+        }
+        selectInternal(candidate.key)
+        return .added
+    }
+
+    /// Updates a saved place's custom name (e.g. "Home", "Work", "Friend's place", or "" to clear)
+    /// and/or its street address in-place without losing its forecast or position in the list.
+    @discardableResult
+    public func renamePlace(
+        key: String?,
+        customName: String?,
+        streetAddress: String? = nil
+    ) -> Bool {
+        guard isLoaded, !isShuttingDown,
+              let idx = placeList.index(ofKey: key),
+              let existing = placeList.place(at: idx)
+        else {
+            return false
+        }
+        let trimmedCustom = customName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let keepCustomFlag = existing.isCustomLocation || !trimmedCustom.isEmpty || !(streetAddress ?? "").isEmpty
+        guard let updated = try? existing.withCustomLocation(
+            customName: trimmedCustom.isEmpty ? nil : trimmedCustom,
+            streetAddress: streetAddress,
+            isCustomLocation: keepCustomFlag
+        ) else {
+            return false
+        }
+        return placeList.updatePlace(key: existing.key, with: updated)
     }
 
     /// refusal_message (wx-picker.c:563-575) on the list as it is now.

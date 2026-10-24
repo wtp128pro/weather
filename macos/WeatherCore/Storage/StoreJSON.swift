@@ -249,9 +249,28 @@ enum StoreJSON {
         else {
             return nil
         }
-        return try? WxPlace(
+        guard var place = try? WxPlace(
             nameBytes: name, admin1Bytes: admin1, countryBytes: country, countryCodeBytes: code,
             lat: lat, lon: lon, timezoneBytes: tz)
+        else {
+            return nil
+        }
+        if let customNode = o.member("custom"), let isCustom = nodeBool(customNode) {
+            place.isCustomLocation = isCustom
+        }
+        if let customNameBytes = nodeString(o.member("custom_name")),
+           WxText.isUsableName(bytes: customNameBytes, maxBytes: WxLimits.placeNameMax)
+        {
+            place.customName = String(decoding: customNameBytes.prefix { $0 != 0 }, as: UTF8.self)
+            place.isCustomLocation = true
+        }
+        if let streetBytes = nodeString(o.member("street_address")),
+           WxText.isUsableName(bytes: streetBytes, maxBytes: WxLimits.placeNameMax)
+        {
+            place.streetAddress = String(decoding: streetBytes.prefix { $0 != 0 }, as: UTF8.self)
+            place.isCustomLocation = true
+        }
+        return place
     }
 
     /// An optional string member: absent is [] (""), a string is its bytes,
@@ -282,6 +301,17 @@ enum StoreJSON {
         StrictJSON.appendDouble(place.lon, to: &out)
         out += ", \"timezone\": "
         StrictJSON.appendString(place.timezone, to: &out)
+        if place.isCustomLocation {
+            out += ", \"custom\": true"
+        }
+        if !place.customName.isEmpty {
+            out += ", \"custom_name\": "
+            StrictJSON.appendString(place.customName, to: &out)
+        }
+        if !place.streetAddress.isEmpty {
+            out += ", \"street_address\": "
+            StrictJSON.appendString(place.streetAddress, to: &out)
+        }
         out += "}"
     }
 

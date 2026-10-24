@@ -19,8 +19,44 @@ struct ShellRow: View {
     let onAction: (RowViewModel.Action) -> Void
     /// A drop of the first dropped string (RowViewModel.acceptDrop); true when it moved a row.
     let onDrop: (String?) -> Bool
+    /// Optional callback to update the place's custom name ("Home", "Work", "Friend's place", etc.)
+    /// and/or street address.
+    var onRename: ((String?, String?) -> Void)? = nil
 
     @State private var isDropTargeted = false
+    @State private var showRenameSheet = false
+
+    private var customSymbol: String? {
+        Self.symbolForPlace(row.place)
+    }
+
+    static func symbolForPlace(_ place: WxPlace) -> String? {
+        let lower = (!place.customName.isEmpty ? place.customName : (place.isCustomLocation ? place.name : "")).lowercased()
+        if !lower.isEmpty {
+            if lower.contains("home") || lower.contains("house") || lower.contains("apt") {
+                return "house.fill"
+            }
+            if lower.contains("work") || lower.contains("office") {
+                return "briefcase.fill"
+            }
+            if lower.contains("friend") || lower.contains("family") || lower.contains("mom") || lower.contains("dad") {
+                return "person.2.fill"
+            }
+            if lower.contains("school") || lower.contains("college") || lower.contains("uni") {
+                return "graduationcap.fill"
+            }
+            if lower.contains("gym") || lower.contains("fitness") {
+                return "dumbbell.fill"
+            }
+            if !place.customName.isEmpty {
+                return "tag.fill"
+            }
+        }
+        if place.isCustomLocation || !place.streetAddress.isEmpty {
+            return "mappin.and.ellipse"
+        }
+        return nil
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -33,10 +69,19 @@ struct ShellRow: View {
             .opacity(Self.iconOpacity(row))
             .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.name)
-                    .fontWeight(.bold)
-                    .foregroundStyle(Color.white)
-                    .modifier(Self.SingleLine(maxChars: 24, minChars: 10, fontSize: Self.baseSize))
+                HStack(spacing: 5) {
+                    if let customSymbol {
+                        Image(systemName: customSymbol)
+                            .font(.system(size: Self.baseSize * 0.82, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.45, green: 0.84, blue: 1.00))
+                    }
+                    Text(row.name)
+                        .fontWeight(.bold)
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .modifier(Self.SingleLine(maxChars: 24, minChars: 10, fontSize: Self.baseSize))
                 if row.isRegionVisible {
                     Text(row.region)
                         .font(.system(size: Self.baseSize * 0.85, weight: .medium))
@@ -68,6 +113,25 @@ struct ShellRow: View {
                 }
             }
             Menu {
+                if let onRename {
+                    Button("Name / Edit Location\u{2026}") {
+                        showRenameSheet = true
+                    }
+                    Menu("Set Location Name") {
+                        ForEach(WxAddressGeocoder.presetLocationNames, id: \.label) { preset in
+                            Button(preset.label) {
+                                onRename(preset.label, nil)
+                            }
+                        }
+                        if !row.place.customName.isEmpty {
+                            Divider()
+                            Button("Clear Custom Name") {
+                                onRename("", nil)
+                            }
+                        }
+                    }
+                    Divider()
+                }
                 ForEach(RowViewModel.menuActions, id: \.self) { action in
                     Button(action.title) { onAction(action) }
                 }
@@ -81,6 +145,14 @@ struct ShellRow: View {
             .fixedSize()
             .help(RowViewModel.menuButtonLabel)
             .accessibilityLabel(RowViewModel.menuButtonLabel)
+        }
+        .sheet(isPresented: $showRenameSheet) {
+            LocationNameEditorSheet(
+                place: row.place,
+                onSave: { customName, streetAddress in
+                    onRename?(customName, streetAddress)
+                }
+            )
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
@@ -171,6 +243,114 @@ struct ShellRow: View {
                 .truncationMode(.tail)
                 .frame(minWidth: minChars * char, maxWidth: maxChars * char, alignment: .leading)
         }
+    }
+}
+
+/// Modal sheet for setting or editing a saved location's custom name (e.g. "Home", "Work",
+/// "Friend's place") and street address description.
+struct LocationNameEditorSheet: View {
+    let place: WxPlace
+    let onSave: (String?, String?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var customName: String = ""
+    @State private var streetAddress: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: "tag.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                Text("Name & Address Details")
+                    .font(.headline)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Location Name")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                TextField("e.g. Home, Work, Friend's place", text: $customName)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { saveAndClose() }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(WxAddressGeocoder.presetLocationNames, id: \.label) { preset in
+                            let selected = customName.trimmingCharacters(in: .whitespacesAndNewlines)
+                                .caseInsensitiveCompare(preset.label) == .orderedSame
+                            Button {
+                                customName = selected ? "" : preset.label
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: preset.symbol)
+                                        .font(.caption2)
+                                    Text(preset.label)
+                                        .font(.caption.weight(.medium))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(selected ? Color.accentColor : Color.secondary.opacity(0.15))
+                                )
+                                .foregroundStyle(selected ? Color.white : Color.primary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Street Address / Locality Subtitle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                TextField("Street address or city, region", text: $streetAddress)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { saveAndClose() }
+                Text(String(format: "Coordinates: %.4f\u{00B0}, %.4f\u{00B0}", place.lat, place.lon))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                if !place.customName.isEmpty || !customName.isEmpty {
+                    Button("Clear Name") {
+                        onSave("", streetAddress.isEmpty ? nil : streetAddress)
+                        dismiss()
+                    }
+                }
+                Spacer()
+                Button("Cancel", role: .cancel) {
+                    dismiss()
+                }
+                Button("Save") {
+                    saveAndClose()
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding(.top, 4)
+        }
+        .padding(18)
+        .frame(width: 400)
+        .onAppear {
+            customName = place.customName
+            if !place.streetAddress.isEmpty {
+                streetAddress = place.streetAddress
+            } else if !place.admin1.isEmpty {
+                streetAddress = !place.customName.isEmpty ? place.admin1 : "\(place.name), \(place.admin1)"
+            } else {
+                streetAddress = place.name
+            }
+        }
+    }
+
+    private func saveAndClose() {
+        let trimmedName = customName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAddr = streetAddress.trimmingCharacters(in: .whitespacesAndNewlines)
+        onSave(trimmedName, trimmedAddr.isEmpty ? nil : trimmedAddr)
+        dismiss()
     }
 }
 

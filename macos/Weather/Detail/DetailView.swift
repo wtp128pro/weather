@@ -23,6 +23,7 @@ import WeatherCore
 /// The detail pane of the selected place (nil: none selected).
 struct DetailView: View {
     let place: AppModel.Place?
+    var onRename: ((String?, String?) -> Void)? = nil
 
     @State private var detail = DetailViewModel()
     private let liveStore = LiveStationStore.shared
@@ -30,7 +31,9 @@ struct DetailView: View {
     var body: some View {
         DetailPage(
             page: effectivePage,
-            liveAirQuality: liveStore.snapshot(for: place)?.airQuality
+            liveAirQuality: liveStore.snapshot(for: place)?.airQuality,
+            wxPlace: place?.place,
+            onRename: onRename
         )
         .onChange(of: ShowKey(place), initial: true) {
             detail.show(place: place)
@@ -130,6 +133,8 @@ struct DetailView: View {
 struct DetailPage: View {
     let page: DetailViewModel.Page
     var liveAirQuality: DetailViewModel.AirQualityCard? = nil
+    var wxPlace: WxPlace? = nil
+    var onRename: ((String?, String?) -> Void)? = nil
 
     var body: some View {
         switch page {
@@ -149,7 +154,9 @@ struct DetailPage: View {
                     GlassEffectContainer(spacing: 18) {
                         ForecastPageView(
                             page: forecast,
-                            airQuality: liveAirQuality ?? forecast.airQuality
+                            airQuality: liveAirQuality ?? forecast.airQuality,
+                            wxPlace: wxPlace,
+                            onRename: onRename
                         )
                         .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,6 +213,10 @@ private struct PlaceholderPage: View {
 private struct ForecastPageView: View {
     let page: DetailViewModel.ForecastPage
     let airQuality: DetailViewModel.AirQualityCard
+    var wxPlace: WxPlace? = nil
+    var onRename: ((String?, String?) -> Void)? = nil
+
+    @State private var showRenameSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -213,15 +224,22 @@ private struct ForecastPageView: View {
                 self.section(section)
             }
         }
+        .sheet(isPresented: $showRenameSheet) {
+            if let wxPlace {
+                LocationNameEditorSheet(
+                    place: wxPlace,
+                    onSave: { customName, streetAddress in
+                        onRename?(customName, streetAddress)
+                    }
+                )
+            }
+        }
     }
 
     @ViewBuilder private func section(_ section: DetailViewModel.Section) -> some View {
         switch section {
         case .header:
-            Text(page.place)
-                .font(.system(size: 30, weight: .bold, design: .rounded))
-                .foregroundStyle(WeatherTheme.primaryText)
-                .shadow(color: .black.opacity(0.32), radius: 4, x: 0, y: 1.5)
+            headerSection
         case .now:
             NowBlock(now: page.now)
         case .rain:
@@ -256,6 +274,88 @@ private struct ForecastPageView: View {
                 Text(partial)
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(Color(red: 1.00, green: 0.82, blue: 0.36))
+            }
+        }
+    }
+
+    @ViewBuilder private var headerSection: some View {
+        if let wxPlace, wxPlace.isCustomLocation || !wxPlace.customName.isEmpty || !wxPlace.streetAddress.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    if let sym = ShellRow.symbolForPlace(wxPlace) {
+                        Image(systemName: sym)
+                            .font(.system(size: 23, weight: .bold))
+                            .foregroundStyle(Color(red: 0.48, green: 0.86, blue: 1.00))
+                            .shadow(color: .black.opacity(0.32), radius: 3, x: 0, y: 1)
+                    }
+                    Text(wxPlace.displayTitle)
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(WeatherTheme.primaryText)
+                        .shadow(color: .black.opacity(0.32), radius: 4, x: 0, y: 1.5)
+                    if onRename != nil {
+                        Button {
+                            showRenameSheet = true
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "tag.fill")
+                                    .font(.caption2)
+                                Text(wxPlace.customName.isEmpty ? "Name Location" : "Edit Name")
+                                    .font(.caption.weight(.semibold))
+                            }
+                            .foregroundStyle(WeatherTheme.secondaryText)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.24), in: Capsule())
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.6)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .help("Set or edit location name (e.g. Home, Work, Friend's place)")
+                    }
+                }
+                let subtitle = wxPlace.displayAddressSubtitle
+                if !subtitle.isEmpty {
+                    HStack(spacing: 5) {
+                        Image(systemName: "mappin.and.ellipse")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(WeatherTheme.secondaryText)
+                        Text(subtitle)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(WeatherTheme.secondaryText)
+                    }
+                    .shadow(color: .black.opacity(0.28), radius: 2, x: 0, y: 1)
+                }
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(page.place)
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(WeatherTheme.primaryText)
+                    .shadow(color: .black.opacity(0.32), radius: 4, x: 0, y: 1.5)
+                if wxPlace != nil && onRename != nil {
+                    Button {
+                        showRenameSheet = true
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "tag.fill")
+                                .font(.caption2)
+                            Text("Name Location")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(WeatherTheme.secondaryText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.24), in: Capsule())
+                        .overlay(
+                            Capsule()
+                                .strokeBorder(Color.white.opacity(0.20), lineWidth: 0.6)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .help("Assign a custom name (e.g. Home, Work, Friend's place)")
+                }
             }
         }
     }

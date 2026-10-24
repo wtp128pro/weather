@@ -14,9 +14,14 @@ import WeatherCore
 struct PickerView: View {
     /// The view model of this presentation.
     let viewModel: PickerViewModel
+    /// Optional application model for street-address geocoding and custom-named locations.
+    var model: AppModel? = nil
+    /// Optional window dismissal callback when a custom/address location is added.
+    var onDismiss: (() -> Void)? = nil
 
     private enum Focus: Hashable {
         case search
+        case locationName
         case results
     }
 
@@ -24,35 +29,177 @@ struct PickerView: View {
     /// The keyboard cursor of the list (GtkListBox's focus row). It is not a selection the
     /// picker reports: only Return, Space or a double click add a row.
     @State private var cursor: Int?
-    /// What the field shows: always viewModel.text once an edit is applied, so an insertion
-    /// the view model cuts (64 characters / 64 bytes) is cut on screen too, as in GTK.
+    /// What the search field shows.
     @State private var draft = ""
+    /// Optional custom name for the location (e.g. "Home", "Work", "Friend's place").
+    @State private var locationName = ""
+    /// Street-address & multi-provider geocoding results for the current query.
+    @State private var addressCandidates: [WxAddressCandidate] = []
+    /// Whether an address search is currently in flight.
+    @State private var isSearchingAddresses = false
+    /// Custom status or error message when adding/searching addresses.
+    @State private var addressErrorText: String? = nil
+    /// Debounced search task for street addresses.
+    @State private var addressSearchTask: Task<Void, Never>? = nil
     /// The search field's place in AppKit, to show a cut edit at once (see `edit`).
     @State private var fieldAnchor = FieldAnchor()
 
     /// The keypad's Enter key (U+0003), which AppKit reports apart from Return.
     private static let keypadEnter = KeyEquivalent("\u{3}")
 
+    private var trimmedQuery: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedLocationName: String {
+        locationName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isShowingAddressResults: Bool {
+        trimmedQuery.utf8.count >= PickerViewModel.minQueryBytes && (!addressCandidates.isEmpty || isSearchingAddresses)
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField(
-                PickerViewModel.searchPlaceholder,
-                text: Binding(get: { draft }, set: { edit($0) }))
+        VStack(alignment: .leading, spacing: 10) {
+            // 1. Address / City / Coordinate Search Field
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Address, Landmark, or City")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField(
+                        "Street address, ZIP/postal code, coordinates, or city\u{2026}",
+                        text: Binding(get: { draft }, set: { edit($0) })
+                    )
+                    .textFieldStyle(.plain)
+                    .background(FieldAnchorView(anchor: fieldAnchor))
+                    .accessibilityLabel(PickerViewModel.searchAccessibilityLabel)
+                    .focused($focus, equals: .search)
+                    .onSubmit {
+                        viewModel.submit()
+                        triggerAddressSearch(immediate: true)
+                    }
+                    if !draft.isEmpty {
+                        Button {
+                            edit("")
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Clear search")
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(nsColor: .textBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(Color.secondary.opacity(0.28), lineWidth: 1)
+                )
+            }
+
+            // 2. Custom Location Name Field + Quick Preset Chips ("Home", "Work", "Friend's place", etc.)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 4) {
+                    Image(systemName: "tag.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text("Location Name (optional)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if !trimmedLocationName.isEmpty {
+                        Button("Clear") {
+                            locationName = ""
+                        }
+                        .buttonStyle(.link)
+                        .font(.caption)
+                    }
+                }
+                TextField(
+                    "e.g. Home, Work, Friend's place, Mom's house\u{2026}",
+                    text: $locationName
+                )
                 .textFieldStyle(.roundedBorder)
-                .background(FieldAnchorView(anchor: fieldAnchor))
-                .accessibilityLabel(PickerViewModel.searchAccessibilityLabel)
-                .focused($focus, equals: .search)
-                .onSubmit { viewModel.submit() }
-            if viewModel.isStatusVisible {
+                .focused($focus, equals: .locationName)
+                .onSubmit {
+                    if let cursor {
+                        activateDisplayedRow(at: cursor)
+                    } else if !displayedRows.isEmpty {
+                        activateDisplayedRow(at: 0)
+                    }
+                }
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(WxAddressGeocoder.presetLocationNames, id: \.label) { preset in
+                            let isSelected = trimmedLocationName.caseInsensitiveCompare(preset.label) == .orderedSame
+                            Button {
+                                if isSelected {
+                                    locationName = ""
+                                } else {
+                                    locationName = preset.label
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: preset.symbol)
+                                        .font(.caption2)
+                                    Text(preset.label)
+                                        .font(.caption.weight(.medium))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(isSelected ? Color.accentColor : Color.secondary.opacity(0.14))
+                                )
+                                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
+            // 3. Status line
+            if let addressErrorText {
+                Text(addressErrorText)
+                    .foregroundStyle(Color.red)
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else if isSearchingAddresses && addressCandidates.isEmpty {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Searching addresses and weather locations\u{2026}")
+                        .foregroundStyle(Color.secondary)
+                }
+            } else if isShowingAddressResults {
+                Text("Matching addresses & locations (\(displayedRows.count))")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.secondary)
+            } else if viewModel.isStatusVisible {
                 Text(viewModel.statusText)
                     .foregroundStyle(viewModel.statusStyle == .error ? Color.red : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.updatesFrequently)
             }
+
+            // 4. Results list (Address candidates or PickerViewModel rows)
             List(selection: $cursor) {
-                ForEach(viewModel.rows) { row in
-                    PickerRowView(row: row)
-                        .tag(row.id)
+                ForEach(displayedRows) { item in
+                    PickerCandidateRowView(
+                        item: item,
+                        customLocationName: trimmedLocationName,
+                        onAdd: { activateDisplayedRow(at: item.id) }
+                    )
+                    .tag(item.id)
                 }
             }
             .focused($focus, equals: .results)
@@ -60,21 +207,22 @@ struct PickerView: View {
                 guard let cursor else {
                     return .ignored
                 }
-                let key: PickerViewModel.Key = press.key == .space ? .space : .enter
-                // handleRowKey is the only key path that adds: it adds for a key without a
-                // modifier. Return, keypad Enter and Space with one are consumed too, so the
-                // List's own Return action (the primaryAction below) never adds on them.
-                viewModel.handleRowKey(key, modifiers: Keys.modifiers(press.modifiers), at: cursor)
+                let mods = Keys.modifiers(press.modifiers)
+                let nonCaps = mods.subtracting(.capsLock)
+                guard nonCaps.isEmpty else {
+                    return .handled
+                }
+                activateDisplayedRow(at: cursor)
                 return .handled
             }
             .contextMenu(forSelectionType: Int.self, menu: { _ in EmptyView() }, primaryAction: { ids in
                 // A double click on a row.
                 if let id = ids.first {
-                    viewModel.activateRow(at: id)
+                    activateDisplayedRow(at: id)
                 }
             })
-            .onChange(of: viewModel.rows.count) {
-                if let cursor, cursor >= viewModel.rows.count {
+            .onChange(of: displayedRows.count) {
+                if let cursor, cursor >= displayedRows.count {
                     self.cursor = nil
                 }
             }
@@ -85,30 +233,155 @@ struct PickerView: View {
             draft = viewModel.text
             focus = .search
         }
+        .onDisappear {
+            addressSearchTask?.cancel()
+            addressSearchTask = nil
+        }
         .onChange(of: viewModel.text) {
-            // A change of the view model's text (an edit it cut, or setText elsewhere). Applied
-            // on the next turn: an update made while the field is still delivering the edit is
-            // dropped by the field.
             Task { @MainActor in
-                if !draft.utf8.elementsEqual(viewModel.text.utf8) {
-                    draft = viewModel.text
+                // Sync from viewModel only when draft is within the 64-byte city limit or was cleared.
+                if viewModel.text.isEmpty && !draft.isEmpty {
+                    draft = ""
                 }
             }
         }
     }
 
-    /// A field edit: the view model applies it (cutting an over-long insertion, wx-picker.c
-    /// on_insert_text), then the field shows exactly the view model's text. The field holds the
-    /// uncut edit while it is delivered; on the next turn the cut text is written into the
-    /// field's editor and `draft`, so what is shown is what will be searched (FieldAnchor.show).
-    private func edit(_ newText: String) {
-        viewModel.textChanged(to: newText)
-        draft = newText
-        if !viewModel.text.utf8.elementsEqual(newText.utf8) {
-            Task { @MainActor in
-                draft = viewModel.text
-                fieldAnchor.show(viewModel.text)
+    // MARK: - Displayed Rows & Activation
+
+    fileprivate struct DisplayedRow: Identifiable {
+        let id: Int
+        let place: WxPlace
+        let title: String
+        let subtitle: String
+        let isStreetAddress: Bool
+        let isAdded: Bool
+        let tooltip: String
+    }
+
+    private var displayedRows: [DisplayedRow] {
+        if !addressCandidates.isEmpty {
+            return addressCandidates.enumerated().map { idx, cand in
+                let saved = isCandidateAlreadySaved(cand.place)
+                return DisplayedRow(
+                    id: idx,
+                    place: cand.place,
+                    title: cand.primaryTitle,
+                    subtitle: cand.subtitle,
+                    isStreetAddress: cand.kind != .city,
+                    isAdded: saved,
+                    tooltip: cand.fullAddress.isEmpty ? cand.place.label : cand.fullAddress
+                )
             }
+        }
+        return viewModel.rows.map { row in
+            let subParts = [row.place.admin1, row.place.country].filter { !$0.isEmpty }
+            return DisplayedRow(
+                id: row.id,
+                place: row.place,
+                title: row.place.name,
+                subtitle: subParts.joined(separator: ", "),
+                isStreetAddress: row.place.isCustomLocation || !row.place.streetAddress.isEmpty,
+                isAdded: isCandidateAlreadySaved(row.place, defaultIsAdded: row.isAdded),
+                tooltip: row.tooltip
+            )
+        }
+    }
+
+    private func isCandidateAlreadySaved(_ place: WxPlace, defaultIsAdded: Bool = false) -> Bool {
+        guard let model else { return defaultIsAdded }
+        if !trimmedLocationName.isEmpty {
+            return model.places.contains {
+                WxGeo.distanceKm(aLat: $0.place.lat, aLon: $0.place.lon, bLat: place.lat, bLon: place.lon) < 0.05
+                    && $0.place.name.caseInsensitiveCompare(trimmedLocationName) == .orderedSame
+            }
+        }
+        if place.isCustomLocation || !place.streetAddress.isEmpty {
+            return model.places.contains {
+                WxGeo.distanceKm(aLat: $0.place.lat, aLon: $0.place.lon, bLat: place.lat, bLon: place.lon) < 0.05
+                    && $0.place.name.caseInsensitiveCompare(place.name) == .orderedSame
+            }
+        }
+        return defaultIsAdded || model.isSaved(key: place.key)
+    }
+
+    private func activateDisplayedRow(at index: Int) {
+        let rows = displayedRows
+        guard index >= 0, index < rows.count else { return }
+        let row = rows[index]
+        addressErrorText = nil
+
+        guard let model else {
+            viewModel.activateRow(at: index)
+            return
+        }
+
+        let customName = trimmedLocationName.isEmpty ? nil : trimmedLocationName
+        let streetAddr: String? = {
+            if !row.place.streetAddress.isEmpty {
+                return row.place.streetAddress
+            }
+            if row.isStreetAddress {
+                return row.subtitle.isEmpty ? row.title : "\(row.title), \(row.subtitle)"
+            }
+            if customName != nil {
+                return row.subtitle.isEmpty ? row.title : "\(row.title), \(row.subtitle)"
+            }
+            return nil
+        }()
+
+        let result: AppModel.AddResult
+        if customName != nil || streetAddr != nil || row.place.isCustomLocation {
+            result = model.addCustomLocation(
+                row.place,
+                customName: customName,
+                streetAddress: streetAddr
+            )
+        } else {
+            result = model.add(row.place)
+        }
+
+        switch result {
+        case .added:
+            onDismiss?()
+        case .duplicate:
+            addressErrorText = "This location is already in your list (tip: give it a distinct Location Name like \"Home\" or \"Work\")"
+        case .full:
+            addressErrorText = "You can save at most 50 places"
+        case .failed:
+            addressErrorText = "Could not add this location"
+        }
+    }
+
+    /// Updates both `PickerViewModel` (for standard city suggestions/fallback) and schedules
+    /// the full street-address geocoder search.
+    private func edit(_ newText: String) {
+        draft = newText
+        addressErrorText = nil
+        // Pass a 64-byte-safe prefix to PickerViewModel so long street addresses aren't truncated in `draft`.
+        let vmText = String(newText.prefix(PickerViewModel.maxQueryChars))
+        viewModel.textChanged(to: vmText)
+        triggerAddressSearch(immediate: false)
+    }
+
+    private func triggerAddressSearch(immediate: Bool) {
+        addressSearchTask?.cancel()
+        let query = trimmedQuery
+        guard query.utf8.count >= PickerViewModel.minQueryBytes else {
+            addressCandidates = []
+            isSearchingAddresses = false
+            return
+        }
+        isSearchingAddresses = true
+        addressSearchTask = Task { @MainActor in
+            if !immediate {
+                try? await Task.sleep(nanoseconds: 280_000_000)
+                if Task.isCancelled { return }
+            }
+            let candidates = await WxAddressGeocoder.search(query: query)
+            if Task.isCancelled { return }
+            self.addressCandidates = candidates
+            self.isSearchingAddresses = false
         }
     }
 }
@@ -195,29 +468,65 @@ extension PickerView {
     }
 }
 
-/// One result: the semibold place label (ellipsised, the full label as its tooltip) and the dim
-/// "Added" marker while the place is saved.
-private struct PickerRowView: View {
-    let row: PickerViewModel.Row
+/// One result row: displays a street address, landmark, coordinate, or city with an optional
+/// custom location label badge ("Home", "Work", "Friend's place", etc.), subtitle, and an "Add"
+/// button or "Added" indicator.
+private struct PickerCandidateRowView: View {
+    let item: PickerView.DisplayedRow
+    let customLocationName: String
+    let onAdd: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(row.label)
-                .fontWeight(.semibold)  // .wx-picker-label { font-weight: 600 } (style.css:65-66)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(row.tooltip)
+        HStack(spacing: 10) {
+            Image(systemName: item.isStreetAddress ? "mappin.and.ellipse" : "building.2.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(item.isStreetAddress ? Color.accentColor : Color.secondary)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    if !customLocationName.isEmpty {
+                        Text(customLocationName)
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1.5)
+                            .background(Color.accentColor.opacity(0.18), in: Capsule())
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    Text(item.title)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                if !item.subtitle.isEmpty {
+                    Text(item.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .help(item.tooltip)
+
             Spacer(minLength: 8)
-            if row.isAdded {
+
+            if item.isAdded {
                 Text(PickerViewModel.addedText)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+            } else {
+                Button("Add") {
+                    onAdd()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
             }
         }
+        .padding(.vertical, 2)
         .contentShape(Rectangle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityAddTraits(.isStaticText)  // without a role the value ("Added") is not published
-        .accessibilityLabel(row.accessibilityLabel)
-        .accessibilityValue(row.accessibilityDescription)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(item.tooltip)
+        .accessibilityValue(item.isAdded ? PickerViewModel.addedText : "")
     }
 }
 

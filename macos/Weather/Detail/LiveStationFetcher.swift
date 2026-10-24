@@ -249,7 +249,19 @@ struct LiveStationSnapshot: Sendable, Equatable {
 
         // Update the 48-hour strip:
         // - Card 0 ("Now") gets the live station temperature, icon, feels-like, wind, and cloud cover.
+        // - Hours 1...6 get an exponentially decaying observation-to-model bias correction
+        //   (ΔT(Δt) = ΔT_0 · exp(-Δt / τ_MOS), τ_MOS = 3.5h) so the hourly strip transitions
+        //   smoothly from the live street-address observation into the NWP ensemble curve.
         // - Upcoming dry hours get calibrated visual cloud cover so high NWP cirrus doesn't show 100% Overcast.
+        let modelNowTempC = baseCurrent?.tempC ?? .nan
+        let tempInnovationC: Double = (liveTempC.isFinite && modelNowTempC.isFinite)
+            ? max(-8.0, min(8.0, liveTempC - modelNowTempC))
+            : 0.0
+        let mosDecayTauS = 3.5 * 3600.0
+        let hourByTS: [Int64: WxBlendHour] = forecast.map {
+            Dictionary($0.hours.map { ($0.tS, $0) }, uniquingKeysWith: { first, _ in first })
+        } ?? [:]
+
         var updatedHours = page.hours
         for idx in updatedHours.indices {
             let hCard = updatedHours[idx]
@@ -283,26 +295,54 @@ struct LiveStationSnapshot: Sendable, Equatable {
                     conditionCode: resolvedCondition,
                     isDay: isDay
                 )
-            } else if let calCloud = calibratedHourlyCloudPct[hCard.startS],
-                      calCloud.isFinite,
-                      WxConditionSymbol.precipitationRank(hCard.conditionCode) == 0,
-                      hCard.conditionCode != .fog
-            {
-                let newCond = WxConditionRules.cloudCondition(calCloud)
-                let newEntry = WxConditionSymbol.entry(newCond, isDay: hCard.isDay)
-                updatedHours[idx] = DetailViewModel.HourCard(
-                    startS: hCard.startS,
-                    isNow: hCard.isNow,
-                    hour: hCard.hour,
-                    symbolName: newEntry.symbolName,
-                    gtkIconName: newEntry.gtkIconName,
-                    temp: hCard.temp,
-                    rain: hCard.rain,
-                    cloud: "Cloud " + WxFormat.percent(calCloud),
-                    tooltip: hCard.tooltip,
-                    conditionCode: newCond,
-                    isDay: hCard.isDay
-                )
+            } else {
+                let leadS = Double(max(0, hCard.startS - nowS))
+                var newTempText = hCard.temp
+                if abs(tempInnovationC) >= 0.25,
+                   leadS > 0,
+                   leadS <= 6.0 * 3600.0,
+                   let rawHour = hourByTS[hCard.startS],
+                   rawHour.tempC.isFinite
+                {
+                    let correctedTempC = rawHour.tempC + tempInnovationC * exp(-leadS / mosDecayTauS)
+                    newTempText = WxFormat.temp(correctedTempC, units: units, withUnit: false)
+                }
+
+                if let calCloud = calibratedHourlyCloudPct[hCard.startS],
+                   calCloud.isFinite,
+                   WxConditionSymbol.precipitationRank(hCard.conditionCode) == 0,
+                   hCard.conditionCode != .fog
+                {
+                    let newCond = WxConditionRules.cloudCondition(calCloud)
+                    let newEntry = WxConditionSymbol.entry(newCond, isDay: hCard.isDay)
+                    updatedHours[idx] = DetailViewModel.HourCard(
+                        startS: hCard.startS,
+                        isNow: hCard.isNow,
+                        hour: hCard.hour,
+                        symbolName: newEntry.symbolName,
+                        gtkIconName: newEntry.gtkIconName,
+                        temp: newTempText,
+                        rain: hCard.rain,
+                        cloud: "Cloud " + WxFormat.percent(calCloud),
+                        tooltip: hCard.tooltip,
+                        conditionCode: newCond,
+                        isDay: hCard.isDay
+                    )
+                } else if newTempText != hCard.temp {
+                    updatedHours[idx] = DetailViewModel.HourCard(
+                        startS: hCard.startS,
+                        isNow: hCard.isNow,
+                        hour: hCard.hour,
+                        symbolName: hCard.symbolName,
+                        gtkIconName: hCard.gtkIconName,
+                        temp: newTempText,
+                        rain: hCard.rain,
+                        cloud: hCard.cloud,
+                        tooltip: hCard.tooltip,
+                        conditionCode: hCard.conditionCode,
+                        isDay: hCard.isDay
+                    )
+                }
             }
         }
 
@@ -538,18 +578,25 @@ final class LiveStationStore {
 
 enum LiveStationFetcher {
     /// Dynamically discovers and fetches live weather and air-quality observations from the
-    /// nearest physical stations around `(lat, lon)`.
+    /// nearest physical stations and high-resolution surface models around `(lat, lon)`.
     static func fetch(
         lat: Double,
         lon: Double,
         units: WxUnits = .imperial
     ) async -> LiveStationSnapshot? {
-        async let metarTask = fetchNearbyMETAR(lat: lat, lon: lon)
         async let openMeteoTask = fetchOpenMeteoCurrent(lat: lat, lon: lon)
         async let nwsHourlyTask = fetchNWSHourlySky(lat: lat, lon: lon)
         async let aqiTask = fetchAirQuality(lat: lat, lon: lon, units: units)
 
-        let (metar, omCurrent, nwsHourlySky, aqi) = await (metarTask, openMeteoTask, nwsHourlyTask, aqiTask)
+        let omCurrent = await openMeteoTask
+        async let metarTask = fetchNearbyMETAR(
+            lat: lat,
+            lon: lon,
+            targetElevationM: omCurrent?.elevationM,
+            upperCloudPct: omCurrent?.upperCloudPct
+        )
+
+        let (metar, nwsHourlySky, aqi) = await (metarTask, nwsHourlyTask, aqiTask)
         if metar == nil && omCurrent == nil && aqi == nil {
             return nil
         }
@@ -558,9 +605,33 @@ enum LiveStationFetcher {
         snapshot.airQuality = aqi
 
         if let metar {
-            snapshot.tempC = metar.tempC
-            snapshot.humidityPct = metar.humidityPct ?? omCurrent?.humidityPct
-            snapshot.windKmh = metar.windKmh ?? omCurrent?.windKmh
+            // Distance- and freshness-aware multi-service fusion between the elevation-adjusted
+            // multi-station observation and Open-Meteo's 90m-DEM downscaled surface analysis:
+            // - At d = 0 km, α_obs ≈ 0.94 (physical station dominates).
+            // - At d = 25 km, α_obs ≈ 0.72.
+            // - At d = 60 km, α_obs ≈ 0.42 (high-resolution DEM surface analysis prevents macro-scale smoothing).
+            let distFactor = exp(-pow(metar.distanceKm / 38.0, 2.0))
+            let ageFactor = exp(-Double(max(0, metar.ageSeconds)) / 3600.0)
+            let obsAlpha = max(0.35, min(0.95, 0.35 + 0.60 * distFactor * ageFactor))
+
+            if let omTemp = omCurrent?.tempC, omTemp.isFinite {
+                snapshot.tempC = obsAlpha * metar.tempC + (1.0 - obsAlpha) * omTemp
+            } else {
+                snapshot.tempC = metar.tempC
+            }
+
+            if let mHum = metar.humidityPct, let omHum = omCurrent?.humidityPct, omHum.isFinite {
+                snapshot.humidityPct = max(0.0, min(100.0, obsAlpha * mHum + (1.0 - obsAlpha) * omHum))
+            } else {
+                snapshot.humidityPct = metar.humidityPct ?? omCurrent?.humidityPct
+            }
+
+            if let mWind = metar.windKmh, let omWind = omCurrent?.windKmh, omWind.isFinite {
+                snapshot.windKmh = obsAlpha * mWind + (1.0 - obsAlpha) * omWind
+            } else {
+                snapshot.windKmh = metar.windKmh ?? omCurrent?.windKmh
+            }
+
             snapshot.gustKmh = metar.gustKmh ?? omCurrent?.gustKmh
             snapshot.cloudPct = metar.cloudPct ?? omCurrent?.cloudPct
             snapshot.precipMmH = metar.precipMmH ?? omCurrent?.precipMmH
@@ -568,14 +639,14 @@ enum LiveStationFetcher {
             snapshot.stationID = metar.stationID
             snapshot.stationName = metar.stationName
             snapshot.stationDistanceKm = metar.distanceKm
-            if let feels = metar.feelsC {
-                snapshot.feelsC = feels
-            } else if let t = snapshot.tempC {
+            if let t = snapshot.tempC {
                 snapshot.feelsC = LiveStationSnapshot.computeFeelsLikeC(
                     tempC: t,
                     humidityPct: snapshot.humidityPct ?? 50.0,
                     windKmh: snapshot.windKmh ?? 0.0
                 )
+            } else if let feels = metar.feelsC {
+                snapshot.feelsC = feels
             }
         } else if let omCurrent {
             snapshot.tempC = omCurrent.tempC
@@ -603,7 +674,7 @@ enum LiveStationFetcher {
         return snapshot
     }
 
-    // MARK: - 1. NOAA Aviation Weather Center Global METAR + NWS ASOS 5-Min Station Discovery
+    // MARK: - 1. Multi-Station 3D Anisotropic / Shepard / Psychrometric METAR + NWS ASOS Fusion
 
     private struct METARObservation: Decodable {
         struct CloudLayer: Decodable {
@@ -614,6 +685,7 @@ enum LiveStationFetcher {
         let name: String?
         let lat: Double?
         let lon: Double?
+        let elev: Double?
         let obsTime: Int64?
         let temp: Double?
         let dewp: Double?
@@ -637,86 +709,244 @@ enum LiveStationFetcher {
         var stationID: String
         var stationName: String?
         var distanceKm: Double
+        var ageSeconds: Int64
     }
 
-    private static func fetchNearbyMETAR(lat: Double, lon: Double) async -> BlendedMETAR? {
-        var stations = await queryMETARBox(lat: lat, lon: lon, delta: 0.42)
+    private struct CandidateStation {
+        let obs: METARObservation
+        let distKm: Double
+        let bearingRad: Double
+        let elevM: Double?
+        let ageS: Int64
+        let adjustedTempC: Double
+        let adjustedDewpC: Double?
+        let horizWeight: Double
+        let vertWeight: Double
+        var shepardFactor: Double = 1.0
+        var qcPenalty: Double = 1.0
+    }
+
+    private static func fetchNearbyMETAR(
+        lat: Double,
+        lon: Double,
+        targetElevationM: Double?,
+        upperCloudPct: Double?
+    ) async -> BlendedMETAR? {
+        var stations = await queryMETARBox(lat: lat, lon: lon, delta: 0.45)
         if stations.isEmpty {
-            stations = await queryMETARBox(lat: lat, lon: lon, delta: 0.85)
+            stations = await queryMETARBox(lat: lat, lon: lon, delta: 0.88)
         }
         guard !stations.isEmpty else { return nil }
 
         let nowEpoch = Int64(Date().timeIntervalSince1970)
-        let ranked: [(obs: METARObservation, distKm: Double)] = stations.compactMap { obs in
+        let isDaytime = WxGeo.sunIsUp(lat: lat, lon: lon, t: nowEpoch)
+
+        // Adaptive environmental lapse rate Γ_T (°C/m) and dewpoint lapse rate Γ_Td (°C/m):
+        // - Daytime mixed boundary layer: -0.0068 °C/m
+        // - Nighttime radiative stability: -0.0042 °C/m
+        let gammaTempPerM = isDaytime ? -0.0068 : -0.0042
+        let gammaDewpPerM = -0.0019
+
+        let ranked: [CandidateStation] = stations.compactMap { obs in
             guard let sLat = obs.lat, let sLon = obs.lon,
-                  let temp = obs.temp, temp.isFinite, temp >= -90, temp <= 65
+                  let rawTemp = obs.temp, rawTemp.isFinite, rawTemp >= -90, rawTemp <= 65
             else {
                 return nil
             }
-            if let obsTime = obs.obsTime, nowEpoch - obsTime > 3 * 3600 {
+            let ageS = obs.obsTime.map { max(0, nowEpoch - $0) } ?? 1200
+            if ageS > 3 * 3600 {
                 return nil
             }
             let d = WxGeo.distanceKm(aLat: lat, aLon: lon, bLat: sLat, bLon: sLon)
             guard d.isFinite, d <= 95.0 else { return nil }
-            return (obs: obs, distKm: d)
+
+            // Compute elevation difference Δz = z_target - z_station (clamped to ±1800 m)
+            let dz: Double = {
+                guard let z0 = targetElevationM, let zStation = obs.elev, z0.isFinite, zStation.isFinite else {
+                    return 0.0
+                }
+                return max(-1800.0, min(1800.0, z0 - zStation))
+            }()
+
+            let adjTemp = rawTemp + gammaTempPerM * dz
+            let adjDewp: Double? = obs.dewp.flatMap { td in
+                guard td.isFinite, td >= -95, td <= 50 else { return nil }
+                return min(adjTemp, td + gammaDewpPerM * dz)
+            }
+
+            // 3D anisotropic horizontal + vertical kernel (L_h = 22 km, d_0 = 8 km, L_z = 350 m)
+            let wHoriz = exp(-pow(d, 2.0) / (2.0 * 22.0 * 22.0)) / (1.0 + pow(d / 8.0, 2.0))
+            let wVert = exp(-pow(dz, 2.0) / (2.0 * 350.0 * 350.0))
+            let bearing = initialBearingRadians(fromLat: lat, fromLon: lon, toLat: sLat, toLon: sLon)
+
+            return CandidateStation(
+                obs: obs,
+                distKm: d,
+                bearingRad: bearing,
+                elevM: obs.elev,
+                ageS: ageS,
+                adjustedTempC: adjTemp,
+                adjustedDewpC: adjDewp,
+                horizWeight: wHoriz,
+                vertWeight: wVert
+            )
         }
         .sorted { $0.distKm < $1.distKm }
 
         guard let nearest = ranked.first else { return nil }
 
-        // Blend up to 3 stations within 40 km (or use the single nearest station if farther).
-        let pool = ranked.filter { $0.distKm <= 40.0 }.prefix(3)
-        let activePool = pool.isEmpty ? [nearest] : Array(pool)
+        // Select up to 8 stations within 60 km (or fallback to nearest)
+        let poolSlice = ranked.filter { $0.distKm <= 60.0 }.prefix(8)
+        var pool = poolSlice.isEmpty ? [nearest] : Array(poolSlice)
 
+        // Shepard directional isolation / angular de-clustering factor s_i:
+        // Prevents a tight cluster of stations on one bearing from overpowering an isolated station
+        // on the opposite side of the target street address.
+        if pool.count >= 2 {
+            for i in pool.indices {
+                var angularShadow = 0.0
+                for j in pool.indices where j != i {
+                    let cosDiff = cos(pool[i].bearingRad - pool[j].bearingRad)
+                    let dirOverlap = pow(max(0.0, (1.0 + cosDiff) * 0.5), 4.0)
+                    let ratio = sqrt(max(1e-6, pool[j].horizWeight / max(pool[i].horizWeight, 1e-6)))
+                    angularShadow += ratio * dirOverlap
+                }
+                pool[i].shepardFactor = 1.0 / (1.0 + angularShadow)
+            }
+        }
+
+        // Spatial Buddy Quality Control using Median Absolute Deviation (MAD) when >= 3 stations exist
+        if pool.count >= 3 {
+            let sortedTemps = pool.map(\.adjustedTempC).sorted()
+            let medianTemp = sortedTemps[sortedTemps.count / 2]
+            let absDevs = sortedTemps.map { abs($0 - medianTemp) }.sorted()
+            let mad = max(1.0, absDevs[absDevs.count / 2])
+            let threshold = 3.2 * mad
+            for i in pool.indices {
+                let resid = abs(pool[i].adjustedTempC - medianTemp)
+                if resid > threshold {
+                    pool[i].qcPenalty = pow(threshold / resid, 2.0)
+                }
+            }
+        }
+
+        // Variable-specific temporal exponential decay constants:
+        // τ_temp = 2700 s (45 min), τ_wind = 1200 s (20 min), τ_wx = 900 s (15 min)
         var tempSum = 0.0, tempW = 0.0
-        var humSum = 0.0, humW = 0.0
+        var dewpSum = 0.0, dewpW = 0.0
         var windSum = 0.0, windW = 0.0
-        var gustMax: Double? = nil
+        var gustExcessSqSum = 0.0, gustW = 0.0
         var cloudSum = 0.0, cloudW = 0.0
         var precipSum = 0.0, precipW = 0.0
 
-        for item in activePool {
-            let w = 1.0 / pow(max(item.distKm, 2.0), 2.0)
-            if let t = item.obs.temp {
-                tempSum += t * w
-                tempW += w
-                if let td = item.obs.dewp, td.isFinite {
-                    let rh = relativeHumidity(tempC: t, dewpC: td)
-                    humSum += rh * w
-                    humW += w
-                }
+        for item in pool {
+            let baseSpatialW = item.horizWeight * item.vertWeight * item.shepardFactor * item.qcPenalty
+            let wTemp = baseSpatialW * exp(-Double(item.ageS) / 2700.0)
+            let wWind = baseSpatialW * exp(-Double(item.ageS) / 1200.0)
+            let wWx = baseSpatialW * exp(-Double(item.ageS) / 900.0)
+
+            tempSum += item.adjustedTempC * wTemp
+            tempW += wTemp
+
+            if let td = item.adjustedDewpC {
+                dewpSum += td * wTemp
+                dewpW += wTemp
             }
             if let wspd = item.obs.wspd, wspd >= 0 {
                 let kmh = wspd * 1.852
-                windSum += kmh * w
-                windW += w
+                windSum += kmh * wWind
+                windW += wWind
+                if let wgst = item.obs.wgst, wgst > wspd {
+                    let excessKmh = max(0.0, (wgst - wspd) * 1.852)
+                    gustExcessSqSum += (excessKmh * excessKmh) * wWind
+                    gustW += wWind
+                }
             }
-            if let wgst = item.obs.wgst, wgst > 0 {
-                let kmh = wgst * 1.852
-                gustMax = max(gustMax ?? 0.0, kmh)
-            }
-            if let cPct = effectiveMETARCloudCover(obs: item.obs) {
-                cloudSum += cPct * w
-                cloudW += w
+            if let cPct = effectiveMETARCloudCover(obs: item.obs, upperCloudPct: upperCloudPct) {
+                cloudSum += cPct * wWx
+                cloudW += wWx
             }
             if let pIn = item.obs.precip, pIn >= 0 {
-                precipSum += (pIn * 25.4) * w
-                precipW += w
+                precipSum += (pIn * 25.4) * wWx
+                precipW += wWx
             }
         }
 
         guard tempW > 0 else { return nil }
         var blendedTemp = tempSum / tempW
+        var blendedDewp = dewpW > 0 ? min(blendedTemp, dewpSum / dewpW) : nil
         var blendedFeels: Double? = nil
-        var blendedHum = humW > 0 ? (humSum / humW) : nil
+        var blendedHum = blendedDewp.map { relativeHumidity(tempC: blendedTemp, dewpC: $0) }
         var blendedWind = windW > 0 ? (windSum / windW) : nil
+        var blendedGust: Double? = {
+            guard let u = blendedWind, gustW > 0 else { return nil }
+            let rmsExcess = sqrt(gustExcessSqSum / gustW)
+            return rmsExcess >= 3.5 ? (u + rmsExcess) : nil
+        }()
         var blendedCloud = cloudW > 0 ? (cloudSum / cloudW) : nil
         var blendedPrecip = precipW > 0 ? (precipSum / precipW) : nil
+        var bestAgeS = nearest.ageS
 
-        // Parse present weather string from the nearest station (if within 35 km)
-        var wxCond: WxCondition? = nil
-        if nearest.distKm <= 35.0, let wx = nearest.obs.wxString, !wx.isEmpty {
-            wxCond = parseMETARWxString(wx, tempC: blendedTemp, cloudPct: blendedCloud ?? 50.0)
+        let stationID = nearest.obs.icaoId ?? "METAR"
+        let stationName = cleanStationName(nearest.obs.name)
+
+        // If the primary station is a US ICAO station (K..., P..., T...), also query NWS api.weather.gov
+        // for 5-minute / 15-minute sub-hourly ASOS updates and official laser-ceilometer sky cover.
+        var nwsCondition: WxCondition? = nil
+        if let nwsObs = await fetchNWSLatestObservation(stationID: stationID),
+           nwsObs.timestampS >= (nearest.obs.obsTime ?? 0)
+        {
+            bestAgeS = max(0, nowEpoch - nwsObs.timestampS)
+            let dz: Double = {
+                guard let z0 = targetElevationM, let zStation = nwsObs.elevM ?? nearest.elevM else { return 0.0 }
+                return max(-1800.0, min(1800.0, z0 - zStation))
+            }()
+            if let nwsTemp = nwsObs.tempC {
+                let adjNwsTemp = nwsTemp + gammaTempPerM * dz
+                blendedTemp = (adjNwsTemp * 0.65) + (blendedTemp * 0.35)
+            }
+            if let nwsDewp = nwsObs.dewpC {
+                let adjNwsDewp = min(blendedTemp, nwsDewp + gammaDewpPerM * dz)
+                blendedDewp = blendedDewp.map { (adjNwsDewp * 0.65) + ($0 * 0.35) } ?? adjNwsDewp
+                blendedHum = relativeHumidity(tempC: blendedTemp, dewpC: blendedDewp!)
+            } else if let nwsHum = nwsObs.humidityPct {
+                blendedHum = nwsHum
+            }
+            if let nwsFeels = nwsObs.feelsC {
+                blendedFeels = nwsFeels
+            }
+            if let nwsWind = nwsObs.windKmh {
+                blendedWind = blendedWind.map { (nwsWind * 0.65) + ($0 * 0.35) } ?? nwsWind
+            }
+            if let nwsGust = nwsObs.gustKmh {
+                blendedGust = max(blendedGust ?? 0.0, nwsGust)
+            }
+            if let nwsCloud = nwsObs.cloudPct {
+                if let upper = upperCloudPct, nwsCloud < 25.0, upper > 30.0 {
+                    // Combine ASOS <=12,000 ft ceilometer with NWP upper-tropospheric cloud transmittance
+                    let lowT = 1.0 - (nwsCloud / 100.0)
+                    let highT = 1.0 - (upper / 100.0)
+                    blendedCloud = 100.0 * (1.0 - lowT * highT)
+                } else {
+                    blendedCloud = nwsCloud
+                }
+            }
+            nwsCondition = nwsObs.condition
+        }
+
+        // Compute psychrometric Stull (2011) wet-bulb temperature T_w for hydrometeor phase discrimination
+        let effectiveRH = blendedHum ?? 55.0
+        let wetBulbC = computeWetBulbC(tempC: blendedTemp, humidityPct: effectiveRH)
+
+        // Parse present weather string from the nearest station (if within 38 km)
+        var wxCond: WxCondition? = nwsCondition
+        if wxCond == nil, nearest.distKm <= 38.0, let wx = nearest.obs.wxString, !wx.isEmpty {
+            wxCond = parseMETARWxString(
+                wx,
+                tempC: blendedTemp,
+                wetBulbC: wetBulbC,
+                cloudPct: blendedCloud ?? 50.0
+            )
             if blendedPrecip == nil, let wxCond, WxConditionSymbol.precipitationRank(wxCond) > 0 {
                 blendedPrecip = switch wxCond {
                 case .heavyRain, .thunderstorm: 8.5
@@ -725,38 +955,6 @@ enum LiveStationFetcher {
                 case .drizzle: 0.3
                 default: 0.0
                 }
-            }
-        }
-
-        let stationID = nearest.obs.icaoId ?? "METAR"
-        let stationName = cleanStationName(nearest.obs.name)
-
-        // If the primary station is a US ICAO station (K..., P..., T...), also query NWS api.weather.gov
-        // for 5-minute / 15-minute sub-hourly ASOS updates and official laser-ceilometer sky cover.
-        if let nwsObs = await fetchNWSLatestObservation(stationID: stationID),
-           nwsObs.timestampS >= (nearest.obs.obsTime ?? 0)
-        {
-            if let nwsTemp = nwsObs.tempC {
-                // Weight newer 5-min ASOS reading heavily with the spatial IDW average
-                blendedTemp = (nwsTemp * 0.65) + (blendedTemp * 0.35)
-            }
-            if let nwsFeels = nwsObs.feelsC {
-                blendedFeels = nwsFeels
-            }
-            if let nwsHum = nwsObs.humidityPct {
-                blendedHum = nwsHum
-            }
-            if let nwsWind = nwsObs.windKmh {
-                blendedWind = nwsWind
-            }
-            if let nwsGust = nwsObs.gustKmh {
-                gustMax = max(gustMax ?? 0.0, nwsGust)
-            }
-            if let nwsCloud = nwsObs.cloudPct {
-                blendedCloud = nwsCloud
-            }
-            if let nwsCond = nwsObs.condition {
-                wxCond = nwsCond
             }
         }
 
@@ -769,19 +967,22 @@ enum LiveStationFetcher {
             feelsC: blendedFeels,
             humidityPct: blendedHum,
             windKmh: blendedWind,
-            gustKmh: gustMax,
+            gustKmh: blendedGust,
             cloudPct: blendedCloud,
             precipMmH: blendedPrecip,
             condition: wxCond,
             stationID: stationID,
             stationName: stationName,
-            distanceKm: nearest.distKm
+            distanceKm: nearest.distKm,
+            ageSeconds: bestAgeS
         )
     }
 
     private struct NWSLatestObs {
         var timestampS: Int64
+        var elevM: Double?
         var tempC: Double?
+        var dewpC: Double?
         var feelsC: Double?
         var humidityPct: Double?
         var windKmh: Double?
@@ -802,6 +1003,7 @@ enum LiveStationFetcher {
         struct Properties: Decodable {
             let timestamp: String?
             let textDescription: String?
+            let elevation: QuantitativeValue?
             let temperature: QuantitativeValue?
             let dewpoint: QuantitativeValue?
             let relativeHumidity: QuantitativeValue?
@@ -839,6 +1041,8 @@ enum LiveStationFetcher {
             let tempC = props.temperature?.value
             guard let tempC, tempC.isFinite else { return nil }
 
+            let dewpC = props.dewpoint?.value.flatMap { $0.isFinite ? $0 : nil }
+            let elevM = props.elevation?.value.flatMap { $0.isFinite ? $0 : nil }
             let feelsC = props.heatIndex?.value ?? props.windChill?.value
             let rh = props.relativeHumidity?.value
 
@@ -859,21 +1063,30 @@ enum LiveStationFetcher {
 
             var cloudPct: Double? = nil
             if let layers = props.cloudLayers, !layers.isEmpty {
-                var best = 0.0
+                var transmittance = 1.0
                 for layer in layers {
                     guard let amount = layer.amount?.uppercased() else { continue }
                     let rawPct = oktasCoverPercent(amount)
                     let baseMeters = layer.base?.value ?? 1500.0
-                    let weight: Double = baseMeters >= 5500.0 ? 0.32 : (baseMeters >= 3600.0 ? 0.75 : 1.0)
-                    best = max(best, rawPct * weight)
+                    let weight: Double = baseMeters >= 5500.0 ? 0.30 : (baseMeters >= 3600.0 ? 0.72 : 1.0)
+                    let layerOpacity = max(0.0, min(1.0, (rawPct * weight) / 100.0))
+                    transmittance *= (1.0 - layerOpacity)
                 }
-                cloudPct = best
+                cloudPct = max(0.0, min(100.0, 100.0 * (1.0 - transmittance)))
             }
 
-            let cond = parseNWSTextDescription(props.textDescription, tempC: tempC, cloudPct: &cloudPct)
+            let wetBulbC = computeWetBulbC(tempC: tempC, humidityPct: rh ?? 55.0)
+            let cond = parseNWSTextDescription(
+                props.textDescription,
+                tempC: tempC,
+                wetBulbC: wetBulbC,
+                cloudPct: &cloudPct
+            )
             return NWSLatestObs(
                 timestampS: ts,
+                elevM: elevM,
                 tempC: tempC,
+                dewpC: dewpC,
                 feelsC: feelsC,
                 humidityPct: rh,
                 windKmh: windKmh,
@@ -889,6 +1102,7 @@ enum LiveStationFetcher {
     private static func parseNWSTextDescription(
         _ text: String?,
         tempC: Double,
+        wetBulbC: Double,
         cloudPct: inout Double?
     ) -> WxCondition? {
         guard let text = text?.lowercased().trimmingCharacters(in: .whitespacesAndNewlines),
@@ -903,7 +1117,7 @@ enum LiveStationFetcher {
             return .sleet
         }
         if text.contains("snow") || text.contains("flurries") || text.contains("blizzard") {
-            return tempC <= 2.5 ? .snow : .sleet
+            return wetBulbC <= 0.8 ? .snow : (wetBulbC <= 2.0 ? .sleet : .rain)
         }
         if text.contains("heavy rain") {
             return .heavyRain
@@ -915,7 +1129,7 @@ enum LiveStationFetcher {
             return .lightRain
         }
         if text.contains("rain") {
-            return .rain
+            return tempC <= -0.5 ? .sleet : .rain
         }
         if text.contains("drizzle") {
             return .drizzle
@@ -1000,7 +1214,12 @@ enum LiveStationFetcher {
                 }
                 let tS = Int64(date.timeIntervalSince1970)
                 var inferredCloud: Double? = nil
-                _ = parseNWSTextDescription(period.shortForecast, tempC: 20.0, cloudPct: &inferredCloud)
+                _ = parseNWSTextDescription(
+                    period.shortForecast,
+                    tempC: 20.0,
+                    wetBulbC: 15.0,
+                    cloudPct: &inferredCloud
+                )
                 if let inferredCloud {
                     out[tS] = inferredCloud
                 }
@@ -1032,8 +1251,24 @@ enum LiveStationFetcher {
         }
     }
 
+    /// Computes initial forward azimuth (bearing in radians) from `(fromLat, fromLon)` to `(toLat, toLon)`
+    /// for Shepard directional isolation de-clustering.
+    private static func initialBearingRadians(
+        fromLat: Double,
+        fromLon: Double,
+        toLat: Double,
+        toLon: Double
+    ) -> Double {
+        let phi1 = fromLat * .pi / 180.0
+        let phi2 = toLat * .pi / 180.0
+        let dLon = (toLon - fromLon) * .pi / 180.0
+        let y = sin(dLon) * cos(phi2)
+        let x = cos(phi1) * sin(phi2) - sin(phi1) * cos(phi2) * cos(dLon)
+        return atan2(y, x)
+    }
+
     /// Computes relative humidity (0...100%) from air temperature and dewpoint (°C)
-    /// using the Magnus-Tetens saturation vapor pressure relationship.
+    /// using the Alduchov & Eskridge (1996) / Magnus-Tetens saturation vapor pressure relationship.
     private static func relativeHumidity(tempC: Double, dewpC: Double) -> Double {
         let a = 17.625
         let b = 243.04
@@ -1043,29 +1278,58 @@ enum LiveStationFetcher {
         return max(0.0, min(100.0, rh))
     }
 
-    /// Computes effective visual sky cover (0...100%) from METAR cloud layers, weighting
-    /// high thin cirrus (`base >= 18000` ft) by `0.32` so high-altitude ice crystals do
-    /// not falsely report 100% overcast on a sunny day.
-    private static func effectiveMETARCloudCover(obs: METARObservation) -> Double? {
+    /// Computes psychrometric wet-bulb temperature T_w (°C) using Stull's (2011) empirical
+    /// formula (Journal of Applied Meteorology and Climatology, 50, 2267-2269) for accurate
+    /// rain / sleet / snow hydrometeor phase discrimination.
+    static func computeWetBulbC(tempC: Double, humidityPct: Double) -> Double {
+        let rh = max(5.0, min(100.0, humidityPct))
+        let t = tempC
+        let term1 = t * atan(0.151977 * sqrt(rh + 8.313659))
+        let term2 = atan(t + rh)
+        let term3 = -atan(rh - 1.676331)
+        let term4 = 0.00391838 * pow(rh, 1.5) * atan(0.023101 * rh)
+        return term1 + term2 + term3 + term4 - 4.686035
+    }
+
+    /// Computes effective visual sky cover (0...100%) from METAR cloud layers using radiative
+    /// random-overlap transmittance (`1 - ∏ (1 - α_k C_k)`), and fuses with NWP mid/high
+    /// cloud opacity when the ASOS laser ceilometer (12,000-ft ceiling) reports clear below 12,000 ft.
+    private static func effectiveMETARCloudCover(
+        obs: METARObservation,
+        upperCloudPct: Double? = nil
+    ) -> Double? {
+        var stationCover: Double? = nil
         if let layers = obs.clouds, !layers.isEmpty {
-            var best = 0.0
+            var transmittance = 1.0
             for layer in layers {
                 guard let code = layer.cover?.uppercased() else { continue }
                 let rawPct = oktasCoverPercent(code)
                 let baseFt = layer.base ?? 5000
                 let altitudeWeight: Double = if baseFt >= 18_000 {
-                    0.32
+                    0.30
                 } else if baseFt >= 12_000 {
-                    0.75
+                    0.72
                 } else {
                     1.0
                 }
-                best = max(best, rawPct * altitudeWeight)
+                let layerOpacity = max(0.0, min(1.0, (rawPct * altitudeWeight) / 100.0))
+                transmittance *= (1.0 - layerOpacity)
             }
-            return max(0.0, min(100.0, best))
+            stationCover = max(0.0, min(100.0, 100.0 * (1.0 - transmittance)))
+        } else if let topCover = obs.cover?.uppercased() {
+            stationCover = oktasCoverPercent(topCover)
         }
-        if let topCover = obs.cover?.uppercased() {
-            return oktasCoverPercent(topCover)
+
+        // ASOS laser ceilometers top out at 12,000 ft (3,650 m): if the station reports mostly clear
+        // below 12,000 ft while NWP reports significant altostratus/cirrostratus aloft, combine via
+        // random overlap.
+        if let sc = stationCover {
+            if let upper = upperCloudPct, sc < 25.0, upper > 30.0 {
+                let lowT = 1.0 - (sc / 100.0)
+                let highT = 1.0 - (upper / 100.0)
+                return max(0.0, min(100.0, 100.0 * (1.0 - lowT * highT)))
+            }
+            return sc
         }
         return nil
     }
@@ -1081,7 +1345,12 @@ enum LiveStationFetcher {
         }
     }
 
-    private static func parseMETARWxString(_ wx: String, tempC: Double, cloudPct: Double) -> WxCondition? {
+    private static func parseMETARWxString(
+        _ wx: String,
+        tempC: Double,
+        wetBulbC: Double,
+        cloudPct: Double
+    ) -> WxCondition? {
         let u = wx.uppercased()
         if u.contains("TS") {
             return .thunderstorm
@@ -1090,7 +1359,7 @@ enum LiveStationFetcher {
             return .sleet
         }
         if u.contains("SN") || u.contains("SG") || u.contains("GS") || u.contains("GR") {
-            return tempC <= 2.5 ? .snow : .sleet
+            return wetBulbC <= 0.8 ? .snow : (wetBulbC <= 2.0 ? .sleet : .rain)
         }
         if u.contains("SHRA") || u.contains("SH") {
             return .showers
@@ -1102,7 +1371,7 @@ enum LiveStationFetcher {
             return cloudPct < 85.0 ? .showers : .lightRain
         }
         if u.contains("RA") {
-            return .rain
+            return tempC <= -0.5 ? .sleet : .rain
         }
         if u.contains("DZ") {
             return .drizzle
@@ -1133,15 +1402,17 @@ enum LiveStationFetcher {
             .joined(separator: " ")
     }
 
-    // MARK: - 2. Open-Meteo High-Resolution Current, Multi-Altitude Cloud Layers & 15-Min Radar
+    // MARK: - 2. Open-Meteo High-Resolution Current, 90m DEM Elevation, Multi-Altitude Cloud Layers & 15-Min Radar
 
     private struct OpenMeteoCurrentSnapshot {
+        var elevationM: Double?
         var tempC: Double?
         var feelsC: Double?
         var humidityPct: Double?
         var windKmh: Double?
         var gustKmh: Double?
         var cloudPct: Double?
+        var upperCloudPct: Double?
         var precipMmH: Double?
         var condition: WxCondition?
         var radarQuarters: [WxQuarter]
@@ -1176,6 +1447,7 @@ enum LiveStationFetcher {
             let time: [Int64]?
             let precipitation: [Double?]?
         }
+        let elevation: Double?
         let current: Current?
         let hourly: Hourly?
         let minutely_15: Minutely15?
@@ -1203,6 +1475,18 @@ enum LiveStationFetcher {
                     )
                 }
                 return cur.cloud_cover
+            }()
+
+            let upperCloud: Double? = {
+                if let mid = cur.cloud_cover_mid, let high = cur.cloud_cover_high {
+                    return altitudeWeightedCloud(
+                        low: 0.0,
+                        mid: mid,
+                        high: high,
+                        precipMm: cur.precipitation ?? 0.0
+                    )
+                }
+                return nil
             }()
 
             let precipRate = cur.precipitation ?? 0.0
@@ -1249,12 +1533,14 @@ enum LiveStationFetcher {
             }
 
             return OpenMeteoCurrentSnapshot(
+                elevationM: decoded.elevation,
                 tempC: cur.temperature_2m,
                 feelsC: cur.apparent_temperature,
                 humidityPct: cur.relative_humidity_2m,
                 windKmh: cur.wind_speed_10m,
                 gustKmh: cur.wind_gusts_10m,
                 cloudPct: effectiveCloud,
+                upperCloudPct: upperCloud,
                 precipMmH: cur.precipitation,
                 condition: derivedCond,
                 radarQuarters: quarters,
@@ -1265,18 +1551,22 @@ enum LiveStationFetcher {
         }
     }
 
-    /// Computes effective visual cloud cover from NWP low/mid/high cloud layers so that dry
-    /// upper-tropospheric cirrus/altostratus (`low < 25%`, `precip == 0`) does not falsely
-    /// report 100% Overcast.
+    /// Computes effective visual cloud cover from NWP low/mid/high cloud layers using radiative
+    /// random-overlap transmittance (`1 - (1 - α_low C_low)(1 - α_mid C_mid)(1 - α_high C_high)`),
+    /// ensuring dry upper-tropospheric cirrus/altostratus (`low < 25%`, `precip == 0`) does not
+    /// falsely report 100% Overcast.
     private static func altitudeWeightedCloud(
         low: Double,
         mid: Double,
         high: Double,
         precipMm: Double
     ) -> Double {
-        let midWeight: Double = (low < 25.0 && high >= 75.0 && precipMm < 0.1) ? 0.32 : 0.78
-        let weighted = max(low, mid * midWeight, high * 0.24)
-        return max(0.0, min(100.0, weighted))
+        let lowOpacity = max(0.0, min(1.0, low / 100.0))
+        let midWeight: Double = (low < 25.0 && high >= 75.0 && precipMm < 0.1) ? 0.34 : 0.76
+        let midOpacity = max(0.0, min(1.0, (mid * midWeight) / 100.0))
+        let highOpacity = max(0.0, min(1.0, (high * 0.24) / 100.0))
+        let transmittance = (1.0 - lowOpacity) * (1.0 - midOpacity) * (1.0 - highOpacity)
+        return max(0.0, min(100.0, 100.0 * (1.0 - transmittance)))
     }
 
     // MARK: - 3. Local Air Quality Monitor Discovery (EPA AirNow + Open-Meteo Fallback)
