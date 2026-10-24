@@ -27,6 +27,7 @@ struct ShellSidebar: View {
     static let detailMinWidth: CGFloat = 480
 
     let model: AppModel
+    private let liveStore = LiveStationStore.shared
 
     /// Always .all; any collapse (divider drag, toggleSidebar:) is undone at once.
     @State private var columns: NavigationSplitViewVisibility = .all
@@ -35,7 +36,7 @@ struct ShellSidebar: View {
         NavigationSplitView(columnVisibility: $columns) {
             List(selection: selection) {
                 // Recomputed from model.places on every change; never cached (U28).
-                ForEach(RowViewModel.rows(of: model)) { row in
+                ForEach(liveRows) { row in
                     ShellRow(row: row,
                              onAction: { action in _ = row.perform(action, in: model) },
                              onDrop: { text in row.acceptDrop(text, in: model) })
@@ -69,6 +70,21 @@ struct ShellSidebar: View {
                 columns = .all
             }
         }
+        .task(id: sidebarLiveTaskKey) {
+            await liveStore.refreshAll(places: model.places)
+        }
+    }
+
+    private var liveRows: [RowViewModel] {
+        model.places.map { place in
+            let base = RowViewModel(place)
+            guard let snap = liveStore.snapshot(for: place) else { return base }
+            return snap.apply(to: base, units: place.units, nowS: place.nowS)
+        }
+    }
+
+    private var sidebarLiveTaskKey: [String] {
+        model.places.map { "\($0.key):\($0.fetchedS):\($0.offline):\($0.units)" }
     }
 
     /// Prevents the enclosing NSSplitViewController from collapsing the sidebar on divider drag or

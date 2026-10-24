@@ -209,6 +209,49 @@ public struct RowViewModel: Sendable, Identifiable {
         self.isEmpty = forecast == nil
     }
 
+    private init(
+        key: String, place: WxPlace, current: WxBlendHour?, outlook: WxRainOutlook?,
+        hasForecast: Bool, name: String, region: String, temperature: String, hint: String,
+        marker: Marker?, symbolName: String, gtkIconName: String, isDim: Bool, isEmpty: Bool
+    ) {
+        self.key = key
+        self.place = place
+        self.current = current
+        self.outlook = outlook
+        self.hasForecast = hasForecast
+        self.name = name
+        self.region = region
+        self.temperature = temperature
+        self.hint = hint
+        self.marker = marker
+        self.symbolName = symbolName
+        self.gtkIconName = gtkIconName
+        self.isDim = isDim
+        self.isEmpty = isEmpty
+    }
+
+    /// Returns a copy of this row with live station conditions applied to its current display.
+    public func withLiveCurrent(_ liveCurrent: WxBlendHour, liveHint: String? = nil, units: WxUnits) -> RowViewModel {
+        let effectiveCond = WxConditionSymbol.effectiveHourlyCondition(for: liveCurrent)
+        let icon = WxConditionSymbol.entry(effectiveCond, isDay: liveCurrent.isDay)
+        return RowViewModel(
+            key: key,
+            place: place,
+            current: liveCurrent,
+            outlook: outlook,
+            hasForecast: hasForecast,
+            name: name,
+            region: region,
+            temperature: WxFormat.temp(liveCurrent.tempC, units: units, withUnit: false),
+            hint: liveHint ?? hint,
+            marker: marker,
+            symbolName: icon.symbolName,
+            gtkIconName: icon.gtkIconName,
+            isDim: isDim,
+            isEmpty: isEmpty
+        )
+    }
+
     /// The rows of the model's items, in the list's order.
     @MainActor
     public static func rows(of model: AppModel) -> [RowViewModel] {

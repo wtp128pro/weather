@@ -112,6 +112,30 @@ public final class DetailViewModel {
         /// Whether it is currently daytime at the place.
         public let isDay: Bool
 
+        public init(
+            symbolName: String,
+            gtkIconName: String,
+            iconAccessibilityLabel: String,
+            temperature: String,
+            condition: String,
+            feelsLike: String,
+            highLow: String?,
+            wind: String,
+            conditionCode: WxCondition,
+            isDay: Bool
+        ) {
+            self.symbolName = symbolName
+            self.gtkIconName = gtkIconName
+            self.iconAccessibilityLabel = iconAccessibilityLabel
+            self.temperature = temperature
+            self.condition = condition
+            self.feelsLike = feelsLike
+            self.highLow = highLow
+            self.wind = wind
+            self.conditionCode = conditionCode
+            self.isDay = isDay
+        }
+
         /// Bundled rich multi-color weather icon asset name.
         public var iconAssetName: String {
             WxConditionSymbol.assetName(conditionCode, isDay: isDay)
@@ -139,6 +163,13 @@ public final class DetailViewModel {
         public let hourly: RainChartData
         /// The nowcast chart has data (the nowcast covers "now"); the two charts then share the width.
         public var showsNowcast: Bool { nowcast.hasData }
+
+        public init(headline: String, detail: String?, nowcast: RainChartData, hourly: RainChartData) {
+            self.headline = headline
+            self.detail = detail
+            self.nowcast = nowcast
+            self.hourly = hourly
+        }
     }
 
     /// The "Clouds" card (wx-detail.h:76-79).
@@ -148,6 +179,11 @@ public final class DetailViewModel {
         public let cover: String
         /// wx_cloud_sentence().
         public let sentence: String
+
+        public init(cover: String, sentence: String) {
+            self.cover = cover
+            self.sentence = sentence
+        }
 
         /// Parsed integer cloud cover percentage (0...100), nil when unknown ("—").
         public var cloudPercent: Int? {
@@ -256,6 +292,40 @@ public final class DetailViewModel {
         public var attributionText: String { attribution.map(\.text).joined(separator: " \u{00B7} ") }
         /// "Not available right now: X, Y"; nil (hidden) when no source failed.
         public let partial: String?
+
+        public init(
+            place: String,
+            showsOfflineBadge: Bool,
+            showsStaleBadge: Bool,
+            staleBadgeTooltip: String,
+            now: Now,
+            rain: RainCard,
+            clouds: CloudCard,
+            airQuality: AirQualityCard,
+            hours: [HourCard],
+            days: [DayRow],
+            footer: String,
+            showsRefreshing: Bool,
+            attribution: [AttributionEntry],
+            attributionMarkup: String,
+            partial: String?
+        ) {
+            self.place = place
+            self.showsOfflineBadge = showsOfflineBadge
+            self.showsStaleBadge = showsStaleBadge
+            self.staleBadgeTooltip = staleBadgeTooltip
+            self.now = now
+            self.rain = rain
+            self.clouds = clouds
+            self.airQuality = airQuality
+            self.hours = hours
+            self.days = days
+            self.footer = footer
+            self.showsRefreshing = showsRefreshing
+            self.attribution = attribution
+            self.attributionMarkup = attributionMarkup
+            self.partial = partial
+        }
     }
 
     /// The page shown.
@@ -558,23 +628,23 @@ public final class DetailViewModel {
     }
 
     private nonisolated static func estimateAQI(for h: WxBlendHour) -> Int {
-        var score: Double = 42.0
+        var score: Double = 28.0
         if h.windKmh.isFinite {
             // Wind ventilation lowers particulate concentration; stagnant air raises it.
-            score -= min(14.0, max(-10.0, (h.windKmh - 12.0) * 0.65))
+            score -= min(10.0, max(-8.0, (h.windKmh - 12.0) * 0.55))
         }
         if h.precipMm.isFinite && h.precipMm > 0 {
             // Wet scavenging / rain washout improves air quality.
-            score -= min(14.0, 4.0 + h.precipMm * 3.0)
+            score -= min(12.0, 3.0 + h.precipMm * 2.5)
         }
-        if h.tempC.isFinite && h.isDay && h.tempC > 22.0 {
+        if h.tempC.isFinite && h.isDay && h.tempC > 25.0 {
             // Daytime photochemical ozone formation on warm days.
-            score += min(18.0, (h.tempC - 22.0) * 1.4)
+            score += min(12.0, (h.tempC - 25.0) * 1.1)
         }
         if h.condition == .fog {
-            score += 16.0
+            score += 14.0
         }
         let rounded = Int(score.rounded())
-        return max(14, min(160, rounded))
+        return max(12, min(160, rounded))
     }
 }

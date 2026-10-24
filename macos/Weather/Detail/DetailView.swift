@@ -25,20 +25,44 @@ struct DetailView: View {
     let place: AppModel.Place?
 
     @State private var detail = DetailViewModel()
-    @State private var liveAirQuality: DetailViewModel.AirQualityCard?
+    private let liveStore = LiveStationStore.shared
 
     var body: some View {
-        DetailPage(page: detail.page, liveAirQuality: liveAirQuality)
-            .onChange(of: ShowKey(place), initial: true) {
-                detail.show(place: place)
-            }
-            .task(id: place?.key) {
-                liveAirQuality = nil
-                guard let p = place, !p.offline else { return }
-                if let fetched = await LiveAQIFetcher.fetch(lat: p.place.lat, lon: p.place.lon) {
-                    liveAirQuality = fetched
-                }
-            }
+        DetailPage(
+            page: effectivePage,
+            liveAirQuality: liveStore.snapshot(for: place)?.airQuality
+        )
+        .onChange(of: ShowKey(place), initial: true) {
+            detail.show(place: place)
+        }
+        .task(id: LiveFetchKey(place)) {
+            guard let p = place, !p.offline else { return }
+            await liveStore.refreshIfNeeded(for: p)
+        }
+    }
+
+    private var effectivePage: DetailViewModel.Page {
+        guard case .forecast(let forecastPage) = detail.page,
+              let place,
+              let snapshot = liveStore.snapshot(for: place)
+        else {
+            return detail.page
+        }
+        return .forecast(snapshot.apply(to: forecastPage, place: place))
+    }
+
+    private struct LiveFetchKey: Equatable {
+        let key: String?
+        let fetchedS: Int64
+        let offline: Bool
+        let units: WxUnits?
+
+        init(_ p: AppModel.Place?) {
+            key = p?.key
+            fetchedS = p?.fetchedS ?? 0
+            offline = p?.offline ?? false
+            units = p?.units
+        }
     }
 
     /// What of the place the pane reads (DetailViewModel.Item), as NaN-free values: a change
@@ -98,45 +122,6 @@ struct DetailView: View {
                         UInt64(truncatingIfNeeded: d.condition.rawValue)]
             }
             return out
-        }
-    }
-}
-
-/// Fetches real-time US AQI from Open-Meteo's Air Quality API when online.
-private enum LiveAQIFetcher {
-    private struct Response: Decodable {
-        struct Current: Decodable {
-            let us_aqi: Int?
-        }
-        struct Hourly: Decodable {
-            let us_aqi: [Int?]?
-        }
-        let current: Current?
-        let hourly: Hourly?
-    }
-
-    static func fetch(lat: Double, lon: Double) async -> DetailViewModel.AirQualityCard? {
-        let urlStr = String(
-            format: "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=%.4f&longitude=%.4f&current=us_aqi&hourly=us_aqi&past_days=1&forecast_days=1",
-            lat, lon
-        )
-        guard let url = URL(string: urlStr) else { return nil }
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
-            let decoded = try JSONDecoder().decode(Response.self, from: data)
-            guard let aqi = decoded.current?.us_aqi else { return nil }
-            let clamped = max(0, min(500, aqi))
-            let pastValues = decoded.hourly?.us_aqi?.compactMap { $0 } ?? []
-            let yesterdayAQI = pastValues.count >= 24 ? pastValues[pastValues.count - 24] : nil
-            return DetailViewModel.AirQualityCard(
-                index: clamped,
-                valueText: "\(clamped)",
-                category: DetailViewModel.AirQualityCard.categoryLabel(for: clamped),
-                summary: DetailViewModel.AirQualityCard.summarySentence(aqi: clamped, referenceAQI: yesterdayAQI)
-            )
-        } catch {
-            return nil
         }
     }
 }

@@ -50,6 +50,32 @@ extension DetailViewModel {
         /// Whether this hour is during daylight.
         public let isDay: Bool
 
+        public init(
+            startS: Int64,
+            isNow: Bool,
+            hour: String,
+            symbolName: String,
+            gtkIconName: String,
+            temp: String,
+            rain: String,
+            cloud: String,
+            tooltip: String,
+            conditionCode: WxCondition,
+            isDay: Bool
+        ) {
+            self.startS = startS
+            self.isNow = isNow
+            self.hour = hour
+            self.symbolName = symbolName
+            self.gtkIconName = gtkIconName
+            self.temp = temp
+            self.rain = rain
+            self.cloud = cloud
+            self.tooltip = tooltip
+            self.conditionCode = conditionCode
+            self.isDay = isDay
+        }
+
         /// Bundled rich multi-color weather icon asset name.
         public var iconAssetName: String {
             WxConditionSymbol.assetName(conditionCode, isDay: isDay)
@@ -141,6 +167,28 @@ extension DetailViewModel {
         public let tooltip: String
         /// The day's sky/precipitation condition enum.
         public let conditionCode: WxCondition
+
+        public init(
+            startS: Int64,
+            day: String,
+            symbolName: String,
+            gtkIconName: String,
+            rain: String,
+            low: String,
+            high: String,
+            tooltip: String,
+            conditionCode: WxCondition
+        ) {
+            self.startS = startS
+            self.day = day
+            self.symbolName = symbolName
+            self.gtkIconName = gtkIconName
+            self.rain = rain
+            self.low = low
+            self.high = high
+            self.tooltip = tooltip
+            self.conditionCode = conditionCode
+        }
 
         /// Bundled rich multi-color weather icon asset name (always day variant).
         public var iconAssetName: String {
