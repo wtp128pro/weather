@@ -117,6 +117,12 @@ public struct RowViewModel: Sendable, Identifiable {
     /// The GTK icon name of the same condition (wx_icon_name; dialog-question-symbolic fallback).
     public let gtkIconName: String
 
+    /// The bundled rich weather icon asset name for the row's current condition.
+    public var iconAssetName: String {
+        let cond = current.map(WxConditionSymbol.effectiveHourlyCondition(for:)) ?? .unknown
+        return WxConditionSymbol.assetName(cond, isDay: current?.isDay ?? true)
+    }
+
     /// The region line is shown (it is hidden when empty, wx-row.c:710).
     public var isRegionVisible: Bool { !region.isEmpty }
     /// The marker text, "" while none is shown.

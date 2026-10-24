@@ -18,32 +18,49 @@ struct FirstRunView: View {
     let onAddCity: () -> Void
 
     var body: some View {
-        VStack(spacing: 18) {
-            Text(FirstRunViewModel.title)
-                .font(.system(size: NSFont.systemFontSize * 1.6, weight: .bold))
-                .accessibilityAddTraits(.isHeader)
-            Text(FirstRunViewModel.hint)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            FirstRunChipFlow(spacing: 8) {
-                ForEach(Array(viewModel.chips.enumerated()), id: \.element.id) { index, chip in
-                    Button(chip.title) {
-                        // A refused add shows nothing (wx-window.c:646-654).
-                        viewModel.addSuggestion(at: index)
+        ZStack {
+            WeatherSkyBackground(condition: .partlyCloudy, isDay: true)
+            GlassEffectContainer(spacing: 14) {
+                VStack(spacing: 18) {
+                    WeatherIconView(
+                        assetName: "wx-partly-cloudy-day",
+                        symbolName: "cloud.sun.fill",
+                        size: 76,
+                        shadowRadius: 8
+                    )
+                    .accessibilityHidden(true)
+
+                    Text(FirstRunViewModel.title)
+                        .font(.system(size: NSFont.systemFontSize * 1.6, weight: .bold, design: .rounded))
+                        .foregroundStyle(WeatherTheme.primaryText)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(FirstRunViewModel.hint)
+                        .foregroundStyle(WeatherTheme.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    FirstRunChipFlow(spacing: 8) {
+                        ForEach(Array(viewModel.chips.enumerated()), id: \.element.id) { index, chip in
+                            Button(chip.title) {
+                                // A refused add shows nothing (wx-window.c:646-654).
+                                viewModel.addSuggestion(at: index)
+                            }
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.capsule)
+                            .help(chip.tooltip)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.capsule)
-                    .help(chip.tooltip)
+                    Button(FirstRunViewModel.addCityTitle, action: onAddCity)
+                        .buttonStyle(.glassProminent)
+                        .controlSize(.large)
                 }
+                .padding(28)
+                .frame(maxWidth: 480)
+                .weatherGlassCard(cornerRadius: 26)
             }
-            Button(FirstRunViewModel.addCityTitle, action: onAddCity)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(24)
-        .frame(maxWidth: 480)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.colorScheme, .dark)
     }
 }
 

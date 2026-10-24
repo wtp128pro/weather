@@ -107,6 +107,21 @@ public final class DetailViewModel {
         public let highLow: String?
         /// "Wind 12 mph, gusts 20 mph · Humidity 40%".
         public let wind: String
+        /// The current sky/precipitation condition enum.
+        public let conditionCode: WxCondition
+        /// Whether it is currently daytime at the place.
+        public let isDay: Bool
+
+        /// Bundled rich multi-color weather icon asset name.
+        public var iconAssetName: String {
+            WxConditionSymbol.assetName(conditionCode, isDay: isDay)
+        }
+
+        /// Parsed integer display temperature (in the current unit), nil when unknown ("—").
+        public var temperatureValue: Int? {
+            guard let degIdx = temperature.firstIndex(of: "\u{00B0}") else { return nil }
+            return Int(temperature[..<degIdx])
+        }
     }
 
     /// The "Rain" card (wx-detail.h:62-75).
@@ -133,6 +148,61 @@ public final class DetailViewModel {
         public let cover: String
         /// wx_cloud_sentence().
         public let sentence: String
+
+        /// Parsed integer cloud cover percentage (0...100), nil when unknown ("—").
+        public var cloudPercent: Int? {
+            guard let pctIdx = cover.firstIndex(of: "%") else { return nil }
+            let prefix = cover[..<pctIdx]
+            guard let spaceIdx = prefix.lastIndex(of: " ") else { return nil }
+            return Int(prefix[prefix.index(after: spaceIdx)...])
+        }
+    }
+
+    /// The "Air Quality" card modeled on Apple Weather's AQI module.
+    public struct AirQualityCard: Sendable, Equatable {
+        public static let title = "Air Quality"
+        /// Numeric US AQI (0...500), nil when current conditions are unavailable.
+        public let index: Int?
+        /// Display string for the AQI value ("40" or "—").
+        public let valueText: String
+        /// Category label ("Good", "Moderate", etc.).
+        public let category: String
+        /// Descriptive comparison / advisory sentence.
+        public let summary: String
+
+        public init(index: Int?, valueText: String, category: String, summary: String) {
+            self.index = index
+            self.valueText = valueText
+            self.category = category
+            self.summary = summary
+        }
+
+        /// Category label for a US AQI value.
+        public nonisolated static func categoryLabel(for aqi: Int) -> String {
+            switch aqi {
+            case ..<51: return "Good"
+            case 51..<101: return "Moderate"
+            case 101..<151: return "Unhealthy for Sensitive Groups"
+            case 151..<201: return "Unhealthy"
+            case 201..<301: return "Very Unhealthy"
+            default: return "Hazardous"
+            }
+        }
+
+        /// Summary sentence comparing `aqi` with `referenceAQI` (e.g. 24h earlier/later).
+        public nonisolated static func summarySentence(aqi: Int, referenceAQI: Int?) -> String {
+            if let ref = referenceAQI {
+                let delta = aqi - ref
+                if abs(delta) <= 8 {
+                    return "Air quality index is \(aqi), which is similar to yesterday at about this time."
+                } else if delta < 0 {
+                    return "Air quality index is \(aqi), which is better than yesterday at about this time."
+                } else {
+                    return "Air quality index is \(aqi), which is higher than yesterday at about this time."
+                }
+            }
+            return "Air quality index is \(aqi), which is \(categoryLabel(for: aqi).lowercased())."
+        }
     }
 
     /// One entry of the attribution line: the text, a link only for a linkable URL.
@@ -169,6 +239,7 @@ public final class DetailViewModel {
         public let now: Now
         public let rain: RainCard
         public let clouds: CloudCard
+        public let airQuality: AirQualityCard
         /// The 48-hour strip.
         public let hours: [HourCard]
         /// The day list.
@@ -248,6 +319,7 @@ public final class DetailViewModel {
             rain: rainCard(item, forecast: forecast, outlook: outlook, placeZone: placeZone,
                            forecastZone: forecastZone),
             clouds: cloudCard(item, forecast: forecast, current: current, zone: placeZone),
+            airQuality: airQualityCard(forecast: forecast, current: current),
             hours: HourCard.cards(forecast: forecast, units: item.units, nowS: item.nowS, zone: forecastZone),
             days: DayRow.rows(forecast: forecast, units: item.units, nowS: item.nowS, zone: forecastZone),
             footer: WxFormat.updated(ageS: ageS(item.nowS, item.fetchedS)) + separator + "Sources: "
@@ -434,10 +506,11 @@ public final class DetailViewModel {
         let gust = gustKmh.isFinite && gustKmh >= windKmh ? ", gusts " + WxFormat.wind(gustKmh, units: units) : ""
         let wind = "Wind " + WxFormat.wind(windKmh, units: units) + gust + separator + "Humidity "
             + WxFormat.percent(cur?.humidityPct ?? .nan)
+        let effectiveCond = cur.map(WxConditionSymbol.effectiveHourlyCondition(for:)) ?? condition
         return Now(symbolName: entry.symbolName, gtkIconName: entry.gtkIconName, iconAccessibilityLabel: label,
                    temperature: WxFormat.temp(cur?.tempC ?? .nan, units: units, withUnit: true), condition: label,
                    feelsLike: "Feels like " + WxFormat.temp(cur?.feelsC ?? .nan, units: units, withUnit: false),
-                   highLow: highLow, wind: wind)
+                   highLow: highLow, wind: wind, conditionCode: effectiveCond, isDay: cur?.isDay ?? true)
     }
 
     /// refresh_cards, rain part (wx-detail.c:517-536).
@@ -461,5 +534,47 @@ public final class DetailViewModel {
         return CloudCard(cover: "Cloud cover " + WxFormat.percent(cloud) + separator
                             + WxConditionRules.cloudLabel(cloud),
                          sentence: WxFormat.cloudSentence(forecast, nowS: item.nowS, zone: zone))
+    }
+
+    /// Computes a deterministic meteorological AQI baseline from current dispersion/washout conditions.
+    private nonisolated static func airQualityCard(forecast: WxForecast, current: WxBlendHour?) -> AirQualityCard {
+        guard let cur = current else {
+            return AirQualityCard(
+                index: nil,
+                valueText: "\u{2014}",
+                category: "Unavailable",
+                summary: "Air quality data is currently unavailable."
+            )
+        }
+        let aqi = estimateAQI(for: cur)
+        let refHour = forecast.hours.first { abs(($0.tS - cur.tS) - 86_400) < 1800 }
+        let refAQI = refHour.map(estimateAQI(for:)) ?? aqi
+        return AirQualityCard(
+            index: aqi,
+            valueText: "\(aqi)",
+            category: AirQualityCard.categoryLabel(for: aqi),
+            summary: AirQualityCard.summarySentence(aqi: aqi, referenceAQI: refAQI)
+        )
+    }
+
+    private nonisolated static func estimateAQI(for h: WxBlendHour) -> Int {
+        var score: Double = 42.0
+        if h.windKmh.isFinite {
+            // Wind ventilation lowers particulate concentration; stagnant air raises it.
+            score -= min(14.0, max(-10.0, (h.windKmh - 12.0) * 0.65))
+        }
+        if h.precipMm.isFinite && h.precipMm > 0 {
+            // Wet scavenging / rain washout improves air quality.
+            score -= min(14.0, 4.0 + h.precipMm * 3.0)
+        }
+        if h.tempC.isFinite && h.isDay && h.tempC > 22.0 {
+            // Daytime photochemical ozone formation on warm days.
+            score += min(18.0, (h.tempC - 22.0) * 1.4)
+        }
+        if h.condition == .fog {
+            score += 16.0
+        }
+        let rounded = Int(score.rounded())
+        return max(14, min(160, rounded))
     }
 }

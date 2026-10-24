@@ -45,6 +45,37 @@ extension DetailViewModel {
         public let cloud: String
         /// "<clock>\nFeels like <temp with unit>\nWind <wind>\nRain <amount>".
         public let tooltip: String
+        /// The hour's sky/precipitation condition enum.
+        public let conditionCode: WxCondition
+        /// Whether this hour is during daylight.
+        public let isDay: Bool
+
+        /// Bundled rich multi-color weather icon asset name.
+        public var iconAssetName: String {
+            WxConditionSymbol.assetName(conditionCode, isDay: isDay)
+        }
+
+        /// Parsed integer display temperature, nil when unknown ("—").
+        public var tempValue: Int? {
+            guard let degIdx = temp.firstIndex(of: "\u{00B0}") else { return nil }
+            return Int(temp[..<degIdx])
+        }
+
+        /// Parsed integer rain probability (0...100), nil when unknown.
+        public var rainPercent: Int? {
+            guard let pctIdx = rain.firstIndex(of: "%"),
+                  let spaceIdx = rain[..<pctIdx].lastIndex(of: " ")
+            else { return nil }
+            return Int(rain[rain.index(after: spaceIdx)..<pctIdx])
+        }
+
+        /// Parsed integer cloud cover (0...100), nil when unknown.
+        public var cloudPercent: Int? {
+            guard let pctIdx = cloud.firstIndex(of: "%"),
+                  let spaceIdx = cloud[..<pctIdx].lastIndex(of: " ")
+            else { return nil }
+            return Int(cloud[cloud.index(after: spaceIdx)..<pctIdx])
+        }
 
         /// wx_hour_strip_set_forecast (wx-hour-strip.c:240-293): the cards of `forecast` at
         /// `nowS` in `units`, formatted with `zone` (the held zone of `forecast.place.timezone`).
@@ -78,7 +109,8 @@ extension DetailViewModel {
                     symbolName: entry.symbolName, gtkIconName: entry.gtkIconName,
                     temp: WxFormat.temp(h.tempC, units: units, withUnit: false),
                     rain: "Rain " + WxFormat.percent(h.precipProb),
-                    cloud: "Cloud " + WxFormat.percent(h.cloudPct), tooltip: tooltip))
+                    cloud: "Cloud " + WxFormat.percent(h.cloudPct), tooltip: tooltip,
+                    conditionCode: WxConditionSymbol.effectiveHourlyCondition(for: h), isDay: h.isDay))
             }
             return out
         }
@@ -107,6 +139,31 @@ extension DetailViewModel {
         /// "Rain <amount>, <chance> chance\nCloud cover <pct>" plus
         /// "\nCovers the rest of the day, from 2 PM." for a partly covered day.
         public let tooltip: String
+        /// The day's sky/precipitation condition enum.
+        public let conditionCode: WxCondition
+
+        /// Bundled rich multi-color weather icon asset name (always day variant).
+        public var iconAssetName: String {
+            WxConditionSymbol.assetName(conditionCode, isDay: true)
+        }
+
+        /// Parsed integer low temperature, nil when unknown ("—").
+        public var lowValue: Int? {
+            guard let degIdx = low.firstIndex(of: "\u{00B0}") else { return nil }
+            return Int(low[..<degIdx])
+        }
+
+        /// Parsed integer high temperature, nil when unknown ("—").
+        public var highValue: Int? {
+            guard let degIdx = high.firstIndex(of: "\u{00B0}") else { return nil }
+            return Int(high[..<degIdx])
+        }
+
+        /// Parsed integer rain chance (0...100), nil when unknown ("—").
+        public var rainPercent: Int? {
+            guard let pctIdx = rain.firstIndex(of: "%") else { return nil }
+            return Int(rain[..<pctIdx])
+        }
 
         /// wx_day_list_set_forecast (wx-day-list.c:268-329): the rows of `forecast` at `nowS`
         /// in `units`, with day ends and labels in `zone` (the held zone of
@@ -136,13 +193,20 @@ extension DetailViewModel {
                 let partial = fromS != 0
                     ? "\nCovers the rest of the day, from \(WxFormat.hourLabel(fromS, zone: zone))." : ""
                 let entry = WxConditionSymbol.entry(d.condition, isDay: true)
+                let effectiveCond = WxConditionSymbol.effectiveDailyCondition(
+                    for: d,
+                    hours: forecast.hours,
+                    quarters: forecast.quarters,
+                    zone: zone
+                )
                 out.append(DayRow(
                     startS: d.startS, day: WxFormat.weekday(d.startS, zone: zone, nowS: nowS),
                     symbolName: entry.symbolName, gtkIconName: entry.gtkIconName, rain: prob,
                     low: WxFormat.temp(d.tempMinC, units: units, withUnit: false),
                     high: WxFormat.temp(d.tempMaxC, units: units, withUnit: false),
                     tooltip: "Rain \(WxFormat.precip(d.precipMm, units: units)), \(prob) chance\nCloud cover "
-                        + WxFormat.percent(d.cloudPct) + partial))
+                        + WxFormat.percent(d.cloudPct) + partial,
+                    conditionCode: effectiveCond))
             }
             return out
         }

@@ -68,21 +68,28 @@ struct ShellPage: View {
     var body: some View {
         content
             .navigationTitle(ShellWindow.title)
+            .preferredColorScheme(.dark)
+            .toolbarColorScheme(.dark, for: .windowToolbar)
             .toolbar {
                 ToolbarItem(placement: .navigation) {
                     Button(action: openPicker) {
-                        Label(Self.addLabel, systemImage: "plus")
+                        Image(systemName: "plus")
+                            .font(.system(size: 13, weight: .bold))
                     }
+                    .buttonStyle(TitlebarPillButtonStyle())
                     .help(Self.addTooltip)
                     .accessibilityLabel(Self.addLabel)
                     .disabled(model == nil)
                 }
+                .sharedBackgroundVisibility(.hidden)
                 ToolbarItemGroup(placement: .primaryAction) {
                     Button {
                         model?.refresh()
                     } label: {
-                        Label(Self.refreshLabel, systemImage: "arrow.clockwise")
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .bold))
                     }
+                    .buttonStyle(TitlebarPillButtonStyle())
                     .help(Self.refreshTooltip)
                     .accessibilityLabel(Self.refreshLabel)
                     .disabled(!(model?.isRefreshEnabled ?? false))
@@ -91,7 +98,9 @@ struct ShellPage: View {
                         model?.toggleUnits()
                     } label: {
                         Text(Self.unitsLabel(model?.units ?? .imperial))
+                            .font(.system(size: 13, weight: .bold, design: .rounded))
                     }
+                    .buttonStyle(TitlebarPillButtonStyle())
                     .help(Self.unitsTooltip(model?.units ?? .imperial))
                     .accessibilityLabel(Self.unitsTooltip(model?.units ?? .imperial))
                     .disabled(model == nil)
@@ -99,8 +108,10 @@ struct ShellPage: View {
                     Button {
                         showSources.toggle()
                     } label: {
-                        Label(Self.sourcesLabel, systemImage: "line.3.horizontal")
+                        Image(systemName: "line.3.horizontal")
+                            .font(.system(size: 13, weight: .bold))
                     }
+                    .buttonStyle(TitlebarPillButtonStyle())
                     .help(Self.sourcesLabel)
                     .accessibilityLabel(Self.sourcesLabel)
                     .disabled(sources == nil)
@@ -110,6 +121,7 @@ struct ShellPage: View {
                         }
                     }
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
     }
 
@@ -138,6 +150,32 @@ struct ShellPage: View {
             return
         }
         openWindow(id: PickerWindow.windowID)
+    }
+}
+
+/// High-contrast dark-slate capsule button style for titlebar toolbar items, matching
+/// Apple Weather's titlebar control contrast in both Light and Dark system appearances.
+private struct TitlebarPillButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(Color.white.opacity(isEnabled ? 1.0 : 0.55))
+            .frame(minWidth: 30, minHeight: 26)
+            .padding(.horizontal, 6)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(
+                        configuration.isPressed
+                            ? Color(red: 0.16, green: 0.20, blue: 0.26).opacity(0.95)
+                            : Color(red: 0.23, green: 0.27, blue: 0.33).opacity(isEnabled ? 0.90 : 0.65)
+                    )
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(isEnabled ? 0.34 : 0.18), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.22), radius: 2, x: 0, y: 1)
     }
 }
 

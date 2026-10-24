@@ -24,42 +24,47 @@ struct ShellRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: row.symbolName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 32, height: 32)
-                .opacity(Self.iconOpacity(row))
-                .accessibilityHidden(true)
+            WeatherIconView(
+                assetName: row.iconAssetName,
+                symbolName: row.symbolName,
+                size: 36,
+                shadowRadius: 3
+            )
+            .opacity(Self.iconOpacity(row))
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.name)
                     .fontWeight(.bold)
+                    .foregroundStyle(Color.white)
                     .modifier(Self.SingleLine(maxChars: 24, minChars: 10, fontSize: Self.baseSize))
                 if row.isRegionVisible {
                     Text(row.region)
-                        .font(.system(size: Self.baseSize * 0.85))
-                        .opacity(0.7)
+                        .font(.system(size: Self.baseSize * 0.85, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.86))
                         .modifier(Self.SingleLine(maxChars: 28, fontSize: Self.baseSize * 0.85))
                 }
                 Text(row.hint)
-                    .font(.system(size: Self.baseSize * 0.85))
-                    .opacity(Self.hintOpacity(row))
+                    .font(.system(size: Self.baseSize * 0.85, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(row.isDim ? 0.72 : 0.92))
                     .modifier(Self.SingleLine(maxChars: 28, fontSize: Self.baseSize * 0.85))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(row.temperature)
-                    .font(.system(size: Self.baseSize * 1.6, weight: .light).monospacedDigit())
+                    .font(.system(size: Self.baseSize * 1.65, weight: .light, design: .rounded).monospacedDigit())
+                    .foregroundStyle(Color.white)
                     .opacity(Self.temperatureOpacity(row))
                     .lineLimit(1)
-                    .frame(minWidth: Self.charWidth(fontSize: Self.baseSize * 1.6) * 4, alignment: .trailing)
+                    .frame(minWidth: Self.charWidth(fontSize: Self.baseSize * 1.65) * 4, alignment: .trailing)
                 if row.isMarkerVisible {
                     Text(row.markerText)
-                        .font(.system(size: Self.baseSize * 0.75, weight: .semibold))
-                        .foregroundStyle(Self.markerText)
+                        .font(.system(size: Self.baseSize * 0.75, weight: .bold))
+                        .foregroundStyle(Color.white)
                         .lineLimit(1)
-                        .padding(.vertical, 1)
+                        .padding(.vertical, 2)
                         .padding(.horizontal, 8)
-                        .background(Capsule().fill(Self.markerBackground))
+                        .background(Color.orange.opacity(0.55), in: Capsule())
+                        .glassEffect(.regular.tint(.orange.opacity(0.45)), in: Capsule())
                 }
             }
             Menu {
@@ -68,6 +73,7 @@ struct ShellRow: View {
                 }
             } label: {
                 Text(RowViewModel.menuButtonText)
+                    .foregroundStyle(Color.white.opacity(0.90))
             }
             .menuStyle(.button)
             .buttonStyle(.borderless)
@@ -78,6 +84,24 @@ struct ShellRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.42, green: 0.50, blue: 0.59).opacity(0.88),
+                            Color(red: 0.34, green: 0.42, blue: 0.51).opacity(0.88),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.32), lineWidth: 0.8)
+                .allowsHitTesting(false)
+        )
         .contentShape(Rectangle())
         .help(row.tooltip)
         .overlay(alignment: .top) {

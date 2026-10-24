@@ -9,13 +9,14 @@
 // - .placeholder: the title, the text and, iff showsSpinner, a spinner whose
 //   accessibility label is Placeholder.spinnerAccessibilityLabel;
 // - .forecast, in the order of ForecastPage.sections (wx-detail.c:939-1069):
-//   header, now, Rain card, Clouds card, "Next 48 hours" + hour strip,
+//   header, now, Rain card, Air Quality + Clouds cards, "Next 48 hours" + hour strip,
 //   "Next days" + day list, footer row (text, refresh spinner, Offline / Stale
 //   badges), attribution line, partial line.
 // Card and section titles carry the header trait; tooltips (.help) and
-// accessibility labels come only from view-model strings. Labels are plain
-// (not selectable). Colours are system colours; the charts use the accent.
+// accessibility labels come only from view-model strings. Styled with high-contrast
+// Apple Weather dark-slate Liquid Glass cards and crisp white typography.
 
+import Foundation
 import SwiftUI
 import WeatherCore
 
@@ -24,11 +25,19 @@ struct DetailView: View {
     let place: AppModel.Place?
 
     @State private var detail = DetailViewModel()
+    @State private var liveAirQuality: DetailViewModel.AirQualityCard?
 
     var body: some View {
-        DetailPage(page: detail.page)
+        DetailPage(page: detail.page, liveAirQuality: liveAirQuality)
             .onChange(of: ShowKey(place), initial: true) {
                 detail.show(place: place)
+            }
+            .task(id: place?.key) {
+                liveAirQuality = nil
+                guard let p = place, !p.offline else { return }
+                if let fetched = await LiveAQIFetcher.fetch(lat: p.place.lat, lon: p.place.lon) {
+                    liveAirQuality = fetched
+                }
             }
     }
 
@@ -93,20 +102,76 @@ struct DetailView: View {
     }
 }
 
+/// Fetches real-time US AQI from Open-Meteo's Air Quality API when online.
+private enum LiveAQIFetcher {
+    private struct Response: Decodable {
+        struct Current: Decodable {
+            let us_aqi: Int?
+        }
+        struct Hourly: Decodable {
+            let us_aqi: [Int?]?
+        }
+        let current: Current?
+        let hourly: Hourly?
+    }
+
+    static func fetch(lat: Double, lon: Double) async -> DetailViewModel.AirQualityCard? {
+        let urlStr = String(
+            format: "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=%.4f&longitude=%.4f&current=us_aqi&hourly=us_aqi&past_days=1&forecast_days=1",
+            lat, lon
+        )
+        guard let url = URL(string: urlStr) else { return nil }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+            let decoded = try JSONDecoder().decode(Response.self, from: data)
+            guard let aqi = decoded.current?.us_aqi else { return nil }
+            let clamped = max(0, min(500, aqi))
+            let pastValues = decoded.hourly?.us_aqi?.compactMap { $0 } ?? []
+            let yesterdayAQI = pastValues.count >= 24 ? pastValues[pastValues.count - 24] : nil
+            return DetailViewModel.AirQualityCard(
+                index: clamped,
+                valueText: "\(clamped)",
+                category: DetailViewModel.AirQualityCard.categoryLabel(for: clamped),
+                summary: DetailViewModel.AirQualityCard.summarySentence(aqi: clamped, referenceAQI: yesterdayAQI)
+            )
+        } catch {
+            return nil
+        }
+    }
+}
+
 /// One page of the pane (wx-detail.h:7-11): the placeholder or the forecast.
 struct DetailPage: View {
     let page: DetailViewModel.Page
+    var liveAirQuality: DetailViewModel.AirQualityCard? = nil
 
     var body: some View {
         switch page {
         case .placeholder(let placeholder):
-            PlaceholderPage(placeholder: placeholder)
-        case .forecast(let forecast):
-            ScrollView(.vertical) {
-                ForecastPageView(page: forecast)
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            ZStack {
+                WeatherSkyBackground(condition: .partlyCloudy, isDay: true)
+                PlaceholderPage(placeholder: placeholder)
             }
+            .environment(\.colorScheme, .dark)
+        case .forecast(let forecast):
+            ZStack {
+                WeatherSkyBackground(
+                    condition: forecast.now.conditionCode,
+                    isDay: forecast.now.isDay
+                )
+                ScrollView(.vertical) {
+                    GlassEffectContainer(spacing: 18) {
+                        ForecastPageView(
+                            page: forecast,
+                            airQuality: liveAirQuality ?? forecast.airQuality
+                        )
+                        .padding(24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .environment(\.colorScheme, .dark)
         }
     }
 }
@@ -117,20 +182,35 @@ private struct PlaceholderPage: View {
     let placeholder: DetailViewModel.Placeholder
 
     var body: some View {
-        // C order: spinner, title, text (wx-detail.c:906-908), centred.
-        VStack(spacing: 10) {
-            if placeholder.showsSpinner {
-                ProgressView()
-                    .accessibilityLabel(Text(DetailViewModel.Placeholder.spinnerAccessibilityLabel))
+        // C order: spinner, title, text (wx-detail.c:906-908), centred inside a dark-slate glass card.
+        GlassEffectContainer {
+            VStack(spacing: 12) {
+                WeatherIconView(
+                    assetName: "wx-partly-cloudy-day",
+                    symbolName: "cloud.sun.fill",
+                    size: 68,
+                    shadowRadius: 6
+                )
+                .accessibilityHidden(true)
+
+                if placeholder.showsSpinner {
+                    ProgressView()
+                        .tint(.white)
+                        .accessibilityLabel(Text(DetailViewModel.Placeholder.spinnerAccessibilityLabel))
+                }
+                Text(placeholder.title)
+                    .font(.title2.bold())
+                    .foregroundStyle(WeatherTheme.primaryText)
+                if !placeholder.text.isEmpty {
+                    Text(placeholder.text)
+                        .foregroundStyle(WeatherTheme.secondaryText)
+                }
             }
-            Text(placeholder.title)
-                .font(.title2.bold())
-            if !placeholder.text.isEmpty {
-                Text(placeholder.text)
-                    .foregroundStyle(.secondary)
-            }
+            .multilineTextAlignment(.center)
+            .padding(.vertical, 28)
+            .padding(.horizontal, 36)
+            .weatherGlassCard(cornerRadius: 24)
         }
-        .multilineTextAlignment(.center)
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -140,9 +220,10 @@ private struct PlaceholderPage: View {
 
 private struct ForecastPageView: View {
     let page: DetailViewModel.ForecastPage
+    let airQuality: DetailViewModel.AirQualityCard
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             ForEach(DetailViewModel.ForecastPage.sections, id: \.self) { section in
                 self.section(section)
             }
@@ -153,22 +234,31 @@ private struct ForecastPageView: View {
         switch section {
         case .header:
             Text(page.place)
-                .font(.title2.bold())
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(WeatherTheme.primaryText)
+                .shadow(color: .black.opacity(0.32), radius: 4, x: 0, y: 1.5)
         case .now:
             NowBlock(now: page.now)
         case .rain:
             RainCardView(rain: page.rain)
         case .clouds:
-            CloudCardView(clouds: page.clouds)
+            HStack(alignment: .top, spacing: 16) {
+                AirQualityCardView(airQuality: airQuality)
+                CloudCardView(clouds: page.clouds)
+            }
         case .hours:
-            VStack(alignment: .leading, spacing: 8) {
-                SectionTitle(text: DetailViewModel.ForecastPage.hoursTitle)
+            VStack(alignment: .leading, spacing: 10) {
+                SectionTitle(text: DetailViewModel.ForecastPage.hoursTitle, iconAsset: nil, isCardHeader: false)
                 HourStrip(cards: page.hours)
             }
         case .days:
-            VStack(alignment: .leading, spacing: 8) {
-                SectionTitle(text: DetailViewModel.ForecastPage.daysTitle)
-                DayList(rows: page.days)
+            VStack(alignment: .leading, spacing: 10) {
+                SectionTitle(text: DetailViewModel.ForecastPage.daysTitle, iconAsset: nil, isCardHeader: false)
+                DayList(
+                    rows: page.days,
+                    currentTemperature: page.now.temperatureValue,
+                    isMetric: WeatherTheme.isMetric(temperatureText: page.now.temperature)
+                )
             }
         case .footer:
             FooterRow(page: page)
@@ -178,69 +268,132 @@ private struct ForecastPageView: View {
             }
         case .partial:
             if let partial = page.partial {
-                // style.css:147-148 colours it #9a6700 (4.87:1 on white); the system orange
-                // darkened toward the label colour keeps the hue at >= 4.5:1 in both appearances.
                 Text(partial)
-                    .font(.footnote)
-                    .foregroundStyle(Color.orange.mix(with: .primary, by: 0.4))
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color(red: 1.00, green: 0.82, blue: 0.36))
             }
         }
     }
 }
 
-/// A card or section title (heading role, wx-detail.c).
+/// A card or section title (heading role, wx-detail.c) with an optional decorative icon.
 private struct SectionTitle: View {
     let text: String
+    var iconAsset: String? = nil
+    var fallbackSymbol: String = "circle.fill"
+    var isCardHeader: Bool = true
 
     var body: some View {
-        Text(text)
-            .font(.headline)
-            .accessibilityAddTraits(.isHeader)
+        HStack(spacing: 6) {
+            if let iconAsset {
+                WeatherIconView(
+                    assetName: iconAsset,
+                    symbolName: fallbackSymbol,
+                    size: 18,
+                    shadowRadius: 1.5
+                )
+                .accessibilityHidden(true)
+            } else if isCardHeader {
+                Image(systemName: fallbackSymbol)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(WeatherTheme.cardHeaderText)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+                .font(isCardHeader ? .caption.weight(.semibold) : .headline.weight(.semibold))
+                .textCase(isCardHeader ? .uppercase : nil)
+                .tracking(isCardHeader ? 0.5 : 0)
+                .foregroundStyle(isCardHeader ? WeatherTheme.cardHeaderText : WeatherTheme.primaryText)
+                .shadow(color: isCardHeader ? .clear : .black.opacity(0.25), radius: 2, x: 0, y: 1)
+                .accessibilityAddTraits(.isHeader)
+        }
     }
 }
 
-/// "wx-card": a rounded, lightly filled box.
+/// "wx-card": a high-contrast dark-slate Liquid Glass container modeled after Apple Weather.
 private struct DetailCard<Content: View>: View {
     let title: String
+    var iconAsset: String? = nil
+    var fallbackSymbol: String = "circle.fill"
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionTitle(text: title)
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle(text: title, iconAsset: iconAsset, fallbackSymbol: fallbackSymbol, isCardHeader: true)
             content
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .weatherGlassCard(cornerRadius: 18)
     }
 }
 
-/// The current conditions: icon, temperature with unit, condition, feels like, High/Low, wind.
+/// The current conditions: hero icon, temperature with unit, condition, feels like, High/Low, wind.
 private struct NowBlock: View {
     let now: DetailViewModel.Now
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            Image(systemName: now.symbolName)
-                .font(.system(size: 64))
-                .frame(width: 80, height: 80)
-                .accessibilityLabel(Text(now.iconAccessibilityLabel))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(now.temperature)
-                    .font(.system(size: 56, weight: .light))
-                Text(now.condition)
-                    .font(.title3.weight(.semibold))
-                // style.css:110-114: feels like, High/Low and wind are dimmed.
-                Group {
-                    Text(now.feelsLike)
-                    if let highLow = now.highLow {
-                        Text(highLow)
-                    }
-                    Text(now.wind)
+        HStack(alignment: .center, spacing: 20) {
+            WeatherIconView(
+                assetName: now.iconAssetName,
+                symbolName: now.symbolName,
+                size: 92,
+                shadowRadius: 8
+            )
+            .accessibilityLabel(Text(now.iconAccessibilityLabel))
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    Text(now.temperature)
+                        .font(.system(size: 60, weight: .thin, design: .rounded))
+                        .foregroundStyle(WeatherTheme.primaryText)
+                        .monospacedDigit()
+                    Text(now.condition)
+                        .font(.title2.weight(.semibold))
+                        .foregroundStyle(WeatherTheme.primaryText)
                 }
-                .foregroundStyle(.secondary)
+
+                // Crisp white-on-slate pills for feels like, High/Low and wind.
+                HStack(spacing: 10) {
+                    NowMetricChip(iconAsset: "wx-thermometer", symbol: "thermometer.medium", text: now.feelsLike)
+                    if let highLow = now.highLow {
+                        NowMetricChip(iconAsset: nil, symbol: "arrow.up.and.down", text: highLow)
+                    }
+                    NowMetricChip(iconAsset: "wx-wind", symbol: "wind", text: now.wind)
+                }
             }
+            Spacer(minLength: 0)
         }
+        .padding(.vertical, 16)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .weatherGlassCard(cornerRadius: 22)
+    }
+}
+
+private struct NowMetricChip: View {
+    let iconAsset: String?
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let iconAsset {
+                WeatherIconView(assetName: iconAsset, symbolName: symbol, size: 16, shadowRadius: 1)
+                    .accessibilityHidden(true)
+            }
+            Text(text)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(WeatherTheme.secondaryText)
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 11)
+        .background(Color.black.opacity(0.22), in: Capsule())
+        .overlay(
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 0.6)
+                .allowsHitTesting(false)
+        )
     }
 }
 
@@ -248,36 +401,161 @@ private struct RainCardView: View {
     let rain: DetailViewModel.RainCard
 
     var body: some View {
-        DetailCard(title: DetailViewModel.RainCard.title) {
+        DetailCard(title: DetailViewModel.RainCard.title, iconAsset: "wx-umbrella", fallbackSymbol: "umbrella.fill") {
             Text(rain.headline)
                 .font(.title3.bold())
+                .foregroundStyle(WeatherTheme.primaryText)
             if let detail = rain.detail {
                 Text(detail)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(WeatherTheme.secondaryText)
             }
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
                 if rain.showsNowcast {
-                    CaptionedChart(caption: DetailViewModel.RainCard.nowcastCaption, chart: rain.nowcast)
+                    CaptionedChart(
+                        caption: DetailViewModel.RainCard.nowcastCaption,
+                        chart: rain.nowcast,
+                        showsChanceLegend: false
+                    )
                 }
-                CaptionedChart(caption: DetailViewModel.RainCard.hourlyCaption, chart: rain.hourly)
+                CaptionedChart(
+                    caption: DetailViewModel.RainCard.hourlyCaption,
+                    chart: rain.hourly,
+                    showsChanceLegend: true
+                )
             }
             .padding(.top, 6)
         }
     }
 }
 
-/// A dim caption over a chart; the two charts of the card share the width equally.
+/// A crisp caption over a chart; the two charts of the card share the width equally.
 private struct CaptionedChart: View {
     let caption: String
     let chart: RainChartData
+    var showsChanceLegend: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(caption)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(caption)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(WeatherTheme.secondaryText)
+                Spacer(minLength: 4)
+                if chart.hasData {
+                    ChartSeriesDots(showsChance: showsChanceLegend)
+                        .accessibilityHidden(true)
+                }
+            }
             DetailRainChart(chart: chart)
         }
+        .padding(10)
         .frame(maxWidth: .infinity)
+        .background(Color.black.opacity(0.20), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.6)
+                .allowsHitTesting(false)
+        )
+    }
+}
+
+/// Decorative visual swatch dots indicating the rate bar gradient and probability curve gradient.
+private struct ChartSeriesDots: View {
+    let showsChance: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.22, green: 0.86, blue: 1.00),
+                            Color(red: 0.14, green: 0.34, blue: 0.88),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: 6, height: 10)
+            if showsChance {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.98, green: 0.62, blue: 0.16),
+                                Color(red: 0.92, green: 0.36, blue: 0.58),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: 12, height: 3)
+            }
+        }
+    }
+}
+
+/// Apple Weather-style Air Quality card with index, category, full-spectrum AQI rainbow bar,
+/// and comparison summary.
+private struct AirQualityCardView: View {
+    let airQuality: DetailViewModel.AirQualityCard
+
+    var body: some View {
+        DetailCard(
+            title: DetailViewModel.AirQualityCard.title,
+            iconAsset: nil,
+            fallbackSymbol: "aqi.medium"
+        ) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(airQuality.valueText)
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(WeatherTheme.primaryText)
+                    .monospacedDigit()
+                Text(airQuality.category)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(WeatherTheme.primaryText)
+            }
+            AQIScaleBar(index: airQuality.index)
+                .padding(.vertical, 4)
+                .accessibilityHidden(true)
+            Text(airQuality.summary)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(WeatherTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Apple Weather full-spectrum AQI bar with a white-ringed position dot.
+private struct AQIScaleBar: View {
+    let index: Int?
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(WeatherTheme.aqiGradient)
+                    .frame(height: 6)
+
+                if let index {
+                    let frac = max(0.0, min(1.0, CGFloat(index) / 300.0))
+                    let dotX = min(max(4, width * frac), max(4, width - 4))
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 9, height: 9)
+                        .overlay(
+                            Circle()
+                                .strokeBorder(Color.black.opacity(0.45), lineWidth: 1.4)
+                        )
+                        .shadow(color: .black.opacity(0.30), radius: 2, x: 0, y: 0.5)
+                        .offset(x: dotX - 4.5)
+                }
+            }
+        }
+        .frame(height: 9)
     }
 }
 
@@ -285,82 +563,234 @@ private struct CloudCardView: View {
     let clouds: DetailViewModel.CloudCard
 
     var body: some View {
-        DetailCard(title: DetailViewModel.CloudCard.title) {
+        DetailCard(
+            title: DetailViewModel.CloudCard.title,
+            iconAsset: "wx-mostly-cloudy-day",
+            fallbackSymbol: "cloud.fill"
+        ) {
             Text(clouds.cover)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(WeatherTheme.primaryText)
+            if let pct = clouds.cloudPercent {
+                CloudCoverGaugeBar(percent: pct)
+                    .padding(.vertical, 4)
+                    .accessibilityHidden(true)
+            }
             Text(clouds.sentence)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(WeatherTheme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
 
-/// The 48-hour strip (wx-hour-strip.c): hour, 32-pt icon, temperature, rain and cloud (dim).
+/// Visual cloud-cover gauge bar with a bright sky-cyan to silver-white gradient fill.
+private struct CloudCoverGaugeBar: View {
+    let percent: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let clamped = CGFloat(max(0, min(100, percent))) / 100.0
+            let fillWidth = max(6, geo.size.width * clamped)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.black.opacity(0.28))
+                    .frame(height: 6)
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.38, green: 0.84, blue: 1.00),
+                                Color(red: 0.78, green: 0.88, blue: 0.98),
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: fillWidth, height: 6)
+            }
+        }
+        .frame(height: 9)
+    }
+}
+
+/// The 48-hour strip (wx-hour-strip.c): hour, 36-pt icon, temperature, rain and cloud.
 private struct HourStrip: View {
     let cards: [DetailViewModel.HourCard]
 
     var body: some View {
         ScrollView(.horizontal) {
-            LazyHStack(spacing: 8) {
+            LazyHStack(spacing: 10) {
                 ForEach(cards) { card in
-                    VStack(spacing: 4) {
+                    let hasRain = WxConditionSymbol.precipitationRank(card.conditionCode) > 0
+                        || (card.rainPercent ?? 0) >= 30
+                    VStack(spacing: 5) {
                         Text(card.hour)
-                            .font(.callout.weight(.medium))
-                        Image(systemName: card.symbolName)
-                            .font(.system(size: 32))
-                                        .frame(height: 40)
-                            .accessibilityHidden(true)
+                            .font(.callout.weight(card.isNow ? .bold : .semibold))
+                            .foregroundStyle(WeatherTheme.primaryText)
+                        WeatherIconView(
+                            assetName: card.iconAssetName,
+                            symbolName: card.symbolName,
+                            size: 36,
+                            shadowRadius: 3
+                        )
+                        .frame(height: 40)
+                        .accessibilityHidden(true)
                         Text(card.temp)
-                            .font(.title3)
+                            .font(.title3.weight(.bold))
+                            .foregroundStyle(WeatherTheme.primaryText)
                         Text(card.rain)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.caption.weight(hasRain ? .bold : .medium))
+                            .foregroundStyle(
+                                hasRain
+                                    ? WeatherTheme.rainCyan
+                                    : WeatherTheme.secondaryText
+                            )
                         Text(card.cloud)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(WeatherTheme.secondaryText)
                     }
                     .monospacedDigit()
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 10)
-                    .frame(minWidth: 64)
-                    .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                    .frame(minWidth: 68)
+                    .weatherGlassCard(cornerRadius: 14)
                     .help(card.tooltip)
                     .accessibilityElement(children: .combine)
                 }
             }
-            .padding(.bottom, 8)
+            .padding(.vertical, 4)
+            .padding(.bottom, 6)
         }
         .scrollIndicators(.automatic)
     }
 }
 
-/// The day list (wx-day-list.c): day, 24-pt icon, rain chance and low (dim), high.
+/// The day list (wx-day-list.c): day, 28-pt icon, rain chance, low, Apple Weather-style
+/// temperature range bar, and high inside a high-contrast dark-slate Liquid Glass card.
 private struct DayList: View {
     let rows: [DetailViewModel.DayRow]
+    var currentTemperature: Int? = nil
+    var isMetric: Bool = true
+
+    private var overallLow: Int? {
+        rows.compactMap(\.lowValue).min()
+    }
+
+    private var overallHigh: Int? {
+        rows.compactMap(\.highValue).max()
+    }
 
     var body: some View {
+        let minTemp = overallLow
+        let maxTemp = overallHigh
         VStack(spacing: 0) {
-            ForEach(rows) { row in
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                let hasRain = WxConditionSymbol.precipitationRank(row.conditionCode) > 0
+                    || (row.rainPercent ?? 0) >= 30
                 HStack(spacing: 12) {
                     Text(row.day)
+                        .font(.body.weight(index == 0 ? .bold : .semibold))
+                        .foregroundStyle(WeatherTheme.primaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Image(systemName: row.symbolName)
-                        .font(.system(size: 24))
-                                .frame(width: 32)
-                        .accessibilityHidden(true)
+                    WeatherIconView(
+                        assetName: row.iconAssetName,
+                        symbolName: row.symbolName,
+                        size: 28,
+                        shadowRadius: 2
+                    )
+                    .frame(width: 34)
+                    .accessibilityHidden(true)
                     Text(row.rain)
-                        .foregroundStyle(.secondary)
+                        .font(.callout.weight(hasRain ? .bold : .medium))
+                        .foregroundStyle(
+                            hasRain
+                                ? WeatherTheme.rainCyan
+                                : WeatherTheme.secondaryText
+                        )
                         .frame(minWidth: 44, alignment: .trailing)
                     Text(row.low)
-                        .foregroundStyle(.secondary)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(WeatherTheme.secondaryText)
                         .frame(minWidth: 40, alignment: .trailing)
+                    if let minTemp, let maxTemp {
+                        DayTemperatureBar(
+                            low: row.lowValue,
+                            high: row.highValue,
+                            overallLow: minTemp,
+                            overallHigh: maxTemp,
+                            currentTemp: index == 0 ? currentTemperature : nil,
+                            isMetric: isMetric
+                        )
+                        .frame(width: 130, height: 6)
+                        .accessibilityHidden(true)
+                    }
                     Text(row.high)
+                        .font(.body.weight(.bold))
+                        .foregroundStyle(WeatherTheme.primaryText)
                         .frame(minWidth: 40, alignment: .trailing)
                 }
                 .monospacedDigit()
-                .padding(.vertical, 6)
+                .padding(.vertical, 9)
+                .padding(.horizontal, 16)
                 .contentShape(Rectangle())
                 .help(row.tooltip)
                 .accessibilityElement(children: .combine)
                 if row.id != rows.last?.id {
                     Divider()
+                        .overlay(Color.white.opacity(0.18))
+                        .padding(.horizontal, 16)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .weatherGlassCard(cornerRadius: 18)
+    }
+}
+
+/// Apple Weather-style horizontal temperature range capsule bar for a single day row.
+private struct DayTemperatureBar: View {
+    let low: Int?
+    let high: Int?
+    let overallLow: Int
+    let overallHigh: Int
+    let currentTemp: Int?
+    let isMetric: Bool
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            let span = CGFloat(max(1, overallHigh - overallLow))
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.black.opacity(0.28))
+                    .frame(height: 6)
+
+                if let low, let high {
+                    let startFrac = max(0, min(1, CGFloat(low - overallLow) / span))
+                    let endFrac = max(startFrac, min(1, CGFloat(high - overallLow) / span))
+                    let xOffset = width * startFrac
+                    let barWidth = max(6, width * (endFrac - startFrac))
+
+                    Capsule()
+                        .fill(WeatherTheme.temperatureGradient(low: low, high: high, isMetric: isMetric))
+                        .frame(width: barWidth, height: 6)
+                        .offset(x: xOffset)
+
+                    if let currentTemp {
+                        let clampedNow = max(low, min(high, currentTemp))
+                        let nowFrac = max(0, min(1, CGFloat(clampedNow - overallLow) / span))
+                        let dotX = min(max(3, width * nowFrac), max(3, width - 3))
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 8, height: 8)
+                            .overlay(
+                                Circle()
+                                    .strokeBorder(.black.opacity(0.45), lineWidth: 1.3)
+                            )
+                            .shadow(color: .black.opacity(0.30), radius: 1.5, x: 0, y: 0.5)
+                            .offset(x: dotX - 4)
+                    }
                 }
             }
         }
@@ -375,11 +805,12 @@ private struct FooterRow: View {
         HStack(spacing: 8) {
             // dim-label, hexpand (wx-detail.c:1064-1065): the spinner and badges sit at the trailing edge.
             Text(page.footer)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(WeatherTheme.secondaryText)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if page.showsRefreshing {
                 ProgressView()
+                    .tint(.white)
                     .controlSize(.small)
                     .accessibilityLabel(Text(DetailViewModel.ForecastPage.refreshingAccessibilityLabel))
             }
@@ -394,17 +825,19 @@ private struct FooterRow: View {
     }
 }
 
-/// A yellow pill (style.css:133-139) with a tooltip.
+/// A high-contrast amber pill (style.css:133-139) with a tooltip.
 private struct Badge: View {
     let text: String
     let tooltip: String
 
     var body: some View {
         Text(text)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(.yellow.opacity(0.35), in: Capsule())
+            .font(.caption.weight(.bold))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(Color.orange.opacity(0.45), in: Capsule())
+            .glassEffect(.regular.tint(.orange.opacity(0.45)), in: Capsule())
             .help(tooltip)
             .accessibilityHint(Text(tooltip))
     }
@@ -422,13 +855,14 @@ private struct AttributionLine: View {
             ForEach(Array(Self.pieces(entries, in: text).enumerated()), id: \.offset) { _, piece in
                 if let link = piece.link {
                     Link(piece.text, destination: link)
+                        .foregroundStyle(WeatherTheme.rainCyan)
                 } else {
                     Text(piece.text)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(WeatherTheme.secondaryText)
                 }
             }
         }
-        .font(.footnote)
+        .font(.footnote.weight(.medium))
     }
 
     fileprivate struct Piece {

@@ -1,8 +1,8 @@
 {
   "fill" : {
     "linear-gradient" : [
-      "srgb:0.35294,0.66275,0.90196,1.00000",
-      "srgb:0.18431,0.42745,0.70980,1.00000"
+      "srgb:0.15686,0.54902,0.96078,1.00000",
+      "srgb:0.08627,0.23922,0.58039,1.00000"
     ]
   },
   "groups" : [
@@ -12,7 +12,7 @@
           "image-name" : "weather.svg",
           "name" : "weather",
           "position" : {
-            "scale" : 8.0,
+            "scale" : 7.2,
             "translation-in-points" : [
               0,
               0

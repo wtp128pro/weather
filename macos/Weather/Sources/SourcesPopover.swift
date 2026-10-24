@@ -62,6 +62,7 @@ private struct SourcesRowView: View {
                 .accessibilityLabel(row.accessibilityLabel)
             VStack(alignment: .leading, spacing: 3) {
                 Text(row.name)  // wx-sources-name: no weight rule in style.css
+                    .fontWeight(.medium)
                     .modifier(SourcesWrap())
                 Text(row.status)
                     .foregroundStyle(.secondary)
@@ -76,6 +77,9 @@ private struct SourcesRowView: View {
                 }
             }
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 

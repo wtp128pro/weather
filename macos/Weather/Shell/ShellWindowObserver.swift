@@ -60,6 +60,7 @@ struct ShellWindowObserver: NSViewRepresentable {
             guard let window else {
                 return
             }
+            window.appearance = NSAppearance(named: .darkAqua)
             let center = NotificationCenter.default
             for name in Self.windowChanges {
                 tokens.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in

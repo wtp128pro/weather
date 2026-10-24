@@ -40,8 +40,22 @@ struct ShellSidebar: View {
                              onAction: { action in _ = row.perform(action, in: model) },
                              onDrop: { text in row.acceptDrop(text, in: model) })
                         .tag(row.key)
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.34, green: 0.38, blue: 0.43),
+                        Color(red: 0.26, green: 0.30, blue: 0.35),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .environment(\.colorScheme, .dark)
             .accessibilityLabel(RowViewModel.listAccessibilityLabel)
             .navigationSplitViewColumnWidth(min: Self.sidebarMinWidth, ideal: Self.sidebarMinWidth)
             .background(SidebarSplitViewGuard())
