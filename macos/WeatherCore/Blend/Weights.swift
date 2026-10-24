@@ -7,7 +7,140 @@
 // HEURISTIC (wx-weights.c:6-13): the weights are hand-chosen, NOT fitted to
 // forecast-verification data. Every number, band edge and rule below is the C
 // table verbatim; change them here and in the C code together, never one alone.
-// Pure and deterministic: the weight depends only on the arguments.
+// Pure and deterministic: the weight depends only on the arguments (and any
+// user-configured source/model multipliers when customized in Settings).
+
+import Foundation
+import Synchronization
+
+/// User-configurable weight multipliers per provider (`nws`, `open-meteo`, `met-no`)
+/// and per NWP model (`nws:nws`, `open-meteo:hrrr`, `open-meteo:nbm`, `open-meteo:ecmwf`,
+/// `open-meteo:gfs`, `open-meteo:icon`, `open-meteo:gem`, `open-meteo:ukmo`,
+/// `open-meteo:meteofrance`, `met-no:ecmwf`).
+///
+/// A multiplier of `1.0` preserves the exact heuristic baseline weight table.
+/// Multipliers are clamped to `[0.0, 3.0]`.
+public struct WxWeightMultipliers: Sendable, Equatable, Codable {
+    public static let minMultiplier: Double = 0.0
+    public static let maxMultiplier: Double = 3.0
+    public static let defaultMultiplier: Double = 1.0
+
+    /// Per-provider overall weight multipliers (`providerID -> multiplier`).
+    public var sources: [String: Double]
+    /// Per-model weight multipliers (`"providerID:modelID" -> multiplier`).
+    public var models: [String: Double]
+
+    public init(sources: [String: Double] = [:], models: [String: Double] = [:]) {
+        self.sources = sources
+        self.models = models
+    }
+
+    /// True when all multipliers equal `1.0` (the default baseline).
+    public var isDefault: Bool {
+        sources.values.allSatisfy { abs($0 - 1.0) < 1e-9 }
+            && models.values.allSatisfy { abs($0 - 1.0) < 1e-9 }
+    }
+
+    public static func clamp(_ value: Double) -> Double {
+        guard value.isFinite else { return defaultMultiplier }
+        return min(maxMultiplier, max(minMultiplier, (value * 100.0).rounded() / 100.0))
+    }
+
+    public func sourceMultiplier(for sourceID: String) -> Double {
+        let key = String(Substring(sourceID.utf8.prefix(while: { $0 != 0 })))
+        guard let v = sources[key], v.isFinite else { return Self.defaultMultiplier }
+        return Self.clamp(v)
+    }
+
+    public mutating func setSourceMultiplier(_ value: Double, for sourceID: String) {
+        let clamped = Self.clamp(value)
+        if abs(clamped - Self.defaultMultiplier) < 1e-9 {
+            sources.removeValue(forKey: sourceID)
+        } else {
+            sources[sourceID] = clamped
+        }
+    }
+
+    public static func canonicalModelKey(sourceID: String, modelID: String) -> String {
+        let src = String(Substring(sourceID.utf8.prefix(while: { $0 != 0 })))
+        let mdl = String(Substring(modelID.utf8.prefix(while: { $0 != 0 })))
+        if src == "nws" {
+            return "nws:nws"
+        }
+        if src == "open-meteo" && mdl == "hrrr15" {
+            return "open-meteo:hrrr"
+        }
+        return "\(src):\(mdl)"
+    }
+
+    public func modelMultiplier(sourceID: String, modelID: String) -> Double {
+        let key = Self.canonicalModelKey(sourceID: sourceID, modelID: modelID)
+        guard let v = models[key], v.isFinite else { return Self.defaultMultiplier }
+        return Self.clamp(v)
+    }
+
+    public mutating func setModelMultiplier(_ value: Double, sourceID: String, modelID: String) {
+        let key = Self.canonicalModelKey(sourceID: sourceID, modelID: modelID)
+        let clamped = Self.clamp(value)
+        if abs(clamped - Self.defaultMultiplier) < 1e-9 {
+            models.removeValue(forKey: key)
+        } else {
+            models[key] = clamped
+        }
+    }
+
+    /// Combined source × model multiplier for `(sourceID, modelID)`.
+    public func combinedMultiplier(sourceID: String, modelID: String) -> Double {
+        sourceMultiplier(for: sourceID) * modelMultiplier(sourceID: sourceID, modelID: modelID)
+    }
+
+    /// Default path for persisted custom weights (`<configDirectory>/weather/weights.json`).
+    public static func defaultPath(configDirectory: String) -> String {
+        let base = configDirectory.hasSuffix("/") ? String(configDirectory.dropLast()) : configDirectory
+        return "\(base)/weather/weights.json"
+    }
+
+    public static func load(fromPath path: String) -> WxWeightMultipliers {
+        guard !path.isEmpty,
+              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let decoded = try? JSONDecoder().decode(WxWeightMultipliers.self, from: data) else {
+            return WxWeightMultipliers()
+        }
+        return decoded
+    }
+
+    public func save(toPath path: String) {
+        guard !path.isEmpty else { return }
+        let url = URL(fileURLWithPath: path)
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let data = try? encoder.encode(self) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+}
+
+/// Descriptive metadata for each forecast model row in the weight table, exposed for
+/// the Settings → Weights UI and technical documentation.
+public struct WxModelWeightDescriptor: Sendable, Identifiable, Equatable {
+    public var id: String { "\(sourceID):\(modelID)" }
+    public let sourceID: String
+    public let sourceName: String
+    public let modelID: String
+    public let displayName: String
+    public let resolutionSummary: String
+    public let coverageSummary: String
+    public let usOnly: Bool
+    public let limitedTo48h: Bool
+    /// Baseline US weights `[WxVar][band 0..3]`.
+    public let usWeights: [[Double]]
+    /// Baseline World weights `[WxVar]`.
+    public let worldWeights: [Double]
+}
 
 /// The variable groups that share one set of weights (WxVar,
 /// src/blend/wx-weights.h:24-32). `.temp` covers temperature and apparent
@@ -53,24 +186,18 @@ public enum WxWeights {
         public let origin: Origin
     }
 
-    /// wx_weight_for (wx-weights.c:147-166).
-    ///
-    /// - Parameters:
-    ///   - sourceID: provider id of the member, e.g. "open-meteo", "nws", "met-no".
-    ///   - modelID: model id of the member, e.g. "ecmwf", "hrrr", "nws".
-    ///   - variable: the variable group.
-    ///   - horizonH: (valid time - now) / 3600. Negative counts as band 0,
-    ///     +infinity as the last band; NaN is "unknown" and weighs 0.
-    ///   - usRegion: true when the place is in the US region.
-    /// - Returns: a finite weight in [0, 5]; 0 means "exclude".
-    ///
-    /// The ids are compared byte for byte as C strings (strcmp: no case
-    /// folding, no Unicode equivalence, read up to the first NUL). Rules, in
-    /// the C order: NaN horizon -> 0; unknown pair -> `unknownWeight`; a
-    /// US-only row outside the US region -> 0; a 48-hour row above
-    /// `hrrrMaxHorizonH` -> 0; otherwise the US band value inside the US
-    /// region, else the flat world value.
-    public static func weight(
+    /// Thread-safe storage for active user-configured source and model weight multipliers.
+    private static let activeMultipliersMutex = Mutex(WxWeightMultipliers())
+
+    /// Active user-configured source and model weight multipliers.
+    /// Defaults to all `1.0` (`isDefault == true`), preserving the exact baseline table.
+    public static var activeMultipliers: WxWeightMultipliers {
+        get { activeMultipliersMutex.withLock { $0 } }
+        set { activeMultipliersMutex.withLock { $0 = newValue } }
+    }
+
+    /// Baseline heuristic table weight without any user multipliers applied.
+    public static func baseWeight(
         sourceID: String, modelID: String, variable: WxVar, horizonH: Double, usRegion: Bool
     ) -> Double {
         if horizonH.isNaN {
@@ -86,6 +213,121 @@ public enum WxWeights {
             return 0.0
         }
         return usRegion ? row.us[variable.rawValue][bandOf(horizonH)] : row.world[variable.rawValue]
+    }
+
+    /// wx_weight_for (wx-weights.c:147-166), scaled by `activeMultipliers` when customized.
+    ///
+    /// - Parameters:
+    ///   - sourceID: provider id of the member, e.g. "open-meteo", "nws", "met-no".
+    ///   - modelID: model id of the member, e.g. "ecmwf", "hrrr", "nws".
+    ///   - variable: the variable group.
+    ///   - horizonH: (valid time - now) / 3600. Negative counts as band 0,
+    ///     +infinity as the last band; NaN is "unknown" and weighs 0.
+    ///   - usRegion: true when the place is in the US region.
+    /// - Returns: a finite weight in [0, 5] for default multipliers (or scaled by custom multipliers); 0 means "exclude".
+    ///
+    /// The ids are compared byte for byte as C strings (strcmp: no case
+    /// folding, no Unicode equivalence, read up to the first NUL). Rules, in
+    /// the C order: NaN horizon -> 0; unknown pair -> `unknownWeight`; a
+    /// US-only row outside the US region -> 0; a 48-hour row above
+    /// `hrrrMaxHorizonH` -> 0; otherwise the US band value inside the US
+    /// region, else the flat world value.
+    public static func weight(
+        sourceID: String, modelID: String, variable: WxVar, horizonH: Double, usRegion: Bool
+    ) -> Double {
+        let base = baseWeight(sourceID: sourceID, modelID: modelID, variable: variable, horizonH: horizonH, usRegion: usRegion)
+        guard base > 0 else { return 0.0 }
+        let mults = activeMultipliers
+        if mults.isDefault {
+            return base
+        }
+        return base * mults.combinedMultiplier(sourceID: sourceID, modelID: modelID)
+    }
+
+    /// Descriptive metadata for all 10 table rows so the Settings UI can inspect and tune them.
+    public static var modelDescriptors: [WxModelWeightDescriptor] {
+        [
+            WxModelWeightDescriptor(
+                sourceID: "nws", sourceName: "National Weather Service", modelID: "nws",
+                displayName: "NOAA NWS Forecaster Grid",
+                resolutionSummary: "2.5 km NDFD human-edited grid",
+                coverageSummary: "US, territories & coastal waters",
+                usOnly: true, limitedTo48h: false,
+                usWeights: rows[0].us, worldWeights: rows[0].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "hrrr",
+                displayName: "NOAA HRRR (Hourly & 15-min Nowcast)",
+                resolutionSummary: "3 km convection-allowing rapid refresh",
+                coverageSummary: "CONUS (0–48 h horizon)",
+                usOnly: true, limitedTo48h: true,
+                usWeights: rows[1].us, worldWeights: rows[1].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "nbm",
+                displayName: "NOAA National Blend of Models (NBM)",
+                resolutionSummary: "2.5 km calibrated multi-model ensemble",
+                coverageSummary: "CONUS & Alaska",
+                usOnly: true, limitedTo48h: false,
+                usWeights: rows[2].us, worldWeights: rows[2].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "ecmwf",
+                displayName: "ECMWF IFS (Open-Meteo)",
+                resolutionSummary: "9 km / 0.25° global spectral model",
+                coverageSummary: "Worldwide",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[3].us, worldWeights: rows[3].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "gfs",
+                displayName: "NOAA GFS Seamless",
+                resolutionSummary: "13–25 km global spectral model",
+                coverageSummary: "Worldwide",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[4].us, worldWeights: rows[4].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "icon",
+                displayName: "DWD ICON Seamless",
+                resolutionSummary: "2–13 km icosahedral non-hydrostatic",
+                coverageSummary: "Worldwide (nest in Europe)",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[5].us, worldWeights: rows[5].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "gem",
+                displayName: "ECCC GEM Seamless",
+                resolutionSummary: "2.5–15 km Canadian global/regional",
+                coverageSummary: "Worldwide (nest in North America)",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[6].us, worldWeights: rows[6].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "ukmo",
+                displayName: "UK Met Office Unified Model",
+                resolutionSummary: "2–10 km global/regional seamless",
+                coverageSummary: "Worldwide",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[7].us, worldWeights: rows[7].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "meteofrance",
+                displayName: "Météo-France ARPEGE / AROME",
+                resolutionSummary: "1.5–10 km stretched-grid spectral",
+                coverageSummary: "Worldwide (nest in Europe)",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[8].us, worldWeights: rows[8].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "met-no", sourceName: "MET Norway", modelID: "ecmwf",
+                displayName: "MET Norway Locationforecast 2.0",
+                resolutionSummary: "1 km Nordic MEPS + 9 km ECMWF IFS",
+                coverageSummary: "Worldwide",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[9].us, worldWeights: rows[9].world
+            ),
+        ]
     }
 
     /// The weight together with whether the (source, model) pair hit a real

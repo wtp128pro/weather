@@ -343,6 +343,8 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Neginato Mezora";
+				INFOPLIST_KEY_CFBundleName = "Neginato Mezora";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.weather";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
@@ -486,6 +488,8 @@
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Neginato Mezora";
+				INFOPLIST_KEY_CFBundleName = "Neginato Mezora";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.weather";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 27.0;

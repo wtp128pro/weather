@@ -14,7 +14,8 @@ import WeatherCore
 struct ShellCommands: Commands {
     /// The File menu's add item (Mac title case; the ellipsis because it opens a window).
     static let addTitle = "Add a City\u{2026}"
-    static let aboutTitle = "About Weather"
+    static let aboutTitle = "About Neginato Mezora"
+    static let sourcesTitle = "Data Sources & Weights\u{2026}"
 
     let shell: ShellState
 
@@ -24,6 +25,16 @@ struct ShellCommands: Commands {
         CommandGroup(replacing: .appInfo) {
             Button(Self.aboutTitle) {
                 SourcesAboutPanel.show()
+            }
+        }
+        CommandGroup(replacing: .appSettings) {
+            Button("Settings\u{2026}") {
+                shell.openSettings(tab: .sources)
+            }
+            .keyboardShortcut(",", modifiers: .command)
+
+            Button(Self.sourcesTitle) {
+                shell.openSettings(tab: .weights)
             }
         }
         CommandGroup(replacing: .newItem) {

@@ -1,0 +1,52 @@
+{
+  "sections": [
+    {
+      "id": "getting-started",
+      "title": "Getting Started",
+      "pages": [
+        {
+          "id": "index",
+          "href": "index.html",
+          "title": "Welcome to Neginato Mezora"
+        },
+        {
+          "id": "rain-chart",
+          "href": "rain-chart.html",
+          "title": "Rain Graph & Bars Guide"
+        },
+        {
+          "id": "shortcuts",
+          "href": "shortcuts.html",
+          "title": "Keyboard Shortcuts & Places"
+        }
+      ]
+    },
+    {
+      "id": "sources-and-weights",
+      "title": "Sources & Ensemble Weights",
+      "pages": [
+        {
+          "id": "sources-weights",
+          "href": "sources-weights.html",
+          "title": "Settings: Data Sources & Weights"
+        }
+      ]
+    },
+    {
+      "id": "algorithms-and-physics",
+      "title": "Algorithms & Meteorology",
+      "pages": [
+        {
+          "id": "algorithms",
+          "href": "algorithms.html",
+          "title": "Ensemble Blending & Citations"
+        },
+        {
+          "id": "live-stations",
+          "href": "live-stations.html",
+          "title": "Live Station 3D Assimilation"
+        }
+      ]
+    }
+  ]
+}

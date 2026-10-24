@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Live Station 3D Assimilation — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
+<div class="nav-section">Sources & Ensemble Weights</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
+<div class="nav-section">Algorithms & Meteorology</div>
+<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
+<a class="nav-link active" href="live-stations.html">Live Station 3D Assimilation</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Live Station 3D Assimilation</h1>
+<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), <code>LiveStationFetcher.swift</code> assimilates live physical observations from nearby airport METAR stations, 90m DEM surface analysis, and US EPA AirNow monitors.</p>
+
+<h2>1. 3D Anisotropic Spatial Kernel</h2>
+<p>Each physical station at horizontal distance <code>d</code> (km) and elevation difference <code>Δz</code> (m) is weighted by:</p>
+<pre><code>W_horiz(d) = exp(-d² / (2 * 22.0²)) / (1 + (d / 8.0)²)
+W_vert(Δz) = exp(-Δz² / (2 * 350.0²))
+W_spatial  = W_horiz(d) * W_vert(Δz)</code></pre>
+
+<h2>2. Diurnal Lapse-Rate Elevation Reduction</h2>
+<p>Station temperatures and dewpoints are reduced to the target location's elevation using boundary-layer lapse rates before blending:</p>
+<ul>
+    <li><strong>Daytime Dry-Bulb Lapse Rate:</strong> <code>Γ_T = -0.0068 °C/m</code> (6.8 °C/km mixed convective boundary layer)</li>
+    <li><strong>Nighttime Dry-Bulb Lapse Rate:</strong> <code>Γ_T = -0.0042 °C/m</code> (4.2 °C/km nocturnal inversion damping)</li>
+    <li><strong>Dewpoint Lapse Rate:</strong> <code>Γ_Td = -0.0019 °C/m</code></li>
+</ul>
+
+<h2>3. Shepard Directional Isolation &amp; MAD Buddy QC</h2>
+<ul>
+    <li><strong>Angular De-Clustering (Shepard, 1968):</strong> Stations clustered along the same compass bearing from the target share angular shadow penalty <code>W_dir = 1 / (1 + 0.85 * shadow)</code>.</li>
+    <li><strong>Variable-Specific Temporal Decay:</strong> Exponential decay time constants <code>τ_temp = 2700 s</code> (45 min), <code>τ_wind = 1200 s</code> (20 min), and <code>τ_wx = 900 s</code> (15 min).</li>
+    <li><strong>MAD Outlier Quality Control (Rousseeuw &amp; Croux, 1993):</strong> When &ge; 3 stations report, any sensor deviating by more than <code>3.2 × MAD</code> is penalized by a 4th-power Huber tail weight.</li>
+    <li><strong>6-Hour MOS Bias Decay (Glahn &amp; Lowry, 1972):</strong> The observed temperature innovation <code>ΔT_0</code> decays across the first 6 forecast hours via <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
+</ul>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

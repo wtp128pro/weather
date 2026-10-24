@@ -92,7 +92,10 @@ public struct RainChartData: Sendable, Equatable {
     public static let noDataText = "No data"
     /// Labels of the chance scale on the right (hourly view, wx-rain-chart.c:532-533).
     public static let percentTopText = "100%"
+    public static let percentMidText = "50%"
     public static let percentBottomText = "0%"
+    /// Baseline label of the rain-rate scale on the left.
+    public static let rateZeroText = "0"
     /// MIN_WIDTH/MIN_HEIGHT, NAT_WIDTH/NAT_HEIGHT (wx-rain-chart.c:19-22).
     public static let minimumSize = (width: 160, height: 96)
     public static let naturalSize = (width: 360, height: 140)
@@ -182,6 +185,40 @@ public struct RainChartData: Sendable, Equatable {
 
     /// The chance line is drawn (the hourly view of a chart with data).
     public var showsProbabilityLine: Bool { hasData && !isQuarters }
+
+    /// The midpoint label of the left rain-rate scale (`scaleTopMmH / 2`).
+    public var midScaleLabel: String {
+        WxFormat.precip(scaleTopMmH * 0.5, units: units) + "/h"
+    }
+
+    /// Short unit string for the rain-rate scale (`"in/h"` or `"mm/h"`).
+    public var rateUnitShort: String {
+        units == .imperial ? "in/h" : "mm/h"
+    }
+
+    /// Formatted rain rate for a specific slot (e.g. `"0.06 in/h"` or `"1.5 mm/h"`), or `nil` if dry/unknown.
+    public func formattedRate(forSlot slot: Int) -> String? {
+        guard rateMmH.indices.contains(slot) else { return nil }
+        let mmh = rateMmH[slot]
+        guard mmh.isFinite, mmh > 0 else { return nil }
+        return WxFormat.precip(mmh, units: units) + "/h"
+    }
+
+    /// Compact numeric value for a bar callout on the canvas (e.g. `"0.06 in"` or `"1.5 mm"`).
+    public func compactBarLabel(forSlot slot: Int) -> String? {
+        guard rateMmH.indices.contains(slot) else { return nil }
+        let mmh = rateMmH[slot]
+        guard mmh.isFinite, mmh > 0 else { return nil }
+        return WxFormat.precip(mmh, units: units) + "/h"
+    }
+
+    /// Formatted probability percentage for a specific slot (e.g. `"80%"`), or `nil` if unknown.
+    public func formattedProbability(forSlot slot: Int) -> String? {
+        guard probability.indices.contains(slot) else { return nil }
+        let p = probability[slot]
+        guard p.isFinite, p >= 0 else { return nil }
+        return WxFormat.percent(p)
+    }
 
     /// The slots that get a bar: a known rate above 0.
     public var barSlots: [Int] {

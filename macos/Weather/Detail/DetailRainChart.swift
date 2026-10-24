@@ -33,6 +33,9 @@ struct DetailRainChart: View {
 
     /// The chart's small font (PANGO_SCALE_SMALL layouts, wx-rain-chart.c:692-712).
     static let font = Font.caption2.weight(.medium)
+    private static let badgeFont = Font.system(size: 9.5, weight: .semibold, design: .rounded)
+
+    @State private var hoverLocation: CGPoint?
 
     var body: some View {
         content
@@ -51,7 +54,15 @@ struct DetailRainChart: View {
     @ViewBuilder private var content: some View {
         if chart.hasData {
             Canvas { context, size in
-                Self.paint(chart, in: context, size: size)
+                Self.paint(chart, in: context, size: size, hoverLocation: hoverLocation)
+            }
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let pt):
+                    hoverLocation = pt
+                case .ended:
+                    hoverLocation = nil
+                }
             }
         } else {
             Text(RainChartData.noDataText)
@@ -66,13 +77,20 @@ struct DetailRainChart: View {
     private static let barTopColor = Color(red: 0.22, green: 0.86, blue: 1.00)
     private static let barMidColor = Color(red: 0.06, green: 0.58, blue: 0.96)
     private static let barBottomColor = Color(red: 0.14, green: 0.34, blue: 0.88)
+    private static let barLabelColor = Color(red: 0.60, green: 0.92, blue: 1.00)
 
     private static let chanceHighColor = Color(red: 0.98, green: 0.62, blue: 0.16)
     private static let chanceMidColor = Color(red: 0.92, green: 0.36, blue: 0.58)
     private static let chanceLowColor = Color(red: 0.56, green: 0.38, blue: 0.96)
+    private static let chanceLabelColor = Color(red: 1.00, green: 0.80, blue: 0.54)
 
     /// Measures the labels, takes the view model's geometry for `size` and paints it.
-    private static func paint(_ chart: RainChartData, in context: GraphicsContext, size: CGSize) {
+    private static func paint(
+        _ chart: RainChartData,
+        in context: GraphicsContext,
+        size: CGSize,
+        hoverLocation: CGPoint?
+    ) {
         let unbounded = CGSize(width: CGFloat.infinity, height: CGFloat.infinity)
         let top = context.resolve(Text(RainChartData.percentTopText).font(font)).measure(in: unbounded)
         let widths = chart.axisLabels.map {
@@ -85,6 +103,22 @@ struct DetailRainChart: View {
         }
 
         let plotRect = cgRect(geometry.plot)
+        let slotCount = max(1, chart.slotCount)
+        let slotWidth = plotRect.width / CGFloat(slotCount)
+
+        // Determine hovered slot if cursor is inside the plot horizontally.
+        let hoveredSlot: Int? = {
+            guard let loc = hoverLocation,
+                  plotRect.width > 0,
+                  loc.x >= plotRect.minX,
+                  loc.x <= plotRect.maxX,
+                  loc.y >= plotRect.minY - 8,
+                  loc.y <= size.height else {
+                return nil
+            }
+            let raw = Int(((loc.x - plotRect.minX) / slotWidth).rounded(.down))
+            return max(0, min(slotCount - 1, raw))
+        }()
 
         // 1. Softly rounded plot well backdrop.
         if plotRect.width > 4 && plotRect.height > 4 {
@@ -159,9 +193,11 @@ struct DetailRainChart: View {
         }
 
         // 4. Precipitation rate bars with 3-stop vertical aqua-to-cobalt gradient and top highlight cap.
-        for bar in geometry.bars {
+        let barPairs = Array(zip(chart.barSlots, geometry.bars))
+        for (slot, bar) in barPairs {
             let r = cgRect(bar)
             guard r.width > 0 && r.height > 0 else { continue }
+            let isHovered = hoveredSlot == slot
             let corner = min(r.width * 0.45, min(r.height * 0.5, 4.5))
             let barPath = UnevenRoundedRectangle(
                 topLeadingRadius: corner,
@@ -171,11 +207,11 @@ struct DetailRainChart: View {
                 style: .continuous
             ).path(in: r)
 
-            // Soft outer glow for taller bars.
-            if r.height >= 6 {
+            // Soft outer glow for taller or hovered bars.
+            if r.height >= 6 || isHovered {
                 var glowCtx = context
-                glowCtx.opacity = 0.22
-                let glowRect = r.insetBy(dx: -0.75, dy: -0.5)
+                glowCtx.opacity = isHovered ? 0.45 : 0.22
+                let glowRect = r.insetBy(dx: isHovered ? -1.4 : -0.75, dy: -0.5)
                 glowCtx.fill(
                     Path(roundedRect: glowRect, cornerRadius: corner + 1),
                     with: .color(barTopColor)
@@ -200,7 +236,7 @@ struct DetailRainChart: View {
                 let capRect = CGRect(x: r.minX + 0.5, y: r.minY, width: max(0, r.width - 1), height: min(2.0, r.height * 0.35))
                 context.fill(
                     Path(roundedRect: capRect, cornerRadius: corner),
-                    with: .color(.white.opacity(0.48))
+                    with: .color(.white.opacity(isHovered ? 0.72 : 0.48))
                 )
             }
         }
@@ -258,14 +294,275 @@ struct DetailRainChart: View {
             drawNode(at: CGPoint(x: r.midX, y: r.midY), in: context, plotRect: plotRect)
         }
 
-        // 7. Scale and axis labels (high-contrast crisp white on dark-slate card).
-        for text in geometry.texts {
-            context.draw(
-                context.resolve(Text(text.text).font(font).foregroundStyle(Color.white.opacity(0.92))),
-                at: CGPoint(x: CGFloat(text.origin.x), y: CGFloat(text.origin.y)),
-                anchor: .topLeading
+        // 7. Direct bar & curve peak callout badges (when not obscured by hover).
+        if hoveredSlot == nil && plotRect.width >= 180 && plotRect.height >= 64 {
+            drawPeakCallouts(
+                chart: chart,
+                barPairs: barPairs,
+                plotRect: plotRect,
+                slotWidth: slotWidth,
+                in: context,
+                unbounded: unbounded
             )
         }
+
+        // 8. Scale and axis labels:
+        //    - Left Y-axis (Rain rate, cyan-tinted): top scale ("Rate · <max>/h"), mid scale ("<mid>/h"), and baseline ("0").
+        //    - Right Y-axis (Rain chance, amber-rose-tinted): "100%", "50%", "0%".
+        //    - Bottom X-axis time slots: high-contrast white.
+        for (index, text) in geometry.texts.enumerated() {
+            let pt = CGPoint(x: CGFloat(text.origin.x), y: CGFloat(text.origin.y))
+            if index == 0 {
+                // Top-left scale label (Rain rate axis).
+                let display = plotRect.width >= 210 ? "Rate · \(text.text)" : text.text
+                drawPillLabel(
+                    display,
+                    at: pt,
+                    fg: barLabelColor,
+                    bg: Color.black.opacity(0.46),
+                    border: barTopColor.opacity(0.32),
+                    in: context,
+                    unbounded: unbounded
+                )
+            } else if chart.showsProbabilityLine && text.text == RainChartData.percentTopText && pt.x >= plotRect.maxX {
+                // Right axis top ("100%").
+                context.draw(
+                    context.resolve(Text(text.text).font(font).foregroundStyle(chanceLabelColor)),
+                    at: pt,
+                    anchor: .topLeading
+                )
+            } else if chart.showsProbabilityLine && text.text == RainChartData.percentBottomText && pt.x >= plotRect.maxX {
+                // Right axis bottom ("0%").
+                context.draw(
+                    context.resolve(Text(text.text).font(font).foregroundStyle(chanceLabelColor.opacity(0.85))),
+                    at: pt,
+                    anchor: .topLeading
+                )
+            } else {
+                // X-axis time labels ("Now", "3:00 PM", etc.).
+                context.draw(
+                    context.resolve(Text(text.text).font(font).foregroundStyle(Color.white.opacity(0.92))),
+                    at: pt,
+                    anchor: .topLeading
+                )
+            }
+        }
+
+        // Additional midpoint and baseline axis labels for clarity.
+        if plotRect.height >= 72 {
+            let midY = plotRect.midY - top.height * 0.5
+            // Left Y-axis 50% rate label (e.g. "0.05 in/h" or "1.3 mm/h").
+            drawPillLabel(
+                chart.midScaleLabel,
+                at: CGPoint(x: plotRect.minX + 4, y: midY),
+                fg: barLabelColor.opacity(0.88),
+                bg: Color.black.opacity(0.38),
+                border: nil,
+                in: context,
+                unbounded: unbounded
+            )
+            // Left Y-axis 0 baseline label.
+            let zeroY = plotRect.maxY - top.height - 2
+            if zeroY > midY + top.height + 2 {
+                drawPillLabel(
+                    RainChartData.rateZeroText + " " + chart.rateUnitShort,
+                    at: CGPoint(x: plotRect.minX + 4, y: zeroY),
+                    fg: barLabelColor.opacity(0.76),
+                    bg: Color.black.opacity(0.34),
+                    border: nil,
+                    in: context,
+                    unbounded: unbounded
+                )
+            }
+            // Right Y-axis 50% probability label on the hourly chart.
+            if chart.showsProbabilityLine {
+                context.draw(
+                    context.resolve(Text(RainChartData.percentMidText).font(font).foregroundStyle(chanceLabelColor.opacity(0.90))),
+                    at: CGPoint(x: plotRect.maxX + 4, y: midY),
+                    anchor: .topLeading
+                )
+            }
+        }
+
+        // 9. Interactive hover cursor & live slot readout pill.
+        if let slot = hoveredSlot {
+            drawHoverOverlay(
+                slot: slot,
+                chart: chart,
+                plotRect: plotRect,
+                slotWidth: slotWidth,
+                in: context,
+                unbounded: unbounded
+            )
+        }
+    }
+
+    /// Draws direct value callouts on the highest precipitation bar and highest probability point.
+    private static func drawPeakCallouts(
+        chart: RainChartData,
+        barPairs: [(Int, RainChartData.Rect)],
+        plotRect: CGRect,
+        slotWidth: CGFloat,
+        in context: GraphicsContext,
+        unbounded: CGSize
+    ) {
+        var placedRects: [CGRect] = [
+            // Reserve left axis scale zones so bar/curve callouts never overlap axis labels.
+            CGRect(x: plotRect.minX, y: plotRect.minY, width: 88, height: 22),
+            CGRect(x: plotRect.minX, y: plotRect.midY - 10, width: 68, height: 20),
+            CGRect(x: plotRect.minX, y: plotRect.maxY - 20, width: 58, height: 20),
+        ]
+
+        // 1. Annotate up to 2 highest non-zero bars with their exact rate (e.g. "0.08 in/h").
+        let sortedBars = barPairs.sorted { lhs, rhs in
+            chart.rateMmH[lhs.0] > chart.rateMmH[rhs.0]
+        }
+        var barsAnnotated = 0
+        for (slot, rect) in sortedBars {
+            guard barsAnnotated < 2,
+                  let text = chart.compactBarLabel(forSlot: slot) else { continue }
+            let r = cgRect(rect)
+            let resolved = context.resolve(Text(text).font(badgeFont).foregroundStyle(barLabelColor))
+            let measured = resolved.measure(in: unbounded)
+            let pillW = measured.width + 8
+            let pillH = measured.height + 3
+            let pillX = max(plotRect.minX + 4, min(plotRect.maxX - pillW - 4, r.midX - pillW * 0.5))
+            let pillY = max(plotRect.minY + 3, r.minY - pillH - 3)
+            let candidate = CGRect(x: pillX, y: pillY, width: pillW, height: pillH)
+            if !placedRects.contains(where: { $0.insetBy(dx: -6, dy: -3).intersects(candidate) }) {
+                drawBadgeRect(candidate, text: resolved, bg: Color(red: 0.04, green: 0.22, blue: 0.42).opacity(0.86),
+                              border: barTopColor.opacity(0.55), in: context)
+                placedRects.append(candidate)
+                barsAnnotated += 1
+            }
+        }
+
+        // 2. Annotate the peak probability slot on the hourly curve (when > 0%).
+        if chart.showsProbabilityLine {
+            var bestSlot: Int?
+            var bestProb = 0.0
+            for i in chart.probability.indices {
+                let p = chart.probability[i]
+                if p.isFinite && p > bestProb {
+                    bestProb = p
+                    bestSlot = i
+                }
+            }
+            if let slot = bestSlot, bestProb > 0, let probText = chart.formattedProbability(forSlot: slot) {
+                let cx = plotRect.minX + (CGFloat(slot) + 0.5) * slotWidth
+                let cy = plotRect.minY + plotRect.height * CGFloat(1.0 - min(100.0, max(0.0, bestProb)) / 100.0)
+                let resolved = context.resolve(Text("Peak \(probText)").font(badgeFont).foregroundStyle(chanceLabelColor))
+                let measured = resolved.measure(in: unbounded)
+                let pillW = measured.width + 8
+                let pillH = measured.height + 3
+                let pillX = max(plotRect.minX + 4, min(plotRect.maxX - pillW - 4, cx - pillW * 0.5))
+                let aboveY = cy - pillH - 5
+                let belowY = cy + 6
+                let pillY = aboveY >= plotRect.minY + 2 ? aboveY : min(plotRect.maxY - pillH - 2, belowY)
+                let candidate = CGRect(x: pillX, y: pillY, width: pillW, height: pillH)
+                if !placedRects.contains(where: { $0.insetBy(dx: -4, dy: -2).intersects(candidate) }) {
+                    drawBadgeRect(candidate, text: resolved, bg: Color(red: 0.36, green: 0.14, blue: 0.26).opacity(0.86),
+                                  border: chanceHighColor.opacity(0.55), in: context)
+                }
+            }
+        }
+    }
+
+    /// Draws the interactive vertical guide and floating readout pill for a hovered slot.
+    private static func drawHoverOverlay(
+        slot: Int,
+        chart: RainChartData,
+        plotRect: CGRect,
+        slotWidth: CGFloat,
+        in context: GraphicsContext,
+        unbounded: CGSize
+    ) {
+        let cx = plotRect.minX + (CGFloat(slot) + 0.5) * slotWidth
+        var guide = Path()
+        guide.move(to: CGPoint(x: cx, y: plotRect.minY))
+        guide.addLine(to: CGPoint(x: cx, y: plotRect.maxY))
+        context.stroke(
+            guide,
+            with: .color(Color.white.opacity(0.55)),
+            style: StrokeStyle(lineWidth: 1.0, dash: [2.5, 2.5])
+        )
+
+        if chart.showsProbabilityLine,
+           chart.probability.indices.contains(slot),
+           chart.probability[slot].isFinite {
+            let p = max(0.0, min(100.0, chart.probability[slot]))
+            let py = plotRect.minY + plotRect.height * CGFloat(1.0 - p / 100.0)
+            drawNode(at: CGPoint(x: cx, y: py), in: context, plotRect: plotRect)
+        }
+
+        let slotTitle: String = {
+            if let exact = chart.axisLabels.first(where: { $0.slot == slot })?.text {
+                return exact
+            }
+            if slot == 0 { return "Now" }
+            return chart.isQuarters ? "+\(slot * 15)m" : "+\(slot)h"
+        }()
+        let rateStr = chart.formattedRate(forSlot: slot) ?? "0 \(chart.rateUnitShort)"
+        let summary: String
+        if chart.showsProbabilityLine {
+            let probStr = chart.formattedProbability(forSlot: slot) ?? "—"
+            summary = "\(slotTitle) · Bar: \(rateStr) · Chance: \(probStr)"
+        } else {
+            summary = "\(slotTitle) · Bar: \(rateStr)"
+        }
+
+        let resolved = context.resolve(Text(summary).font(badgeFont).foregroundStyle(Color.white))
+        let measured = resolved.measure(in: unbounded)
+        let pillW = measured.width + 12
+        let pillH = measured.height + 5
+        let pillX = max(plotRect.minX + 4, min(plotRect.maxX - pillW - 4, cx - pillW * 0.5))
+        let pillY = plotRect.minY + 3
+        let rect = CGRect(x: pillX, y: pillY, width: pillW, height: pillH)
+        drawBadgeRect(
+            rect,
+            text: resolved,
+            bg: Color.black.opacity(0.82),
+            border: Color.white.opacity(0.35),
+            in: context
+        )
+    }
+
+    private static func drawPillLabel(
+        _ string: String,
+        at origin: CGPoint,
+        fg: Color,
+        bg: Color,
+        border: Color?,
+        in context: GraphicsContext,
+        unbounded: CGSize
+    ) {
+        let resolved = context.resolve(Text(string).font(font).foregroundStyle(fg))
+        let measured = resolved.measure(in: unbounded)
+        let pillRect = CGRect(
+            x: origin.x - 3,
+            y: origin.y - 1,
+            width: measured.width + 6,
+            height: measured.height + 2
+        )
+        let path = Path(roundedRect: pillRect, cornerRadius: 4, style: .continuous)
+        context.fill(path, with: .color(bg))
+        if let border {
+            context.stroke(path, with: .color(border), lineWidth: 0.6)
+        }
+        context.draw(resolved, at: origin, anchor: .topLeading)
+    }
+
+    private static func drawBadgeRect(
+        _ rect: CGRect,
+        text: GraphicsContext.ResolvedText,
+        bg: Color,
+        border: Color,
+        in context: GraphicsContext
+    ) {
+        let path = Path(roundedRect: rect, cornerRadius: 4.5, style: .continuous)
+        context.fill(path, with: .color(bg))
+        context.stroke(path, with: .color(border), lineWidth: 0.65)
+        context.draw(text, at: CGPoint(x: rect.midX, y: rect.midY), anchor: .center)
     }
 
     /// Draws a glowing circular node on the probability curve.

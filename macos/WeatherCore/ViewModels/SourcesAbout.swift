@@ -9,7 +9,7 @@
 /// and `website` are the C strings; the licence is GTK_LICENSE_GPL_3_0.
 public enum AboutInfo {
     /// "program-name".
-    public static let programName = "Weather"
+    public static let programName = "Neginato Mezora"
     /// "version": WX_APP_VERSION, the Meson project version (meson.build:3).
     public static let version = "0.1.0"
     /// "comments".

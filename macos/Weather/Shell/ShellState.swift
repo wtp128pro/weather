@@ -232,4 +232,14 @@ final class ShellState {
         model.setVisible(windowVisible)
         model.setFocused(windowFocused)
     }
+
+    /// Shows the About Neginato Mezora panel.
+    func showAbout() {
+        SourcesAboutPanel.show()
+    }
+
+    /// Opens the Neginato Mezora Settings dialogue (`⌘,` or toolbar gear button).
+    func openSettings(tab: SettingsTab = .sources) {
+        SettingsWindowManager.shared.showSettings(state: self, initialTab: tab)
+    }
 }

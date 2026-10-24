@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Welcome to Neginato Mezora — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link active" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
+<div class="nav-section">Sources & Ensemble Weights</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
+<div class="nav-section">Algorithms & Meteorology</div>
+<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
+<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Welcome to Neginato Mezora</h1>
+<p><strong>Neginato Mezora</strong> is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes up to <strong>10 numerical weather prediction (NWP) models</strong> from three free upstream providers (<code>Open-Meteo</code>, <code>NOAA National Weather Service</code>, and <code>MET Norway</code>) and fuses them with real-time physical airport METARs, 90m DEM surface analysis, and US EPA AirNow air quality monitors.</p>
+
+<div class="callout">
+    <strong>Quick Navigation</strong>
+    <ul>
+        <li><a href="rain-chart.html" style="color:#38bdf8;">Rain Graph &amp; Bars Guide</a> — Understand what the cyan bars (Rain rate, left axis) and amber-rose curve (Rain chance %, right axis) represent.</li>
+        <li><a href="sources-weights.html" style="color:#38bdf8;">Settings: Data Sources &amp; Weights (⌘,)</a> — Configure enabled providers and adjust per-source and per-model blend weights.</li>
+        <li><a href="algorithms.html" style="color:#38bdf8;">Ensemble Blending &amp; Citations</a> — Full mathematical formulas, horizon weight tables, and academic references.</li>
+        <li><a href="live-stations.html" style="color:#38bdf8;">Live Station 3D Assimilation</a> — How nearby physical weather stations and air quality sensors are fused in real time.</li>
+    </ul>
+</div>
+
+<h2>Key Features at a Glance</h2>
+<table>
+    <thead>
+        <tr><th>Feature</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Labeled Dual-Series Rain Charts</strong></td><td>Side-by-side <em>Next 2 hours</em> (15-minute HRRR nowcast bars) and <em>Next 24 hours</em> (hourly bars + probability curve) with explicit series pills, left/right axis labels, peak callout badges, and interactive hover inspection.</td></tr>
+        <tr><td><strong>Configurable Ensemble Weights</strong></td><td>Open <strong>Settings (⌘,)</strong> to enable/disable providers and tune blend multipliers (<code>0.00×</code> to <code>3.00×</code>) per source and per NWP model.</td></tr>
+        <tr><td><strong>3D Live Station Assimilation</strong></td><td>Blends up to 16 NOAA/FAA AviationWeather METAR stations within 95 km using horizontal Cauchy-Gaussian and vertical Gaussian kernels, lapse-rate elevation correction, Shepard angular de-clustering, and MAD outlier QC.</td></tr>
+        <tr><td><strong>Street-Address &amp; Pin Geocoding</strong></td><td>Search any street address, postal code, city, or raw <code>lat, lon</code> coordinates via 5 parallel geocoders or drop a pin on the interactive Apple Map.</td></tr>
+    </tbody>
+</table>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

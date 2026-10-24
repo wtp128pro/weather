@@ -1,0 +1,553 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 wtp128pro
+//
+// SettingsView.swift - Native macOS Settings dialogue for Neginato Mezora,
+// replacing the legacy hamburger popover. Configures weather data sources,
+// provider and per-model blend weights, and general application preferences.
+
+import AppKit
+import SwiftUI
+import WeatherCore
+
+/// Manages a standalone NSWindow for the Settings dialogue so that toolbar
+/// buttons, keyboard shortcuts, and programmatic calls always open the Settings window
+/// reliably regardless of focus state.
+@MainActor
+final class SettingsWindowManager {
+    static let shared = SettingsWindowManager()
+
+    private var windowController: NSWindowController?
+
+    private init() {}
+
+    func showSettings(state: ShellState, initialTab: SettingsTab = .sources) {
+        present(rootView: SettingsView(state: state, initialTab: initialTab))
+    }
+
+    func showSettings(model: AppModel?, sources: SourcesViewModel?, initialTab: SettingsTab = .sources) {
+        present(rootView: SettingsView(model: model, sources: sources, initialTab: initialTab))
+    }
+
+    private func present<Content: View>(rootView: Content) {
+        if let wc = windowController, let window = wc.window {
+            window.contentViewController = NSHostingController(rootView: rootView)
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hosting = NSHostingController(rootView: rootView)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Neginato Mezora Settings"
+        window.center()
+        window.contentViewController = hosting
+        window.isReleasedWhenClosed = false
+        window.setFrameAutosaveName("NeginatoMezoraSettingsWindow")
+        window.minSize = NSSize(width: 660, height: 500)
+
+        let wc = NSWindowController(window: window)
+        self.windowController = wc
+        wc.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+enum SettingsTab: String, CaseIterable, Identifiable {
+    case sources
+    case weights
+    case general
+
+    var id: String { rawValue }
+}
+
+/// The main Settings dialogue (`⌘,` and toolbar gear button).
+struct SettingsView: View {
+    private let state: ShellState?
+    private let explicitModel: AppModel?
+    private let explicitSources: SourcesViewModel?
+    @State private var selectedTab: SettingsTab
+
+    init(state: ShellState, initialTab: SettingsTab = .sources) {
+        self.state = state
+        self.explicitModel = nil
+        self.explicitSources = nil
+        self._selectedTab = State(initialValue: initialTab)
+    }
+
+    init(model: AppModel?, sources: SourcesViewModel?, initialTab: SettingsTab = .sources) {
+        self.state = nil
+        self.explicitModel = model
+        self.explicitSources = sources
+        self._selectedTab = State(initialValue: initialTab)
+    }
+
+    private var appModel: AppModel? { explicitModel ?? state?.model }
+    private var sourcesVM: SourcesViewModel? { explicitSources ?? state?.sources }
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            SourcesSettingsTab(appModel: appModel, sourcesVM: sourcesVM)
+                .tabItem {
+                    Label("Sources", systemImage: "antenna.radiowaves.left.and.right")
+                }
+                .tag(SettingsTab.sources)
+
+            WeightsSettingsTab(appModel: appModel)
+                .tabItem {
+                    Label("Weights", systemImage: "slider.horizontal.3")
+                }
+                .tag(SettingsTab.weights)
+
+            GeneralSettingsTab(appModel: appModel)
+                .tabItem {
+                    Label("General", systemImage: "gearshape")
+                }
+                .tag(SettingsTab.general)
+        }
+        .frame(minWidth: 680, idealWidth: 720, minHeight: 520, idealHeight: 600)
+    }
+}
+
+// MARK: - Tab 1: Sources & Provider Weights
+
+private struct SourcesSettingsTab: View {
+    let appModel: AppModel?
+    let sourcesVM: SourcesViewModel?
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        Form {
+            if let sourcesVM, let appModel {
+                Section {
+                    ForEach(sourcesVM.rows) { row in
+                        SourceSettingsRow(
+                            row: row,
+                            weight: appModel.sourceWeight(for: row.id),
+                            onToggle: { enabled in
+                                sourcesVM.setEnabled(enabled, forProviderID: row.id)
+                            },
+                            onWeightChange: { newWeight in
+                                appModel.setSourceWeight(newWeight, for: row.id)
+                            },
+                            onOpenURL: { url in
+                                openURL(url)
+                            }
+                        )
+                    }
+                } header: {
+                    HStack {
+                        Text(SourcesViewModel.title)
+                        Spacer()
+                        if !appModel.weightMultipliers.sources.isEmpty {
+                            Button("Reset Source Weights") {
+                                for row in sourcesVM.rows {
+                                    appModel.setSourceWeight(1.0, for: row.id)
+                                }
+                            }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                        }
+                    }
+                } footer: {
+                    Text(SourcesViewModel.note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                }
+            } else {
+                Section {
+                    ProgressView("Loading data sources…")
+                }
+            }
+
+            Section("Live Physical Observation Assimilation") {
+                LabeledContent("Aviation & Surface Networks") {
+                    Text("NOAA / FAA AviationWeather METAR & Open-Meteo 90m DEM")
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("Air Quality Network") {
+                    Text("US EPA AirNow Real-Time Ozone & PM2.5 + CAMS/GEOS-CF")
+                        .foregroundStyle(.secondary)
+                }
+                LabeledContent("Spatial Fusion Kernel") {
+                    Text("3D Anisotropic IDW (Lh = 22 km, Lz = 350 m) + MAD Buddy QC")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct SourceSettingsRow: View {
+    let row: SourcesViewModel.Row
+    let weight: Double
+    let onToggle: (Bool) -> Void
+    let onWeightChange: (Double) -> Void
+    let onOpenURL: (URL) -> Void
+
+    private var statusColor: Color {
+        if !row.isEnabled {
+            return .secondary
+        }
+        if row.status.hasPrefix("Used for this place") {
+            return .green
+        }
+        if row.status.hasPrefix("Could not load") {
+            return .orange
+        }
+        return .secondary
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 10) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.name)
+                        .font(.headline)
+                    Text(row.status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { row.isEnabled },
+                        set: { onToggle($0) }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .accessibilityLabel(row.accessibilityLabel)
+            }
+
+            // Source-level blend weight slider
+            HStack(spacing: 10) {
+                Text("Source weight multiplier")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 150, alignment: .leading)
+
+                Slider(
+                    value: Binding(
+                        get: { weight },
+                        set: { onWeightChange($0) }
+                    ),
+                    in: 0.10...3.00,
+                    step: 0.05
+                )
+                .disabled(!row.isEnabled)
+
+                Text(String(format: "%.2f×", weight))
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .frame(width: 46, alignment: .trailing)
+
+                Button("1.0×") {
+                    onWeightChange(1.0)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .disabled(abs(weight - 1.0) < 0.01)
+            }
+
+            if row.attribution != nil || row.licence != nil {
+                HStack(spacing: 12) {
+                    if let attribution = row.attribution {
+                        SettingsTextLineView(line: attribution, onOpenURL: onOpenURL)
+                    }
+                    if let licence = row.licence {
+                        Text("·")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                        SettingsTextLineView(line: licence, onOpenURL: onOpenURL)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct SettingsTextLineView: View {
+    let line: SourcesViewModel.TextLine
+    let onOpenURL: (URL) -> Void
+
+    var body: some View {
+        if let link = line.link, let url = link.url {
+            HStack(spacing: 0) {
+                if !line.before.isEmpty {
+                    Text(line.before)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Button(link.text) {
+                    onOpenURL(url)
+                }
+                .buttonStyle(.plain)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.tint)
+                .underline()
+                if !line.after.isEmpty {
+                    Text(line.after)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } else {
+            Text(line.text)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Tab 2: Weights & Model Matrix
+
+private struct WeightsSettingsTab: View {
+    let appModel: AppModel?
+    @State private var selectedVariable: WxVar = .temp
+
+    private var descriptors: [WxModelWeightDescriptor] { WxWeights.modelDescriptors }
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Multi-Model Ensemble Weight Configuration")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Continuous variables are blended with a weighted median (50% cumulative weight threshold); precipitation probability uses a weighted arithmetic mean.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Reset All to 1.00×") {
+                        appModel?.resetWeights()
+                    }
+                    .disabled(appModel?.weightMultipliers.isDefault ?? true)
+                }
+                .padding(.vertical, 2)
+            }
+
+            Section {
+                Picker("Inspect Baseline Variable Group", selection: $selectedVariable) {
+                    Text("Temperature & Feels Like").tag(WxVar.temp)
+                    Text("Wind & Gusts").tag(WxVar.wind)
+                    Text("Cloud Cover").tag(WxVar.cloud)
+                    Text("Relative Humidity").tag(WxVar.humidity)
+                    Text("Precipitation Amount (mm/h)").tag(WxVar.precipMm)
+                    Text("Precipitation Chance (%)").tag(WxVar.precipProb)
+                }
+                .pickerStyle(.menu)
+
+                ForEach(descriptors) { desc in
+                    ModelWeightRow(
+                        descriptor: desc,
+                        selectedVariable: selectedVariable,
+                        sourceMultiplier: appModel?.sourceWeight(for: desc.sourceID) ?? 1.0,
+                        modelMultiplier: appModel?.modelWeight(sourceID: desc.sourceID, modelID: desc.modelID) ?? 1.0,
+                        onModelWeightChange: { newValue in
+                            appModel?.setModelWeight(newValue, sourceID: desc.sourceID, modelID: desc.modelID)
+                        }
+                    )
+                }
+            } header: {
+                Text("Per-Model Multipliers & Baseline Horizon Weights")
+            } footer: {
+                Text("Horizon bands (US region): H0 = 0–3h, H1 = 3–18h, H2 = 18–72h, H3 = 72h+. Effective weight = Base Table Weight × Source Multiplier × Model Multiplier.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct ModelWeightRow: View {
+    let descriptor: WxModelWeightDescriptor
+    let selectedVariable: WxVar
+    let sourceMultiplier: Double
+    let modelMultiplier: Double
+    let onModelWeightChange: (Double) -> Void
+
+    private var combinedMultiplier: Double {
+        sourceMultiplier * modelMultiplier
+    }
+
+    private var usBands: [Double] {
+        descriptor.usWeights[selectedVariable.rawValue]
+    }
+
+    private var worldBase: Double {
+        descriptor.worldWeights[selectedVariable.rawValue]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(descriptor.displayName)
+                    .font(.subheadline.weight(.semibold))
+                Text("(\(descriptor.sourceID):\(descriptor.modelID))")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(descriptor.coverageSummary)
+                    .font(.caption2.weight(.medium))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.14), in: Capsule())
+            }
+
+            Text(descriptor.resolutionSummary)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                Text("Model multiplier")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 110, alignment: .leading)
+
+                Slider(
+                    value: Binding(
+                        get: { modelMultiplier },
+                        set: { onModelWeightChange($0) }
+                    ),
+                    in: 0.00...3.00,
+                    step: 0.05
+                )
+
+                Text(String(format: "%.2f×", modelMultiplier))
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .frame(width: 44, alignment: .trailing)
+
+                Button("1.0×") {
+                    onModelWeightChange(1.0)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .disabled(abs(modelMultiplier - 1.0) < 0.01)
+            }
+
+            // Horizon weight badges for the selected variable
+            HStack(spacing: 6) {
+                ForEach(0..<4, id: \.self) { band in
+                    let labels = ["H0 (0–3h)", "H1 (3–18h)", "H2 (18–72h)", "H3 (72h+)"]
+                    let base = usBands[band]
+                    let eff = base * combinedMultiplier
+                    WeightBandBadge(
+                        title: labels[band],
+                        base: base,
+                        effective: eff,
+                        isScaled: abs(combinedMultiplier - 1.0) >= 0.01
+                    )
+                }
+                if !descriptor.usOnly {
+                    WeightBandBadge(
+                        title: "World",
+                        base: worldBase,
+                        effective: worldBase * combinedMultiplier,
+                        isScaled: abs(combinedMultiplier - 1.0) >= 0.01
+                    )
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct WeightBandBadge: View {
+    let title: String
+    let base: Double
+    let effective: Double
+    let isScaled: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(.secondary)
+            if isScaled && base > 0 {
+                Text(String(format: "%.2f (base %.1f)", effective, base))
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.tint)
+            } else {
+                Text(String(format: "%.1f", base))
+                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(base > 0 ? .primary : .tertiary)
+            }
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3.5)
+        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+// MARK: - Tab 3: General
+
+private struct GeneralSettingsTab: View {
+    let appModel: AppModel?
+
+    var body: some View {
+        Form {
+            Section("Measurement Units") {
+                Picker(
+                    "Display Units",
+                    selection: Binding(
+                        get: { appModel?.units ?? .imperial },
+                        set: { appModel?.setUnits($0) }
+                    )
+                ) {
+                    Text("Imperial (°F, mph, in)").tag(WxUnits.imperial)
+                    Text("Metric (°C, km/h, mm)").tag(WxUnits.metric)
+                }
+                .pickerStyle(.radioGroup)
+                .disabled(appModel == nil)
+            }
+
+            Section("Documentation & About") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Neginato Mezora Documentation & Help Book")
+                            .font(.subheadline.weight(.medium))
+                        Text("Full guide to rain charts, data sources, ensemble weights, and meteorological citations.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Open Help (⌘?)") {
+                        HelpWindowManager.shared.showHelp()
+                    }
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AboutInfo.programName)
+                            .font(.subheadline.weight(.medium))
+                        Text("Version \(AboutInfo.version) · Bundle ID: \(AppModel.appID)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(SourcesViewModel.aboutButtonTitle) {
+                        SourcesAboutPanel.show()
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}

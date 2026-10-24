@@ -33,7 +33,7 @@ public final class SourcesViewModel {
         + "of thumb, not statistics measured from past accuracy, so no accuracy figure is claimed."
 
     /// The label of the About button (wx-sources.c:745).
-    public nonisolated static let aboutButtonTitle = "About Weather"
+    public nonisolated static let aboutButtonTitle = "About Neginato Mezora"
 
     /// The width bound of every wrapping label, in characters
     /// (WX_SOURCES_MAX_WIDTH_CHARS, wx-sources.h:109).

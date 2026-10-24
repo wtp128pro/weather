@@ -16,8 +16,8 @@ import WeatherCore
 struct ShellWindow: View {
     /// The main Window scene's id.
     static let windowID = "main"
-    /// The window title (wx-window.c:1112).
-    static let title = "Weather"
+    /// The window title.
+    static let title = "Neginato Mezora"
     /// The default size 1040x720 (wx-window.c:1113).
     static let defaultWidth: CGFloat = 1040
     static let defaultHeight: CGFloat = 720
@@ -48,7 +48,7 @@ struct ShellPage: View {
     static let addLabel = "Add a city"
     static let refreshTooltip = "Refresh this place (\u{2318}R)"
     static let refreshLabel = "Refresh"
-    static let sourcesLabel = "Data sources and about"
+    static let sourcesLabel = "Settings — Data sources and weights (\u{2318},)"
 
     /// The units button shows the CURRENT unit (wx-window.c:290-297).
     static func unitsLabel(_ units: WxUnits) -> String { units == .metric ? "\u{00B0}C" : "\u{00B0}F" }
@@ -63,7 +63,6 @@ struct ShellPage: View {
     let sources: SourcesViewModel?
 
     @Environment(\.openWindow) private var openWindow
-    @State private var showSources = false
 
     var body: some View {
         content
@@ -106,20 +105,15 @@ struct ShellPage: View {
                     .disabled(model == nil)
 
                     Button {
-                        showSources.toggle()
+                        SettingsWindowManager.shared.showSettings(model: model, sources: sources)
                     } label: {
-                        Image(systemName: "line.3.horizontal")
+                        Image(systemName: "gearshape")
                             .font(.system(size: 13, weight: .bold))
                     }
                     .buttonStyle(TitlebarPillButtonStyle())
                     .help(Self.sourcesLabel)
                     .accessibilityLabel(Self.sourcesLabel)
                     .disabled(sources == nil)
-                    .popover(isPresented: $showSources, arrowEdge: .bottom) {
-                        if let sources {
-                            SourcesPopover(viewModel: sources)
-                        }
-                    }
                 }
                 .sharedBackgroundVisibility(.hidden)
             }

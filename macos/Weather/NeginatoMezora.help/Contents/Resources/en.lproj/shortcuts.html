@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Keyboard Shortcuts & Places — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
+<a class="nav-link active" href="shortcuts.html">Keyboard Shortcuts & Places</a>
+<div class="nav-section">Sources & Ensemble Weights</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
+<div class="nav-section">Algorithms & Meteorology</div>
+<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
+<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Keyboard Shortcuts &amp; Places</h1>
+<h2>Keyboard Shortcuts</h2>
+<table>
+    <thead>
+        <tr><th>Shortcut</th><th>Command</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>⌘N</code></td><td>Open <strong>Add a City / Street Address / Pin</strong> window</td></tr>
+        <tr><td><code>⌘R</code></td><td>Refresh the selected place now</td></tr>
+        <tr><td><code>⌘U</code></td><td>Switch between Imperial (<code>°F, mph, in</code>) and Metric (<code>°C, km/h, mm</code>)</td></tr>
+        <tr><td><code>⌘,</code></td><td>Open <strong>Neginato Mezora Settings</strong> (<code>Sources</code>, <code>Weights</code>, <code>General</code>)</td></tr>
+        <tr><td><code>⌘?</code></td><td>Open <strong>Neginato Mezora Help</strong></td></tr>
+        <tr><td><code>⌘Q</code></td><td>Flush unsaved changes and quit Neginato Mezora</td></tr>
+    </tbody>
+</table>
+
+<h2>Adding Custom Locations, Street Addresses &amp; Map Pins</h2>
+<p>Press <code>⌘N</code> or click the <code>+</code> button in the toolbar to open the location picker:</p>
+<ul>
+    <li><strong>Search Tab:</strong> Enter any city name, street address, postal code, landmark, or raw <code>latitude, longitude</code> pair. Neginato Mezora queries Apple MapKit, US Census TIGER/Line, OpenStreetMap Nominatim, OSM Photon, and Open-Meteo in parallel.</li>
+    <li><strong>Pin on Map Tab:</strong> Click anywhere on the interactive Apple Map (or enter exact coordinates and a custom label) to save a hyper-local pin.</li>
+</ul>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

@@ -177,6 +177,8 @@ public final class AppModel {
     public private(set) var isShuttingDown = false
     /// The wall time last given to the items by the display clock, UTC unix seconds.
     public private(set) var displayNowS: Int64
+    /// User-configurable source and model weight multipliers for blending.
+    public private(set) var weightMultipliers = WxWeightMultipliers()
     /// Bumped by every change of the registry (provider switch); `sources` reads it.
     private var registryRevision: UInt64 = 0
 
@@ -464,6 +466,17 @@ public final class AppModel {
         for provider in registry.listProviders() {
             registry.setEnabled(!settings.isProviderDisabled(provider.id), id: provider.id)
         }
+        let loadedWeights = WxWeightMultipliers.load(fromPath: weightsPath)
+        weightMultipliers = loadedWeights
+        WxWeights.activeMultipliers = loadedWeights
+    }
+
+    private var weightsPath: String {
+        guard !storage.settingsPath.isEmpty else { return "" }
+        return URL(fileURLWithPath: storage.settingsPath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("weights.json")
+            .path
     }
 
     // MARK: - Items
@@ -856,6 +869,53 @@ public final class AppModel {
     /// The status of one source for the selected place, nil when it has none.
     public func selectedSourceStatus(providerID: String) -> WxSourceStatus? {
         selectedSourceStatuses.first { $0.providerID == providerID }
+    }
+
+    // MARK: - Source & Model Weights
+
+    /// Current blend weight multiplier for a provider (`0.0 ... 3.0`, default `1.0`).
+    public func sourceWeight(for providerID: String) -> Double {
+        weightMultipliers.sourceMultiplier(for: providerID)
+    }
+
+    /// Updates a provider's blend weight multiplier, persists to `weights.json`, and re-fetches/re-blends.
+    public func setSourceWeight(_ multiplier: Double, for providerID: String) {
+        guard !isShuttingDown, isLoaded else { return }
+        var next = weightMultipliers
+        next.setSourceMultiplier(multiplier, for: providerID)
+        guard next != weightMultipliers else { return }
+        weightMultipliers = next
+        WxWeights.activeMultipliers = next
+        next.save(toPath: weightsPath)
+        engine.sourcesChanged()
+    }
+
+    /// Current blend weight multiplier for a specific model (`0.0 ... 3.0`, default `1.0`).
+    public func modelWeight(sourceID: String, modelID: String) -> Double {
+        weightMultipliers.modelMultiplier(sourceID: sourceID, modelID: modelID)
+    }
+
+    /// Updates a specific model's blend weight multiplier, persists to `weights.json`, and re-fetches/re-blends.
+    public func setModelWeight(_ multiplier: Double, sourceID: String, modelID: String) {
+        guard !isShuttingDown, isLoaded else { return }
+        var next = weightMultipliers
+        next.setModelMultiplier(multiplier, sourceID: sourceID, modelID: modelID)
+        guard next != weightMultipliers else { return }
+        weightMultipliers = next
+        WxWeights.activeMultipliers = next
+        next.save(toPath: weightsPath)
+        engine.sourcesChanged()
+    }
+
+    /// Resets all source and model weight multipliers back to `1.0` (the baseline heuristic table).
+    public func resetWeights() {
+        guard !isShuttingDown, isLoaded else { return }
+        let defaults = WxWeightMultipliers()
+        guard weightMultipliers != defaults else { return }
+        weightMultipliers = defaults
+        WxWeights.activeMultipliers = defaults
+        defaults.save(toPath: weightsPath)
+        engine.sourcesChanged()
     }
 
     // MARK: - Place search

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Settings: Data Sources & Weights — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
+<div class="nav-section">Sources & Ensemble Weights</div>
+<a class="nav-link active" href="sources-weights.html">Settings: Data Sources & Weights</a>
+<div class="nav-section">Algorithms & Meteorology</div>
+<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
+<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Settings: Data Sources &amp; Weights</h1>
+<p>Open the <strong>Neginato Mezora Settings</strong> dialogue at any time by pressing <code>⌘,</code>, clicking the <strong>gear (⚙)</strong> button in the top-right window toolbar, or choosing <strong>Neginato Mezora &gt; Settings…</strong> from the menu bar.</p>
+
+<h2>Tab 1: Sources</h2>
+<p>The <strong>Sources</strong> tab controls which upstream weather providers participate in forecast refreshes and sets each provider's overall blend weight multiplier:</p>
+<ul>
+    <li><strong>Open-Meteo (<code>open-meteo</code>):</strong> Supplies up to 8 NWP models (NOAA HRRR 3 km + 15-min Nowcast, NOAA NBM, ECMWF IFS, NOAA GFS, DWD ICON, ECCC GEM, UK Met Office, and Météo-France). Licensed under CC BY 4.0.</li>
+    <li><strong>National Weather Service (<code>nws</code>):</strong> Official NOAA human-forecaster 2.5 km NDFD grid for the United States, Puerto Rico, US Virgin Islands, Guam, and American Samoa. US Government public domain work.</li>
+    <li><strong>MET Norway (<code>met-no</code>):</strong> Norwegian Meteorological Institute Locationforecast 2.0 (1 km Nordic MEPS + global ECMWF IFS). Licensed under CC BY 4.0 / NLOD.</li>
+</ul>
+<p>Each source row includes a <strong>Source weight multiplier</strong> slider (<code>0.10×</code> to <code>3.00×</code>, default <code>1.00×</code>) that scales all models belonging to that provider.</p>
+
+<h2>Tab 2: Weights &amp; Model Matrix</h2>
+<p>The <strong>Weights</strong> tab lets you inspect the baseline heuristic weight table across all 6 variable groups (<code>Temperature</code>, <code>Wind</code>, <code>Cloud Cover</code>, <code>Humidity</code>, <code>Precipitation Amount</code>, <code>Precipitation Chance</code>) and adjust individual multipliers (<code>0.00×</code> to <code>3.00×</code>) for every NWP model.</p>
+
+<h3>Baseline US Horizon Band Weights (H0: 0–3h, H1: 3–18h, H2: 18–72h, H3: 72h+)</h3>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temp [H0..H3]</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Precip mm [H0..H3]</th><th>Precip %</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><code>nws:nws</code></td><td>4.0, 4.0, 4.5, 5.0</td><td>3.0</td><td>3.0</td><td>1.0</td><td>2.0, 3.0, 4.0, 4.0</td><td>5.0</td></tr>
+        <tr><td><code>open-meteo:hrrr</code> (&le;48h)</td><td>3.0, 3.0, 0.5, 0.0</td><td>3.0, 3.0, 0.5, 0.0</td><td>2.0, 2.0, 0.5, 0.0</td><td>1, 1, 1, 0</td><td>4.0, 4.0, 1.0, 0.0</td><td>1, 1, 1, 0</td></tr>
+        <tr><td><code>open-meteo:nbm</code></td><td>2.5, 3.0, 3.0, 2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>2.0</td></tr>
+        <tr><td><code>open-meteo:ecmwf</code></td><td>1.0, 1.5, 2.0, 2.0</td><td>1.5</td><td>1.5</td><td>1.0</td><td>1.0, 2.0, 2.5, 2.5</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:icon</code></td><td>0.5, 1.0, 1.0, 1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0, 1.0, 1.5, 1.5</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:gfs</code></td><td>0.5, 1.0, 1.0, 1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:gem</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:ukmo</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:meteofrance</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
+        <tr><td><code>met-no:ecmwf</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
+    </tbody>
+</table>
+
+<h3>Baseline World Weights (Outside US Region)</h3>
+<p>Outside the US region, US-only models (<code>nws</code>, <code>hrrr</code>, <code>nbm</code>) receive weight <code>0.0</code>. Global models use flat horizon weights for Temperature, Wind, Cloud, and Precip mm (with Humidity = <code>1.0</code> and Precip % = <code>1.0</code>): <code>open-meteo:ecmwf = 3.0</code>, <code>open-meteo:icon = 2.5</code>, <code>open-meteo:ukmo = 2.0</code>, <code>open-meteo:meteofrance = 2.0</code>, <code>open-meteo:gem = 1.5</code>, <code>open-meteo:gfs = 1.5</code>, and <code>met-no:ecmwf = 1.5</code>.</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Rain Graph & Bars Guide — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link active" href="rain-chart.html">Rain Graph & Bars Guide</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
+<div class="nav-section">Sources & Ensemble Weights</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
+<div class="nav-section">Algorithms & Meteorology</div>
+<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
+<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Rain Graph &amp; Bars Guide</h1>
+<p>The <strong>Rain</strong> card in the detail pane displays up to two charts side-by-side: <strong>Next 2 hours</strong> (15-minute intervals, shown for US locations with HRRR sub-hourly coverage) and <strong>Next 24 hours</strong> (hourly intervals). Each visual series is explicitly labeled in the header legend and on the axes.</p>
+
+<div class="callout">
+    <strong>Bars = Rain Rate (Intensity, Left Axis)</strong><br>
+    The vertical aqua-to-cobalt bars show <em>how hard it is expected to rain</em> in <code>in/h</code> (Imperial) or <code>mm/h</code> (Metric). Read bar heights against the <strong>Left Y-Axis</strong> (labeled <code>Rate · 0.10 in/h</code> / <code>2.5 mm/h</code> at the top, half-scale at the middle dashed line, and <code>0</code> at the baseline).
+</div>
+
+<div class="callout amber">
+    <strong>Curve = Rain Chance (Probability %, Right Axis)</strong><br>
+    On the 24-hour chart, the smooth amber-rose curve with glowing circular nodes shows <em>how likely measurable rain (&ge; 0.1 mm/h) is</em> during each hour, from <code>0%</code> to <code>100%</code>. Read the curve against the <strong>Right Y-Axis</strong> (labeled <code>100%</code> at top, <code>50%</code> at midline, and <code>0%</code> at bottom).
+</div>
+
+<h2>Reading On-Chart Callouts &amp; Hover Inspection</h2>
+<ul>
+    <li><strong>Peak Bar Badges:</strong> Up to two highest non-zero bars display a cyan badge directly above the bar cap showing the exact precipitation rate (e.g., <code>0.08 in/h</code> or <code>1.5 mm/h</code>).</li>
+    <li><strong>Peak Chance Badge:</strong> The highest probability hour on the 24-hour curve displays an amber-rose badge (e.g., <code>Peak 80%</code>).</li>
+    <li><strong>Interactive Hover Readout:</strong> Move the pointer across any time slot on either chart to reveal a vertical guide line and a floating summary banner at the top of the plot: <code>3:00 PM · Bar: 0.06 in/h · Chance: 70%</code>.</li>
+</ul>
+
+<h2>Precipitation Intensity Classification</h2>
+<table>
+    <thead>
+        <tr><th>Category</th><th>Metric Rate (mm/h)</th><th>Imperial Rate (in/h)</th><th>Physical Description</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Dry / Trace</strong></td><td><code>&lt; 0.1 mm/h</code></td><td><code>&lt; 0.004 in/h</code></td><td>No measurable accumulation.</td></tr>
+        <tr><td><strong>Light Rain</strong></td><td><code>0.1 – 2.5 mm/h</code></td><td><code>0.004 – 0.10 in/h</code></td><td>Individual drops easily identified; small puddles form slowly.</td></tr>
+        <tr><td><strong>Moderate Rain</strong></td><td><code>2.5 – 7.6 mm/h</code></td><td><code>0.10 – 0.30 in/h</code></td><td>Rapid puddle formation; visible spray off roofs and pavement.</td></tr>
+        <tr><td><strong>Heavy Rain</strong></td><td><code>&ge; 7.6 mm/h</code></td><td><code>&ge; 0.30 in/h</code></td><td>Sheets of rain; rapid runoff and reduced visibility.</td></tr>
+    </tbody>
+</table>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

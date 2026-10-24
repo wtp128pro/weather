@@ -81,7 +81,7 @@ import Testing
         let vm = makeModel(WxRegistry(), Toggles())
         #expect(vm.rows.isEmpty)  // test-sources.c:383
         #expect(SourcesViewModel.title == "Data sources")  // test-sources.c:386
-        #expect(SourcesViewModel.aboutButtonTitle == "About Weather")  // test-sources.c:391
+        #expect(SourcesViewModel.aboutButtonTitle == "About Neginato Mezora")  // test-sources.c:391
     }
 
     @Test func rowsFollowRegistryOrder() throws {
@@ -628,7 +628,7 @@ import Testing
 
     @Test func aboutFieldsVerbatim() throws {
         // C: /window/sources/about-dialog (show_about, src/ui/wx-window.c:672-678)
-        #expect(AboutInfo.programName == "Weather")  // wx-window.c:672
+        #expect(AboutInfo.programName == "Neginato Mezora")  // wx-window.c:672
         #expect(AboutInfo.version == "0.1.0")  // meson.build:3 (WX_APP_VERSION, src/ui/meson.build:52)
         #expect(AboutInfo.comments
                 == "Weather forecasts from several free sources, with the rain you can expect and when.")  // wx-window.c:673-675

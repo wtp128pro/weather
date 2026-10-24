@@ -236,4 +236,20 @@ import Testing
         #expect(Self.w("nws\u{0}x", "nws", .temp, 1.0, true) == 4.0)  // nws TEMP H0: test-blend.c:477
         #expect(Self.w("open-meteo", "hrrr15\u{0}y", .temp, 1.0, true) == 3.0)  // hrrr TEMP H0: test-blend.c:478
     }
+
+    @Test("/blend/weights/multipliers-and-descriptors") func multipliersAndDescriptors() throws {
+        var mults = WxWeightMultipliers()
+        #expect(mults.isDefault)
+        mults.setSourceMultiplier(1.5, for: "nws")
+        mults.setModelMultiplier(2.0, sourceID: "open-meteo", modelID: "hrrr15")
+        #expect(!mults.isDefault)
+        #expect(mults.sourceMultiplier(for: "nws") == 1.5)
+        #expect(mults.modelMultiplier(sourceID: "open-meteo", modelID: "hrrr") == 2.0)
+        #expect(mults.combinedMultiplier(sourceID: "nws", modelID: "grid") == 1.5)
+        #expect(mults.combinedMultiplier(sourceID: "open-meteo", modelID: "hrrr15") == 2.0)
+        mults.setSourceMultiplier(1.0, for: "nws")
+        mults.setModelMultiplier(1.0, sourceID: "open-meteo", modelID: "hrrr")
+        #expect(mults.isDefault)
+        #expect(WxWeights.modelDescriptors.count == 10)
+    }
 }

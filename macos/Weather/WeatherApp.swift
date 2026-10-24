@@ -23,8 +23,13 @@ struct WeatherApp: App {
         .defaultLaunchBehavior(.presented)
         .commands {
             ShellCommands(shell: delegate.shell)
+            HelpCommands()
         }
 
         PickerScene(model: delegate.shell.model)
+
+        Settings {
+            SettingsView(state: delegate.shell)
+        }
     }
 }

@@ -514,23 +514,33 @@ private struct RainCardView: View {
     }
 }
 
-/// A crisp caption over a chart; the two charts of the card share the width equally.
+/// A crisp caption, interval subtitle, and explicit series legend over a rain chart;
+/// the two charts of the card share the width equally.
 private struct CaptionedChart: View {
     let caption: String
     let chart: RainChartData
     var showsChanceLegend: Bool = false
 
+    private var intervalSubtitle: String {
+        chart.isQuarters ? "15-min bars" : "Hourly bars & curve"
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(caption)
                     .font(.caption.weight(.semibold))
+                    .foregroundStyle(WeatherTheme.primaryText)
+                Text("· \(intervalSubtitle)")
+                    .font(.caption2.weight(.medium))
                     .foregroundStyle(WeatherTheme.secondaryText)
                 Spacer(minLength: 4)
-                if chart.hasData {
-                    ChartSeriesDots(showsChance: showsChanceLegend)
-                        .accessibilityHidden(true)
-                }
+            }
+            if chart.hasData {
+                ChartSeriesLegend(
+                    rateUnit: chart.rateUnitShort,
+                    showsChance: showsChanceLegend
+                )
             }
             DetailRainChart(chart: chart)
         }
@@ -545,39 +555,106 @@ private struct CaptionedChart: View {
     }
 }
 
-/// Decorative visual swatch dots indicating the rate bar gradient and probability curve gradient.
-private struct ChartSeriesDots: View {
+/// Labeled legend explaining what the cyan bars (Rain rate, left axis) and the
+/// amber-rose curve (Rain chance %, right axis) represent.
+private struct ChartSeriesLegend: View {
+    let rateUnit: String
     let showsChance: Bool
 
     var body: some View {
-        HStack(spacing: 6) {
-            RoundedRectangle(cornerRadius: 2, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.22, green: 0.86, blue: 1.00),
-                            Color(red: 0.14, green: 0.34, blue: 0.88),
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: 6, height: 10)
-            if showsChance {
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.98, green: 0.62, blue: 0.16),
-                                Color(red: 0.92, green: 0.36, blue: 0.58),
-                            ],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(width: 12, height: 3)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                rateItem
+                if showsChance {
+                    chanceItem
+                }
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                rateItem
+                if showsChance {
+                    chanceItem
+                }
             }
         }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rateItem: some View {
+        HStack(spacing: 5) {
+            HStack(alignment: .bottom, spacing: 1.5) {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(barGradient)
+                    .frame(width: 3.5, height: 6)
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(barGradient)
+                    .frame(width: 3.5, height: 10)
+            }
+            Text("Bars: Rain rate (\(rateUnit), left)")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(Color(red: 0.56, green: 0.90, blue: 1.00))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2.5)
+        .background(
+            Color(red: 0.08, green: 0.42, blue: 0.78).opacity(0.24),
+            in: Capsule()
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color(red: 0.22, green: 0.86, blue: 1.00).opacity(0.35), lineWidth: 0.6)
+        )
+    }
+
+    private var chanceItem: some View {
+        HStack(spacing: 5) {
+            ZStack {
+                Capsule()
+                    .fill(chanceGradient)
+                    .frame(width: 14, height: 2.5)
+                Circle()
+                    .fill(Color(red: 0.98, green: 0.62, blue: 0.16))
+                    .frame(width: 5, height: 5)
+                    .overlay(Circle().fill(Color.white).frame(width: 2, height: 2))
+            }
+            Text("Line: Rain chance (%, right)")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(Color(red: 1.00, green: 0.78, blue: 0.52))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2.5)
+        .background(
+            Color(red: 0.68, green: 0.28, blue: 0.44).opacity(0.24),
+            in: Capsule()
+        )
+        .overlay(
+            Capsule()
+                .strokeBorder(Color(red: 0.98, green: 0.62, blue: 0.16).opacity(0.35), lineWidth: 0.6)
+        )
+    }
+
+    private var barGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.22, green: 0.86, blue: 1.00),
+                Color(red: 0.14, green: 0.34, blue: 0.88),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var chanceGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.98, green: 0.62, blue: 0.16),
+                Color(red: 0.92, green: 0.36, blue: 0.58),
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 }
 
