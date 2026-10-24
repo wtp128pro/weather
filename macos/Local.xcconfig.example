@@ -1,0 +1,14 @@
+// Local developer configuration
+// Copy this file to Local.xcconfig and fill in your own values.
+// Find your Team ID at: https://developer.apple.com/account
+// Or run: codesign -dv /Applications/YourApp.app | grep TeamIdentifier
+
+BB_DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE
+
+// Feed the team id into the build. project.pbxproj deliberately omits
+// DEVELOPMENT_TEAM and uses ad-hoc signing for local builds; app_build.sh
+// passes this file via -xcconfig so automatic Developer ID signing can select
+// the certificate for this team and enable Hardened Runtime for notarization.
+DEVELOPMENT_TEAM = $(BB_DEVELOPMENT_TEAM)
+CODE_SIGN_IDENTITY = Apple Development
+ENABLE_HARDENED_RUNTIME = YES

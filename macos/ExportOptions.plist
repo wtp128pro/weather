@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Weather — Developer ID export options
+
+  Consumed by app_build.sh's `xcodebuild -exportArchive` step to turn the
+  Release .xcarchive into a Developer-ID-signed, hardened-runtime .app suitable
+  for notarization and distribution outside the Mac App Store.
+
+  method          developer-id : sign for distribution outside the App Store.
+  teamID          The 10-char Apple Developer team; must match Local.xcconfig's
+                  BB_DEVELOPMENT_TEAM and the Developer ID Application cert.
+  signingStyle    automatic    : let Xcode pick the Developer ID cert and, with
+                  -allowProvisioningUpdates, manage provisioning.
+-->
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>teamID</key>
+    <string>AQK9MG47BS</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+</dict>
+</plist>

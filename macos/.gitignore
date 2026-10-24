@@ -2,5 +2,11 @@
 xcuserdata/
 *.xcuserstate
 
+# Local signing / notarization secrets & per-developer identity — never commit.
+# Recreate from the committed *.example templates.
+scripts/signing_credentials.sh
+Local.xcconfig
+provisioning/
+
 # Finder metadata
 .DS_Store
