@@ -2,13 +2,9 @@
 // Copyright (C) 2026 wtp128pro
 //
 // ShellSidebar.swift - the "main" page: the place list beside the detail pane
-// (wx-window.c:928-947, 1125-1137; ui-widgets.md §2 items 5, 14, 15). Sidebar minimum 340 and
-// detail minimum 480 (wx-window.c:11-12). The GTK paned's start child cannot shrink
-// (wx-window.c:1135): SidebarSplitViewGuard sets the sidebar NSSplitViewItem.canCollapse = false
-// and strips the hidden Toggle Sidebar (⌥⌘S) key equivalent so toggleSidebar: validates disabled
-// and never collapses or bounces the sidebar, while the column visibility binding is also forced
-// back to .all whenever it changes as a backstop (no toolbar toggle; SidebarCommands is not added,
-// so there is no Hide Sidebar menu item).
+// (wx-window.c:928-947, 1125-1137; ui-widgets.md §2 items 5, 14, 15). Sidebar ideal width 340
+// (resizable down to 220 or collapsible via the toolbar button, menu command, or divider drag)
+// and detail minimum 480 (wx-window.c:11-12).
 // Single selection that cannot be emptied (GtkSingleSelection, wx-window.c:928-930): the List
 // uses the non-optional selection binding, so the table keeps a highlighted row, and only a
 // saved place's key is passed to AppModel.select (nil or an unknown key would empty the
@@ -21,15 +17,19 @@ import WeatherCore
 
 /// The sidebar of saved places and the detail pane of the selected one.
 struct ShellSidebar: View {
-    /// MIN_SIDEBAR_WIDTH (wx-window.c:11).
+    /// Minimum width before collapsing when dragging the split-view divider.
+    static let sidebarCollapseMinWidth: CGFloat = 220
+    /// MIN_SIDEBAR_WIDTH / ideal width (wx-window.c:11).
     static let sidebarMinWidth: CGFloat = 340
+    /// Maximum width when dragging the split-view divider wider.
+    static let sidebarMaxWidth: CGFloat = 480
     /// MIN_DETAIL_WIDTH (wx-window.c:12).
     static let detailMinWidth: CGFloat = 480
 
     let model: AppModel
     private let liveStore = LiveStationStore.shared
 
-    /// Always .all; any collapse (divider drag, toggleSidebar:) is undone at once.
+    /// Column visibility state for showing or hiding the places sidebar.
     @State private var columns: NavigationSplitViewVisibility = .all
 
     var body: some View {
@@ -63,8 +63,11 @@ struct ShellSidebar: View {
             )
             .environment(\.colorScheme, .dark)
             .accessibilityLabel(RowViewModel.listAccessibilityLabel)
-            .navigationSplitViewColumnWidth(min: Self.sidebarMinWidth, ideal: Self.sidebarMinWidth)
-            .background(SidebarSplitViewGuard())
+            .navigationSplitViewColumnWidth(
+                min: Self.sidebarCollapseMinWidth,
+                ideal: Self.sidebarMinWidth,
+                max: Self.sidebarMaxWidth
+            )
         } detail: {
             DetailView(
                 place: model.selectedPlace,
@@ -74,12 +77,7 @@ struct ShellSidebar: View {
                 }
             )
             .frame(minWidth: Self.detailMinWidth)
-        }
-        .toolbar(removing: .sidebarToggle)
-        .onChange(of: columns) { _, new in
-            if new != .all {
-                columns = .all
-            }
+            .background(SidebarSplitViewConfigurator())
         }
         .task(id: sidebarLiveTaskKey) {
             await liveStore.refreshAll(places: model.places)
@@ -98,18 +96,19 @@ struct ShellSidebar: View {
         model.places.map { "\($0.key):\($0.fetchedS):\($0.offline):\($0.units)" }
     }
 
-    /// Prevents the enclosing NSSplitViewController from collapsing the sidebar on divider drag or
-    /// toggleSidebar: (⌥⌘S), and disables the hidden Toggle Sidebar key equivalent in the main menu.
-    private struct SidebarSplitViewGuard: NSViewRepresentable {
-        func makeNSView(context: Context) -> GuardView {
-            GuardView()
+    /// Ensures the enclosing NSSplitViewController allows collapsing the sidebar via both the
+    /// divider slider and the toolbar/menu toggle button even when the sidebar is collapsed and no
+    /// longer in the responder chain.
+    private struct SidebarSplitViewConfigurator: NSViewRepresentable {
+        func makeNSView(context: Context) -> ConfiguratorView {
+            ConfiguratorView()
         }
 
-        func updateNSView(_ nsView: GuardView, context: Context) {
+        func updateNSView(_ nsView: ConfiguratorView, context: Context) {
             nsView.configureSplitView()
         }
 
-        final class GuardView: NSView {
+        final class ConfiguratorView: NSView {
             override func viewDidMoveToWindow() {
                 super.viewDidMoveToWindow()
                 configureSplitView()
@@ -127,27 +126,21 @@ struct ShellSidebar: View {
                        let controller = splitView.delegate as? NSSplitViewController,
                        let sidebarItem = controller.splitViewItems.first
                     {
-                        if sidebarItem.canCollapse {
-                            sidebarItem.canCollapse = false
+                        if !sidebarItem.canCollapse {
+                            sidebarItem.canCollapse = true
+                        }
+                        if let items = window?.toolbar?.items {
+                            for item in items where item.itemIdentifier == .toggleSidebar
+                                || item.action == #selector(NSSplitViewController.toggleSidebar(_:))
+                            {
+                                if item.target !== controller {
+                                    item.target = controller
+                                }
+                            }
                         }
                         break
                     }
                     current = view.superview
-                }
-                if let mainMenu = NSApp?.mainMenu {
-                    Self.disableToggleSidebarMenuItems(in: mainMenu)
-                }
-            }
-
-            private static func disableToggleSidebarMenuItems(in menu: NSMenu) {
-                for item in menu.items {
-                    if item.action == #selector(NSSplitViewController.toggleSidebar(_:)) {
-                        item.allowsKeyEquivalentWhenHidden = false
-                        item.keyEquivalent = ""
-                    }
-                    if let submenu = item.submenu {
-                        disableToggleSidebarMenuItems(in: submenu)
-                    }
                 }
             }
         }

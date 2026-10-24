@@ -191,11 +191,8 @@ the port:
 - Command-click on the selected row and a click on empty list space never
   leave the list without a highlighted row; arrow keys move the selection; the
   selection survives a relaunch;
-- the sidebar cannot be hidden: drag the divider to the left edge; there is no
-  View > Hide Sidebar item and no ⌃⌘S; no flicker when it springs back;
-- ⌥⌘S (SwiftUI's hidden Toggle Sidebar): disabled along with sidebar
-  collapsing (`NSSplitViewItem.canCollapse = false`), with the column
-  visibility binding as a backstop, so the sidebar never collapses;
+- the sidebar can be resized or collapsed/re-opened using the toolbar button,
+  View > Hide/Show Sidebar, or dragging the split-view divider;
 - drag the divider to the far right;
 - closing the main window while the picker is open closes the picker and
   quits; ⌘W quits;
@@ -880,10 +877,9 @@ differs from the GTK app, with its consequence:
 - Standard macOS menus (app, Edit, View, Window), with Refresh and the unit
   switch in the View menu; ⌘Q quits. Consequence: menu items the GTK app does
   not have.
-- SwiftUI's hidden "Toggle Sidebar" command (⌥⌘S, no visible menu item) is
-  disabled and the sidebar split item sets `canCollapse = false`
-  (`ShellSidebar.swift`), with the column visibility binding kept as a
-  backstop, so the sidebar never collapses (DECISIONS #72).
+- The places sidebar can be resized or collapsed/expanded via the toolbar
+  sidebar toggle button, the View menu (`SidebarCommands`), or by dragging the
+  split-view divider (`ShellSidebar.swift`).
 - The window frame is restored on relaunch (the C app persists no size).
   Consequence: the window should reopen where you left it (a manual check).
 - While the stored places load, the window shows a blank, neutral page, never

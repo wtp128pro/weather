@@ -48,5 +48,6 @@ struct ShellCommands: Commands {
 
             Divider()
         }
+        SidebarCommands()
     }
 }
