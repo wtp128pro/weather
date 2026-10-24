@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Weather — Clean Build + DMG Script
+# Neginato Mezora — Clean Build + DMG Script
 # =============================================================================
 #
 # USAGE
 #   ./build.sh [output-dir]
 #
-#   output-dir  Directory where Weather.dmg is written (default: ~/Downloads)
+#   output-dir  Directory where Neginato Mezora.dmg is written (default: ~/Downloads)
 #
 # PREREQUISITES
 #   scripts/signing_credentials.sh filled in (see .example)
@@ -28,8 +28,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OUTPUT_DIR="${1:-$HOME/Downloads}"
-BUILD_DIR="/tmp/Weather-build"
-APP_PATH="$BUILD_DIR/Weather.app"
+BUILD_DIR="/tmp/NeginatoMezora-build"
+APP_PATH="$BUILD_DIR/Neginato Mezora.app"
 
 # ─── Build version: year:month:day:hour:minute ────────────────────────────────
 # Pre-condition:  none
@@ -47,9 +47,10 @@ source "$SCRIPT_DIR/scripts/dmg_python.sh"
 ensure_dmg_python || exit 1
 
 # ─── Step 1: Build ───────────────────────────────────────────────────────────
+rm -rf "$BUILD_DIR"
 "$SCRIPT_DIR/app_build.sh" "$BUILD_DIR"
 
 # ─── Step 2: Package DMG ─────────────────────────────────────────────────────
-echo "==> [2/2] Packaging DMG → $OUTPUT_DIR/Weather.dmg"
-rm -f "$OUTPUT_DIR/Weather.dmg"
+echo "==> [2/2] Packaging DMG → $OUTPUT_DIR/Neginato Mezora.dmg"
+rm -f "$OUTPUT_DIR/Neginato Mezora.dmg" "$OUTPUT_DIR/Weather.dmg"
 "$SCRIPT_DIR/scripts/build_dmg.sh" "$APP_PATH" "$OUTPUT_DIR"

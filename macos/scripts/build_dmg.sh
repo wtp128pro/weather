@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Weather — Code-Sign & DMG Build Script
+# Neginato Mezora — Code-Sign & DMG Build Script
 # =============================================================================
 #
 # USAGE
-#   ./scripts/build_dmg.sh <path/to/Weather.app> [output-dir]
+#   ./scripts/build_dmg.sh <path/to/Neginato Mezora.app> [output-dir]
 #
 # PREREQUISITES
 #   python3 on PATH — ds_store + mac_alias are provisioned automatically into a
@@ -47,8 +47,8 @@
 # ICON LAYOUT  (matches the directional arrow in dmg_assets/background.png)
 #   ┌──────────────────────────────────────────────────┐
 #   │                                                  │
-#   │      [Weather.app] ──────►  [Applications]       │
-#   │         x=155                x=415               │
+#   │  [Neginato Mezora.app] ──────►  [Applications]   │
+#   │         x=155                       x=415        │
 #   │                                                  │
 #   └──────────────────────────────────────────────────┘
 # =============================================================================
@@ -84,7 +84,7 @@ BB_PROVISIONING_PROFILE="${BB_PROVISIONING_PROFILE:-$SCRIPT_DIR/../provisioning/
 # ─── Input validation ─────────────────────────────────────────────────────────
 APP_PATH="${1:-}"
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
-    echo "Usage: $0 <path/to/Weather.app> [output-dir]"
+    echo "Usage: $0 <path/to/Neginato Mezora.app> [output-dir]"
     exit 1
 fi
 
@@ -98,27 +98,29 @@ if [[ -z "${BB_PROVISIONING_PROFILE:-}" || ! -f "$BB_PROVISIONING_PROFILE" ]]; t
 fi
 
 OUTPUT_DIR="${2:-$(pwd)}"
-APP_NAME="Weather"
+APP_NAME="Neginato Mezora"
+SHIPPED_APP_NAME="${APP_NAME}.app"
 BACKGROUND_SRC="$SCRIPT_DIR/dmg_assets/background.png"
 DMG_OUTPUT="$OUTPUT_DIR/${APP_NAME}.dmg"
 
 # Use a fixed mount point to keep the alias path predictable.
 # If a stale volume from a previous run is still mounted, detach it first.
-MOUNT_POINT="/Volumes/${APP_NAME}-build"
+MOUNT_POINT="/Volumes/NeginatoMezora-build"
 # Separate mount point for the post-build verification gate, where the finished
 # DMG is re-mounted read-only to inspect the .app exactly as it ships.
-VERIFY_MOUNT="/Volumes/${APP_NAME}-verify"
+VERIFY_MOUNT="/Volumes/NeginatoMezora-verify"
 
-# Basename of the incoming bundle (e.g. "Weather.app"); used to locate the copied
-# .app inside the mounted DMG during the verification gate.
+# Basename of the incoming bundle (e.g. "Neginato Mezora.app").
 APP_BASENAME="$(basename "$APP_PATH")"
 
 TEMP_DIR="$(mktemp -d)"
-TEMP_DMG="$TEMP_DIR/${APP_NAME}-rw.dmg"
+TEMP_DMG="$TEMP_DIR/NeginatoMezora-rw.dmg"
 
 cleanup() {
     hdiutil detach "$MOUNT_POINT" 2>/dev/null || true
     hdiutil detach "${VERIFY_MOUNT:-}" 2>/dev/null || true
+    hdiutil detach "/Volumes/Weather-build" 2>/dev/null || true
+    hdiutil detach "/Volumes/Weather-verify" 2>/dev/null || true
     rm -rf "$TEMP_DIR"
 }
 trap cleanup EXIT
@@ -278,8 +280,8 @@ echo "==> [3/5] Populating DMG volume"
 # hdiutil detach to fail with "Resource busy".
 touch "$MOUNT_POINT/.metadata_never_index"
 
-# Copy the signed + stapled .app bundle
-cp -R "$APP_PATH" "$MOUNT_POINT/"
+# Copy the signed + stapled .app bundle under the actual application name
+cp -R "$APP_PATH" "$MOUNT_POINT/$SHIPPED_APP_NAME"
 
 # Create the Applications folder symlink for drag-to-install
 ln -sf /Applications "$MOUNT_POINT/Applications"
@@ -304,12 +306,12 @@ chflags hidden "$MOUNT_POINT/.background"
 #   - Create an HFS alias record for .background/background.png by reading
 #     the file's catalog node ID from the live mounted filesystem.
 #   - Write a correctly-formatted .DS_Store B-tree with:
-#       '.'                bwsp — window bounds and toolbar flags
-#       '.'                icvp — background image alias + icon size
-#       'Weather.app'      Iloc — icon centre at (155, 195)
-#       'Applications'     Iloc — icon centre at (415, 195)
+#       '.'                    bwsp — window bounds and toolbar flags
+#       '.'                    icvp — background image alias + icon size
+#       'Neginato Mezora.app'  Iloc — icon centre at (155, 195)
+#       'Applications'         Iloc — icon centre at (415, 195)
 echo "==> [4/5] Writing .DS_Store (Python, no AppleScript)"
-"$DMG_PYTHON" "$WRITE_DS_STORE" "$MOUNT_POINT"
+"$DMG_PYTHON" "$WRITE_DS_STORE" "$MOUNT_POINT" "$SHIPPED_APP_NAME"
 
 
 # ─── Step 6: Flush and unmount ────────────────────────────────────────────────
@@ -373,9 +375,9 @@ VERIFY_DIR="$TEMP_DIR/verify"
 mkdir -p "$VERIFY_DIR"
 hdiutil detach "$VERIFY_MOUNT" 2>/dev/null || true
 hdiutil attach "$DMG_OUTPUT" -mountpoint "$VERIFY_MOUNT" -nobrowse -noautoopen -readonly
-cp -R "$VERIFY_MOUNT/$APP_BASENAME" "$VERIFY_DIR/"
+cp -R "$VERIFY_MOUNT/$SHIPPED_APP_NAME" "$VERIFY_DIR/"
 hdiutil detach "$VERIFY_MOUNT"
-VERIFY_APP="$VERIFY_DIR/$APP_BASENAME"
+VERIFY_APP="$VERIFY_DIR/$SHIPPED_APP_NAME"
 
 # 1) Gatekeeper: must be accepted AND sourced from a notarized Developer ID.
 # Capture-then-grep here-strings keep every gate SIGPIPE-safe under pipefail.

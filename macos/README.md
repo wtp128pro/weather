@@ -59,4 +59,4 @@ python3 scripts/help/validate.py
 ### Signed Release Archive & Notarized DMG
 1. Copy `Local.xcconfig.example` to `Local.xcconfig` (`BB_DEVELOPMENT_TEAM = AQK9MG47BS`).
 2. Copy `scripts/signing_credentials.sh.example` to `scripts/signing_credentials.sh`.
-3. Run `./build.sh` to archive, export, notarize, staple, and package `Weather.dmg`.
+3. Run `./build.sh` to archive, export, notarize, staple, and package `Neginato Mezora.dmg` (containing `Neginato Mezora.app`).

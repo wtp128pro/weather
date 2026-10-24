@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Writes a .DS_Store file for the Weather DMG installer window.
+Writes a .DS_Store file for the Neginato Mezora DMG installer window.
 
 Must be called while the RW DMG image is mounted, because:
   - mac_alias reads the background file's HFS catalog node ID (inode) and
@@ -10,10 +10,12 @@ Must be called while the RW DMG image is mounted, because:
     to the final read-only UDZO image.
 
 Usage:
-    python3 write_ds_store.py <mount_point>
+    python3 write_ds_store.py <mount_point> [app_bundle_name]
 
-    <mount_point>  Absolute path to the mounted RW DMG volume,
-                   e.g. /Volumes/Weather-build.
+    <mount_point>      Absolute path to the mounted RW DMG volume,
+                       e.g. /Volumes/NeginatoMezora-build.
+    [app_bundle_name]  Bundle directory name inside the DMG
+                       (default: "Neginato Mezora.app").
 
 Requires:
     ds_store + mac_alias. build_dmg.sh runs this with the private venv from
@@ -21,15 +23,15 @@ Requires:
 
 Pre-conditions:
     - <mount_point>/.background/background.png must exist.
-    - <mount_point>/Weather.app must exist (or be a symlink).
+    - <mount_point>/Neginato Mezora.app must exist (or be a symlink).
     - <mount_point>/Applications symlink must exist.
 
 Post-condition:
     - <mount_point>/.DS_Store is written (or overwritten) with:
-        '.'                bwsp  — window position and toolbar flags
-        '.'                icvp  — icon view: background image, icon size, no arrangement
-        'Weather.app'      Iloc  — icon centre at (155, 195)
-        'Applications'     Iloc  — icon centre at (415, 195)
+        '.'                    bwsp  — window position and toolbar flags
+        '.'                    icvp  — icon view: background image, icon size, no arrangement
+        'Neginato Mezora.app'  Iloc  — icon centre at (155, 195)
+        'Applications'         Iloc  — icon centre at (415, 195)
 """
 
 import os
@@ -51,8 +53,9 @@ except ImportError:
 # These must match the arrow drawn in background.png (560 × 400).
 # Coordinates are Finder icon-centre positions within the window.
 
-APP_X, APP_Y   = 155, 195   # Weather.app — left drop zone
+APP_X, APP_Y   = 155, 195   # Neginato Mezora.app — left drop zone
 APPS_X, APPS_Y = 415, 195   # Applications symlink — right drop zone
+DEFAULT_APP_BUNDLE = "Neginato Mezora.app"
 
 # Window: top-left at (100, 100) on screen, 560 px wide × 400 px tall
 WIN_BOUNDS = "{{100, 100}, {560, 400}}"
@@ -115,17 +118,22 @@ def build_icvp(alias_bytes: bytes) -> dict:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        sys.exit(f"Usage: {sys.argv[0]} <mount_point>")
+        sys.exit(f"Usage: {sys.argv[0]} <mount_point> [app_bundle_name]")
 
     mount = sys.argv[1].rstrip("/")
+    app_bundle = sys.argv[2] if len(sys.argv) >= 3 else DEFAULT_APP_BUNDLE
     bg_path = os.path.join(mount, ".background", "background.png")
+    app_path = os.path.join(mount, app_bundle)
     ds_path = os.path.join(mount, ".DS_Store")
 
     # Validate inputs
     if not os.path.isfile(bg_path):
         sys.exit(f"Error: background not found at {bg_path}")
+    if not os.path.exists(app_path):
+        sys.exit(f"Error: app bundle not found at {app_path}")
 
     print(f"  mount     : {mount}")
+    print(f"  app       : {app_bundle}")
     print(f"  background: {bg_path}")
     print(f"  .DS_Store : {ds_path}")
 
@@ -152,7 +160,7 @@ def main() -> None:
 
         # Icon positions: (x, y) tuples encoded by ILocCodec as
         # struct.pack(">IIII", x, y, 0xFFFFFFFF, 0xFFFF0000).
-        d["Weather.app"]["Iloc"] = (APP_X, APP_Y)
+        d[app_bundle]["Iloc"] = (APP_X, APP_Y)
         d["Applications"]["Iloc"] = (APPS_X, APPS_Y)
 
     print("  Done.")

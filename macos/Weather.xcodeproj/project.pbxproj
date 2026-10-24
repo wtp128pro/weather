@@ -42,7 +42,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AA00000000000000000000B1 /* Weather.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Weather.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA00000000000000000000B1 /* Neginato Mezora.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Neginato Mezora.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000000B2 /* WeatherCore.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = WeatherCore.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000000B3 /* WeatherCoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WeatherCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -99,7 +99,7 @@
 		AA0000000000000000000002 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				AA00000000000000000000B1 /* Weather.app */,
+				AA00000000000000000000B1 /* Neginato Mezora.app */,
 				AA00000000000000000000B2 /* WeatherCore.framework */,
 				AA00000000000000000000B3 /* WeatherCoreTests.xctest */,
 			);
@@ -127,8 +127,8 @@
 				AA00000000000000000000A1 /* Weather */,
 			);
 			name = Weather;
-			productName = Weather;
-			productReference = AA00000000000000000000B1 /* Weather.app */;
+			productName = "Neginato Mezora";
+			productReference = AA00000000000000000000B1 /* Neginato Mezora.app */;
 			productType = "com.apple.product-type.application";
 		};
 		AA00000000000000000000C2 /* WeatherCore */ = {
@@ -350,7 +350,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.wtp128pro.Weather;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Neginato Mezora";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = NO;
@@ -495,7 +495,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 27.0;
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.wtp128pro.Weather;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = "Neginato Mezora";
 				SDKROOT = macosx;
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_APPROACHABLE_CONCURRENCY = NO;

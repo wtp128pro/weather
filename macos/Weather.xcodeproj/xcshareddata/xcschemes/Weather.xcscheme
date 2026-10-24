@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AA00000000000000000000C1"
-               BuildableName = "Weather.app"
+               BuildableName = "Neginato Mezora.app"
                BlueprintName = "Weather"
                ReferencedContainer = "container:Weather.xcodeproj">
             </BuildableReference>
@@ -55,7 +55,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AA00000000000000000000C1"
-            BuildableName = "Weather.app"
+            BuildableName = "Neginato Mezora.app"
             BlueprintName = "Weather"
             ReferencedContainer = "container:Weather.xcodeproj">
          </BuildableReference>

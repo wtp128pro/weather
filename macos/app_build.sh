@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Weather — Archive + Developer ID Export
+# Neginato Mezora — Archive + Developer ID Export
 # =============================================================================
 #
 # USAGE
 #   ./app_build.sh [output-dir]
 #
-#   output-dir  Directory where Weather.app is written
+#   output-dir  Directory where Neginato Mezora.app is written
 #               (default: ~/Downloads/Release)
 #
 # PREREQUISITES
@@ -27,7 +27,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OUTPUT_DIR="${1:-$HOME/Downloads/Release}"
-ARCHIVE_PATH="$OUTPUT_DIR/Weather.xcarchive"
+ARCHIVE_PATH="$OUTPUT_DIR/Neginato Mezora.xcarchive"
 PROJECT_PATH="$SCRIPT_DIR/Weather.xcodeproj"
 LOCAL_XCCONFIG="$SCRIPT_DIR/Local.xcconfig"
 EXPORT_OPTIONS="$SCRIPT_DIR/ExportOptions.plist"
@@ -64,7 +64,7 @@ fi
 # Info.plist via the $(CURRENT_PROJECT_VERSION) variable in CFBundleVersion.
 # VERSIONING_SYSTEM="" prevents WeatherCore's apple-generic stub generator from
 # treating the colon-delimited timestamp as a C floating-point literal.
-echo "==> [1/2] Archiving Weather (Release)"
+echo "==> [1/2] Archiving Neginato Mezora (Release)"
 xcodebuild clean archive \
     -project "$PROJECT_PATH" \
     -scheme Weather \
