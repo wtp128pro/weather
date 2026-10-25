@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="AppleTitle" content="Neginato Mezora Help">
-    <title>Settings: Data Sources & Weights — Neginato Mezora Help</title>
+    <title>Settings: Data Sources &amp; Weights — Neginato Mezora Help</title>
     <link rel="stylesheet" href="book.css">
     <link rel="stylesheet" href="help-ui.css">
 </head>
@@ -17,72 +17,245 @@
             <nav>
                 <div class="nav-section">Getting Started</div>
 <a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
-<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
-<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
-<div class="nav-section">Sources & Ensemble Weights</div>
-<a class="nav-link active" href="sources-weights.html">Settings: Data Sources & Weights</a>
-<div class="nav-section">Algorithms & Meteorology</div>
-<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
-<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link active" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
             </nav>
         </aside>
         <main class="help-main">
             <h1>Settings: Data Sources &amp; Weights</h1>
-<p>Open the <strong>Neginato Mezora Settings</strong> dialogue at any time by pressing <code>⌘,</code>, clicking the <strong>gear (⚙)</strong> button in the top-right window toolbar, or choosing <strong>Neginato Mezora &gt; Settings…</strong> from the menu bar.</p>
+<p>Open Settings with <kbd>⌘,</kbd> (it opens on the <strong>Sources</strong> tab), the gear button in the toolbar, or Neginato Mezora › Settings…. <strong>Neginato Mezora › Data Sources &amp; Weights…</strong> opens the <strong>Weights</strong> tab directly.</p>
 
-<h2>Tab 1: Sources</h2>
-<p>The <strong>Sources</strong> tab controls which upstream weather providers participate in forecast refreshes and sets each provider's overall blend weight multiplier:</p>
+<h2>The Sources tab</h2>
+<p>One row per forecast service. Each row has a status dot and line, an on/off switch, a <strong>Source weight multiplier</strong>, and links to the service's credit and licence.</p>
+<table>
+    <thead><tr><th>Service</th><th>Models it supplies</th><th>Where</th><th>Licence</th></tr></thead>
+    <tbody>
+        <tr><td><strong>Open-Meteo</strong></td><td>ECMWF IFS, DWD ICON, NOAA GFS, ECCC GEM, UK Met Office, Météo-France ARPEGE/AROME, KNMI HARMONIE-AROME, and in the US NOAA HRRR and the National Blend of Models (NBM); the 15-minute rain; also current conditions, air quality and elevations</td><td>Worldwide (each model where it runs)</td><td>CC BY 4.0</td></tr>
+        <tr><td><strong>National Weather Service</strong></td><td>The forecasters' 2.5 km grid (NDFD)</td><td>United States and territories</td><td>US public domain</td></tr>
+        <tr><td><strong>MET Norway</strong></td><td>Locationforecast 2.0 (MEPS 2.5 km in the Nordic area, ECMWF elsewhere)</td><td>Worldwide</td><td>NLOD 2.0 / CC BY 4.0</td></tr>
+        <tr><td><strong>Bright Sky (DWD)</strong></td><td>DWD MOSMIX station forecasts</td><td>Germany and neighbouring countries</td><td>CC BY 4.0 (DWD)</td></tr>
+        <tr><td><strong>Environment Canada</strong></td><td>MSC GeoMet: HRDPS / RDPS and the official city forecast of the nearest city (within 75 km)</td><td>Canada</td><td>Data Server End-use Licence of Environment and Climate Change Canada</td></tr>
+    </tbody>
+</table>
+
+<h3>Status lines</h3>
+<table>
+    <thead><tr><th>Dot</th><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td>green</td><td><em>Used for this place (3 forecast models)</em></td><td>The service answered for the selected place, with that many models.</td></tr>
+        <tr><td>orange</td><td><em>Could not load: network error / timed out / server error / rate limited / unreadable answer / no data / invalid request / not available</em></td><td>The last fetch for the selected place failed; the forecast is blended from the other services.</td></tr>
+        <tr><td>grey</td><td><em>Not used for this place</em></td><td>The service does not cover the selected place (for example the NWS outside the US).</td></tr>
+        <tr><td>grey</td><td><em>Turned off</em></td><td>You switched it off. It is not fetched for any place.</td></tr>
+    </tbody>
+</table>
+
+<h3>Switches and source multipliers</h3>
 <ul>
-    <li><strong>Open-Meteo (<code>open-meteo</code>):</strong> Supplies up to 9 NWP models (NOAA HRRR 3 km + 15-min Nowcast, NOAA NBM, ECMWF IFS, NOAA GFS, DWD ICON, ECCC GEM, UK Met Office, Météo-France, and KNMI HARMONIE-AROME 2 km). Licensed under CC BY 4.0.</li>
-    <li><strong>National Weather Service (<code>nws</code>):</strong> Official NOAA human-forecaster 2.5 km NDFD grid for the United States, Puerto Rico, US Virgin Islands, Guam, and American Samoa. US Government public domain work.</li>
-    <li><strong>MET Norway (<code>met-no</code>):</strong> Norwegian Meteorological Institute Locationforecast 2.0 (1 km Nordic MEPS + global ECMWF IFS). Licensed under CC BY 4.0 / NLOD.</li>
-    <li><strong>DWD Bright Sky (<code>dwd-brightsky</code>):</strong> Deutscher Wetterdienst MOSMIX station-calibrated guidance + ICON-D2 / SYNOP observations for Germany, the Netherlands, Benelux, and Central Europe. Licensed under CC BY 4.0.</li>
-    <li><strong>Environment Canada (<code>eccc</code>):</strong> Meteorological Service of Canada GeoMet Official Citypage &amp; HRDPS 2.5 km guidance for Canada. Licensed under the Open Government Licence – Canada.</li>
+    <li>The <strong>switch</strong> turns a service off for every place. Every place is fetched again, without it.</li>
+    <li>The <strong>Source weight multiplier</strong> (0.10× to 3.00×, steps of 0.05, default 1.00×) scales the weight of all of that service's models. <strong>1.0×</strong> resets one row; <strong>Reset Source Weights</strong> (in the section header, shown when any is changed) resets them all.</li>
+    <li>The note under the list is meant literally: the weights are rules of thumb, not statistics measured from past accuracy, so the app claims no accuracy figure.</li>
 </ul>
-<p>Each source row includes a <strong>Source weight multiplier</strong> slider (<code>0.10×</code> to <code>3.00×</code>, default <code>1.00×</code>) that scales all models belonging to that provider.</p>
+<p>Station networks are not in this tab: they have their own switches in <a href="stations-settings.html">Settings › Stations</a>.</p>
 
-<h2>Tab 2: Weights &amp; Model Matrix</h2>
-<p>The <strong>Weights</strong> tab lets you choose a regional profile (<code>Inspect Regional Profile</code>) and variable group (<code>Temperature</code>, <code>Wind</code>, <code>Cloud Cover</code>, <code>Humidity</code>, <code>Precipitation Amount</code>, <code>Precipitation Chance</code>) to inspect the 4-band horizon weights (<code>H0: 0–3h</code>, <code>H1: 3–18h</code>, <code>H2: 18–72h</code>, <code>H3: 72h+</code>) and adjust individual multipliers (<code>0.00×</code> to <code>3.00×</code>) for every NWP model.</p>
+<h2>The Weights tab</h2>
+<p>Every forecast hour is a <strong>weighted median</strong> of the models that cover it (see <a href="algorithms.html">Algorithms</a>). A model's weight depends on the <strong>regional profile</strong> of the place, the <strong>variable</strong>, and how far ahead the hour is, in four <strong>horizon bands</strong>: <code>H0</code> 0–3 hours, <code>H1</code> 3–18 hours, <code>H2</code> 18–72 hours, <code>H3</code> beyond 72 hours.</p>
+<ul>
+    <li><strong>Inspect Regional Profile</strong> shows the weights of one profile. It starts on the profile of the place selected in the main window, and follows it when you select another place; it only changes what you see, not which profile a place uses.</li>
+    <li><strong>Inspect Baseline Variable Group</strong>: Temperature &amp; Feels Like, Wind &amp; Gusts, Cloud Cover, Relative Humidity, Precipitation Amount, Precipitation Chance.</li>
+    <li>Each model row shows its name and id, where it runs, its resolution, the four band weights of the chosen profile and variable, the worldwide baseline, and a <strong>Model multiplier</strong> (0.00× to 3.00×; 0 removes the model from the blend). <strong>1.0×</strong> resets one model; <strong>Reset All to 1.00×</strong> resets every multiplier.</li>
+    <li>The weight used is <code>profile weight × source multiplier × model multiplier</code>. Multipliers apply in every region. Changing one re-fetches every place.</li>
+</ul>
 
-<h3>Regional 4-Band Horizon Profiles (<code>WxRegion</code>)</h3>
+<h2>Regional profiles</h2>
+<p>The profile follows the place's country; places without a country code use their coordinates. These tables are produced from the app's own weight code.</p>
 <table>
     <thead>
-        <tr><th>Region</th><th>Short-Range Leaders (H0/H1, 0–18h)</th><th>Extended Leaders (H2/H3, 18h+)</th><th>15-Min Nowcast</th></tr>
+        <tr><th>Profile</th><th>Used for</th><th>Leads the first 18 hours (temperature)</th><th>Leads after 3 days</th><th>15-minute rain</th></tr>
     </thead>
     <tbody>
-        <tr><td><strong>United States (<code>.us</code>)</strong></td><td><code>nws:nws</code> (4.0), <code>open-meteo:hrrr</code> (3.0–4.0), <code>nbm</code> (2.5–3.0)</td><td><code>nws:nws</code> (4.5–5.0), <code>nbm</code> (2.0–3.0), <code>ecmwf</code> (2.0–2.5)</td><td><code>ncep_hrrr_conus</code></td></tr>
-        <tr><td><strong>UK &amp; Ireland (<code>.ukIreland</code>)</strong></td><td><code>open-meteo:ukmo</code> (UKV 2 km, 4.5), <code>meteofrance</code> (2.5), <code>ecmwf</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>ukmo</code> (2.5), <code>icon</code> (2.2)</td><td>Best-match 15-min</td></tr>
-        <tr><td><strong>Netherlands &amp; Benelux (<code>.beneluxNorthSea</code>)</strong></td><td><code>open-meteo:knmi</code> (HARMONIE 2 km, 4.0), <code>icon</code> (3.5), <code>dwd-brightsky:mosmix</code> (3.0–3.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>dwd-brightsky:mosmix</code> (2.5), <code>icon</code> (2.5), <code>knmi</code> (0 at 72h+)</td><td><code>knmi_seamless</code></td></tr>
-        <tr><td><strong>Germany &amp; Central Europe (<code>.centralEurope</code>)</strong></td><td><code>open-meteo:icon</code> (ICON-D2 2 km, 4.0–4.5), <code>dwd-brightsky:mosmix</code> (3.5), <code>meteofrance</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>dwd-brightsky:mosmix</code> (2.5–3.0), <code>icon</code> (2.8–3.5)</td><td><code>icon_seamless</code></td></tr>
-        <tr><td><strong>Canada (<code>.canada</code>)</strong></td><td><code>eccc:hrdps</code> (4.0), <code>open-meteo:gem</code> (4.0), <code>hrrr</code> (3.0–4.0, &le;48h)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>gem</code> (2.8), <code>eccc:hrdps</code> (2.5)</td><td><code>ncep_hrrr_conus</code> / 15-min</td></tr>
-        <tr><td><strong>Nordic &amp; Baltic (<code>.nordic</code>)</strong></td><td><code>met-no:ecmwf</code> (MEPS 2.5 km, 4.0), <code>ecmwf</code> (3.0), <code>icon</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>met-no:ecmwf</code> (2.2), <code>icon</code> (2.2)</td><td>15-min radar/NWP</td></tr>
+        <tr><td><strong>United States</strong></td><td>US states and territories (Puerto Rico, US Virgin Islands, Guam, American Samoa, Northern Mariana Islands), and any place the National Weather Service covers</td><td>NOAA NWS Forecaster Grid (4), NOAA HRRR (Hourly &amp; 15-min Nowcast) (3), NOAA National Blend of Models (NBM) (2.5)</td><td>NOAA NWS Forecaster Grid (5), ECMWF IFS (Open-Meteo) (2), Météo-France ARPEGE / AROME (2)</td><td>NOAA HRRR (contiguous US only)</td></tr>
+        <tr><td><strong>Canada</strong></td><td>Canada</td><td>ECCC MSC GeoMet (HRDPS / RDPS / Citypage) (4), ECCC GEM Seamless (4), NOAA HRRR (Hourly &amp; 15-min Nowcast) (3)</td><td>ECCC MSC GeoMet (HRDPS / RDPS / Citypage) (3.5), ECMWF IFS (Open-Meteo) (3.5), ECCC GEM Seamless (3)</td><td>NOAA HRRR in the south; Open-Meteo's best 15-minute model elsewhere</td></tr>
+        <tr><td><strong>UK &amp; Ireland</strong></td><td>United Kingdom, Ireland, Isle of Man, Jersey, Guernsey</td><td>UK Met Office Unified Model (4), ECMWF IFS (Open-Meteo) (3), MET Norway Locationforecast 2.0 (2.5)</td><td>ECMWF IFS (Open-Meteo) (3.5), UK Met Office Unified Model (2.5), MET Norway Locationforecast 2.0 (2)</td><td>UK Met Office 2 km</td></tr>
+        <tr><td><strong>Netherlands &amp; Benelux</strong></td><td>Netherlands, Belgium, Luxembourg</td><td>KNMI HARMONIE-AROME (Seamless) (4), DWD ICON Seamless (3.5), DWD MOSMIX &amp; ICON-D2 (Bright Sky) (3)</td><td>ECMWF IFS (Open-Meteo) (3.5), DWD ICON Seamless (2.5), DWD MOSMIX &amp; ICON-D2 (Bright Sky) (2)</td><td>KNMI HARMONIE-AROME 2 km</td></tr>
+        <tr><td><strong>Germany &amp; Central Europe</strong></td><td>Germany, Austria, Switzerland, Liechtenstein, Poland, Czechia</td><td>DWD ICON Seamless (4), DWD MOSMIX &amp; ICON-D2 (Bright Sky) (3.5), ECMWF IFS (Open-Meteo) (2.5)</td><td>ECMWF IFS (Open-Meteo) (3.5), DWD MOSMIX &amp; ICON-D2 (Bright Sky) (2.5), DWD ICON Seamless (2.5)</td><td>DWD ICON-D2</td></tr>
+        <tr><td><strong>Nordic</strong></td><td>Norway, Sweden, Finland, Denmark, Iceland, Faroe Islands, Svalbard</td><td>MET Norway Locationforecast 2.0 (4), ECMWF IFS (Open-Meteo) (3), DWD ICON Seamless (2.5)</td><td>ECMWF IFS (Open-Meteo) (3.5), MET Norway Locationforecast 2.0 (2.5), DWD ICON Seamless (2)</td><td>Open-Meteo's best 15-minute model, south of 65°N and between 11°W and 25°E</td></tr>
+        <tr><td><strong>Rest of Europe</strong></td><td>Other places in Europe</td><td>ECMWF IFS (Open-Meteo) (3), DWD ICON Seamless (3), Météo-France ARPEGE / AROME (3)</td><td>ECMWF IFS (Open-Meteo) (3.5), DWD ICON Seamless (2.5), MET Norway Locationforecast 2.0 (2)</td><td>Open-Meteo's best 15-minute model, south of 65°N and between 11°W and 25°E</td></tr>
+        <tr><td><strong>Rest of the world</strong></td><td>Everywhere else</td><td>ECMWF IFS (Open-Meteo) (3), DWD ICON Seamless (2.5), Météo-France ARPEGE / AROME (2)</td><td>ECMWF IFS (Open-Meteo) (3), DWD ICON Seamless (2.5), Météo-France ARPEGE / AROME (2)</td><td>None</td></tr>
     </tbody>
 </table>
-
-<h3>Baseline US Horizon Band Weights (H0: 0–3h, H1: 3–18h, H2: 18–72h, H3: 72h+)</h3>
+<p>Each table below gives a model's weight in the four horizon bands as <code>H0 / H1 / H2 / H3</code> (one number when all four are equal), before your multipliers. Open a region to see it.</p>
+<details>
+<summary><strong>United States</strong>: every model's weights</summary>
 <table>
     <thead>
-        <tr><th>Model</th><th>Temp [H0..H3]</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Precip mm [H0..H3]</th><th>Precip %</th></tr>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
     </thead>
     <tbody>
-        <tr><td><code>nws:nws</code></td><td>4.0, 4.0, 4.5, 5.0</td><td>3.0</td><td>3.0</td><td>1.0</td><td>2.0, 3.0, 4.0, 4.0</td><td>5.0</td></tr>
-        <tr><td><code>open-meteo:hrrr</code> (&le;48h)</td><td>3.0, 3.0, 0.5, 0.0</td><td>3.0, 3.0, 0.5, 0.0</td><td>2.0, 2.0, 0.5, 0.0</td><td>1, 1, 1, 0</td><td>4.0, 4.0, 1.0, 0.0</td><td>1, 1, 1, 0</td></tr>
-        <tr><td><code>open-meteo:nbm</code></td><td>2.5, 3.0, 3.0, 2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>2.0</td></tr>
-        <tr><td><code>open-meteo:ecmwf</code></td><td>1.0, 1.5, 2.0, 2.0</td><td>1.5</td><td>1.5</td><td>1.0</td><td>1.0, 2.0, 2.5, 2.5</td><td>1.0</td></tr>
-        <tr><td><code>open-meteo:icon</code></td><td>0.5, 1.0, 1.0, 1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0, 1.0, 1.5, 1.5</td><td>1.0</td></tr>
-        <tr><td><code>open-meteo:gfs</code></td><td>0.5, 1.0, 1.0, 1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
-        <tr><td><code>open-meteo:gem</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
-        <tr><td><code>open-meteo:ukmo</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
-        <tr><td><code>open-meteo:meteofrance</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
-        <tr><td><code>open-meteo:knmi</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
-        <tr><td><code>met-no:ecmwf</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
-        <tr><td><code>dwd-brightsky:mosmix</code></td><td>0.0 (US)</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
-        <tr><td><code>eccc:hrdps</code></td><td>0.0 (US)</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr data-region="us" data-model="nws:nws" data-weights="temp=4,4,4.5,5;wind=3,3,3,3;cloud=3,3,3,3;humidity=1,1,1,1;precipMm=2,3,4,4;precipProb=5,5,5,5"><td>NOAA NWS Forecaster Grid<br><code>nws:nws</code></td><td>4 / 4 / 4.5 / 5</td><td>3</td><td>3</td><td>1</td><td>2 / 3 / 4 / 4</td><td>5</td></tr>
+        <tr data-region="us" data-model="open-meteo:hrrr" data-weights="temp=3,3,0.5,0;wind=3,3,0.5,0;cloud=2,2,0.5,0;humidity=1,1,1,0;precipMm=4,4,1,0;precipProb=1,1,1,0"><td>NOAA HRRR (Hourly &amp; 15-min Nowcast)<br><code>open-meteo:hrrr</code></td><td>3 / 3 / 0.5 / 0</td><td>3 / 3 / 0.5 / 0</td><td>2 / 2 / 0.5 / 0</td><td>1 / 1 / 1 / 0</td><td>4 / 4 / 1 / 0</td><td>1 / 1 / 1 / 0</td></tr>
+        <tr data-region="us" data-model="open-meteo:nbm" data-weights="temp=2.5,3,3,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=1,1,1,1;precipMm=2,2,2,2;precipProb=2,2,2,2"><td>NOAA National Blend of Models (NBM)<br><code>open-meteo:nbm</code></td><td>2.5 / 3 / 3 / 2</td><td>2</td><td>2</td><td>1</td><td>2</td><td>2</td></tr>
+        <tr data-region="us" data-model="open-meteo:ecmwf" data-weights="temp=1,1.5,2,2;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1,1,1,1;precipMm=1,2,2.5,2.5;precipProb=1,1,1,1"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>1 / 1.5 / 2 / 2</td><td>1.5</td><td>1.5</td><td>1</td><td>1 / 2 / 2.5 / 2.5</td><td>1</td></tr>
+        <tr data-region="us" data-model="open-meteo:gfs" data-weights="temp=0.5,1,1,1;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>0.5 / 1 / 1 / 1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr data-region="us" data-model="open-meteo:icon" data-weights="temp=0.5,1,1,1;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1.5,1.5;precipProb=1,1,1,1"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>0.5 / 1 / 1 / 1</td><td>1</td><td>1</td><td>1</td><td>1 / 1 / 1.5 / 1.5</td><td>1</td></tr>
+        <tr data-region="us" data-model="open-meteo:gem" data-weights="temp=0.5,0.5,0.5,0.5;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>0.5</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr data-region="us" data-model="open-meteo:ukmo" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=1,1,1,1;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>2</td><td>2</td><td>2</td><td>1</td><td>2</td><td>1</td></tr>
+        <tr data-region="us" data-model="open-meteo:meteofrance" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=1,1,1,1;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>2</td><td>2</td><td>2</td><td>1</td><td>2</td><td>1</td></tr>
+        <tr data-region="us" data-model="met-no:ecmwf" data-weights="temp=0.5,0.5,0.5,0.5;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>0.5</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
     </tbody>
 </table>
+<p>Not used here (weight 0): KNMI HARMONIE-AROME (Seamless), DWD MOSMIX &amp; ICON-D2 (Bright Sky), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
+<details>
+<summary><strong>Canada</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="canada" data-model="open-meteo:hrrr" data-weights="temp=3,3,0.5,0;wind=3,3,0.5,0;cloud=2,2,0.5,0;humidity=1,1,1,0;precipMm=4,4,1,0;precipProb=1,1,1,0"><td>NOAA HRRR (Hourly &amp; 15-min Nowcast)<br><code>open-meteo:hrrr</code></td><td>3 / 3 / 0.5 / 0</td><td>3 / 3 / 0.5 / 0</td><td>2 / 2 / 0.5 / 0</td><td>1 / 1 / 1 / 0</td><td>4 / 4 / 1 / 0</td><td>1 / 1 / 1 / 0</td></tr>
+        <tr data-region="canada" data-model="open-meteo:nbm" data-weights="temp=2.5,2.5,2.5,2;wind=2.5,2.5,2.5,2;cloud=2.5,2.5,2.5,2;humidity=2.5,2.5,2.5,2;precipMm=2.5,2.5,2.5,2;precipProb=2,2,2,2"><td>NOAA National Blend of Models (NBM)<br><code>open-meteo:nbm</code></td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2</td></tr>
+        <tr data-region="canada" data-model="open-meteo:ecmwf" data-weights="temp=2,2.5,3.5,3.5;wind=2,2.5,3.5,3.5;cloud=2,2.5,3.5,3.5;humidity=2,2.5,3.5,3.5;precipMm=2,2.5,3.5,3.5;precipProb=1.5,1.5,1.5,1.5"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>2 / 2.5 / 3.5 / 3.5</td><td>2 / 2.5 / 3.5 / 3.5</td><td>2 / 2.5 / 3.5 / 3.5</td><td>2 / 2.5 / 3.5 / 3.5</td><td>2 / 2.5 / 3.5 / 3.5</td><td>1.5</td></tr>
+        <tr data-region="canada" data-model="open-meteo:gfs" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="canada" data-model="open-meteo:icon" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=2,2,2,2;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td></tr>
+        <tr data-region="canada" data-model="open-meteo:gem" data-weights="temp=4,4,3.5,3;wind=4,4,3.5,3;cloud=4,4,3.5,3;humidity=4,4,3.5,3;precipMm=4,4,3.5,3;precipProb=2,2,2,2"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>4 / 4 / 3.5 / 3</td><td>4 / 4 / 3.5 / 3</td><td>4 / 4 / 3.5 / 3</td><td>4 / 4 / 3.5 / 3</td><td>4 / 4 / 3.5 / 3</td><td>2</td></tr>
+        <tr data-region="canada" data-model="met-no:ecmwf" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="canada" data-model="eccc:hrdps" data-weights="temp=4,4,3.5,3.5;wind=4,4,3.5,3.5;cloud=4,4,3.5,3.5;humidity=4,4,3.5,3.5;precipMm=4,4,3.5,3.5;precipProb=3.5,3.5,3.5,3.5"><td>ECCC MSC GeoMet (HRDPS / RDPS / Citypage)<br><code>eccc:hrdps</code></td><td>4 / 4 / 3.5 / 3.5</td><td>4 / 4 / 3.5 / 3.5</td><td>4 / 4 / 3.5 / 3.5</td><td>4 / 4 / 3.5 / 3.5</td><td>4 / 4 / 3.5 / 3.5</td><td>3.5</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, UK Met Office Unified Model, Météo-France ARPEGE / AROME, KNMI HARMONIE-AROME (Seamless), DWD MOSMIX &amp; ICON-D2 (Bright Sky).</p>
+</details>
+<details>
+<summary><strong>UK &amp; Ireland</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="ukIreland" data-model="open-meteo:ecmwf" data-weights="temp=3,3,3.5,3.5;wind=3,3,3.5,3.5;cloud=3,3,3.5,3.5;humidity=3,3,3.5,3.5;precipMm=3,3,3.5,3.5;precipProb=1.5,1.5,1.5,1.5"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>1.5</td></tr>
+        <tr data-region="ukIreland" data-model="open-meteo:gfs" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="ukIreland" data-model="open-meteo:icon" data-weights="temp=2.5,2.5,2.5,2;wind=2.5,2.5,2.5,2;cloud=2.5,2.5,2.5,2;humidity=2.5,2.5,2.5,2;precipMm=2.5,2.5,2.5,2;precipProb=1.5,1.5,1.5,1.5"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>1.5</td></tr>
+        <tr data-region="ukIreland" data-model="open-meteo:gem" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="ukIreland" data-model="open-meteo:ukmo" data-weights="temp=4,4,3,2.5;wind=4,4,3,2.5;cloud=4,4,3,2.5;humidity=4,4,3,2.5;precipMm=4,4,3,2.5;precipProb=2,2,2,2"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>2</td></tr>
+        <tr data-region="ukIreland" data-model="open-meteo:meteofrance" data-weights="temp=2,2,2,1.5;wind=2,2,2,1.5;cloud=2,2,2,1.5;humidity=2,2,2,1.5;precipMm=2,2,2,1.5;precipProb=1,1,1,1"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>1</td></tr>
+        <tr data-region="ukIreland" data-model="met-no:ecmwf" data-weights="temp=2.5,2.5,2,2;wind=2.5,2.5,2,2;cloud=2.5,2.5,2,2;humidity=2.5,2.5,2,2;precipMm=2.5,2.5,2,2;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>1</td></tr>
+        <tr data-region="ukIreland" data-model="open-meteo:knmi" data-weights="temp=2.5,2.5,2,0;wind=2.5,2.5,2,0;cloud=2.5,2.5,2,0;humidity=2.5,2.5,2,0;precipMm=2.5,2.5,2,0;precipProb=1.5,1.5,1.5,0"><td>KNMI HARMONIE-AROME (Seamless)<br><code>open-meteo:knmi</code></td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>1.5 / 1.5 / 1.5 / 0</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), DWD MOSMIX &amp; ICON-D2 (Bright Sky), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
+<details>
+<summary><strong>Netherlands &amp; Benelux</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:ecmwf" data-weights="temp=2.5,2.5,3.5,3.5;wind=2.5,2.5,3.5,3.5;cloud=2.5,2.5,3.5,3.5;humidity=2.5,2.5,3.5,3.5;precipMm=2.5,2.5,3.5,3.5;precipProb=1.5,1.5,1.5,1.5"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>1.5</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:gfs" data-weights="temp=1,1,1,1;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:icon" data-weights="temp=3.5,3.5,3,2.5;wind=3.5,3.5,3,2.5;cloud=3.5,3.5,3,2.5;humidity=3.5,3.5,3,2.5;precipMm=3.5,3.5,3,2.5;precipProb=1.5,1.5,1.5,1.5"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>1.5</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:gem" data-weights="temp=1,1,1,1;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:ukmo" data-weights="temp=2.5,2.5,2,2;wind=2.5,2.5,2,2;cloud=2.5,2.5,2,2;humidity=2.5,2.5,2,2;precipMm=2.5,2.5,2,2;precipProb=1.5,1.5,1.5,1.5"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>1.5</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:meteofrance" data-weights="temp=2.5,2.5,2,1.5;wind=2.5,2.5,2,1.5;cloud=2.5,2.5,2,1.5;humidity=2.5,2.5,2,1.5;precipMm=2.5,2.5,2,1.5;precipProb=1.5,1.5,1.5,1.5"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>1.5</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="met-no:ecmwf" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=2,2,2,2;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="open-meteo:knmi" data-weights="temp=4,4,2,0;wind=4,4,2,0;cloud=4,4,2,0;humidity=4,4,2,0;precipMm=4,4,2,0;precipProb=2,2,2,0"><td>KNMI HARMONIE-AROME (Seamless)<br><code>open-meteo:knmi</code></td><td>4 / 4 / 2 / 0</td><td>4 / 4 / 2 / 0</td><td>4 / 4 / 2 / 0</td><td>4 / 4 / 2 / 0</td><td>4 / 4 / 2 / 0</td><td>2 / 2 / 2 / 0</td></tr>
+        <tr data-region="beneluxNorthSea" data-model="dwd-brightsky:mosmix" data-weights="temp=3,3,2.5,2;wind=3,3,2.5,2;cloud=3,3,2.5,2;humidity=3,3,2.5,2;precipMm=3,3,2.5,2;precipProb=3,3,3,3"><td>DWD MOSMIX &amp; ICON-D2 (Bright Sky)<br><code>dwd-brightsky:mosmix</code></td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
+<details>
+<summary><strong>Germany &amp; Central Europe</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="centralEurope" data-model="open-meteo:ecmwf" data-weights="temp=2.5,2.5,3.5,3.5;wind=2.5,2.5,3.5,3.5;cloud=2.5,2.5,3.5,3.5;humidity=2.5,2.5,3.5,3.5;precipMm=2.5,2.5,3.5,3.5;precipProb=1.5,1.5,1.5,1.5"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>2.5 / 2.5 / 3.5 / 3.5</td><td>1.5</td></tr>
+        <tr data-region="centralEurope" data-model="open-meteo:gfs" data-weights="temp=1,1,1,1;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr data-region="centralEurope" data-model="open-meteo:icon" data-weights="temp=4,4,3.5,2.5;wind=4,4,3.5,2.5;cloud=4,4,3.5,2.5;humidity=4,4,3.5,2.5;precipMm=4,4,3.5,2.5;precipProb=2,2,2,2"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>4 / 4 / 3.5 / 2.5</td><td>4 / 4 / 3.5 / 2.5</td><td>4 / 4 / 3.5 / 2.5</td><td>4 / 4 / 3.5 / 2.5</td><td>4 / 4 / 3.5 / 2.5</td><td>2</td></tr>
+        <tr data-region="centralEurope" data-model="open-meteo:gem" data-weights="temp=1,1,1,1;wind=1,1,1,1;cloud=1,1,1,1;humidity=1,1,1,1;precipMm=1,1,1,1;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td><td>1</td></tr>
+        <tr data-region="centralEurope" data-model="open-meteo:ukmo" data-weights="temp=2,2,2,1.5;wind=2,2,2,1.5;cloud=2,2,2,1.5;humidity=2,2,2,1.5;precipMm=2,2,2,1.5;precipProb=1,1,1,1"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>2 / 2 / 2 / 1.5</td><td>1</td></tr>
+        <tr data-region="centralEurope" data-model="open-meteo:meteofrance" data-weights="temp=2.5,2.5,2,1.5;wind=2.5,2.5,2,1.5;cloud=2.5,2.5,2,1.5;humidity=2.5,2.5,2,1.5;precipMm=2.5,2.5,2,1.5;precipProb=1.5,1.5,1.5,1.5"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>1.5</td></tr>
+        <tr data-region="centralEurope" data-model="met-no:ecmwf" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=2,2,2,2;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td></tr>
+        <tr data-region="centralEurope" data-model="open-meteo:knmi" data-weights="temp=2.5,2.5,2,0;wind=2.5,2.5,2,0;cloud=2.5,2.5,2,0;humidity=2.5,2.5,2,0;precipMm=2.5,2.5,2,0;precipProb=1.5,1.5,1.5,0"><td>KNMI HARMONIE-AROME (Seamless)<br><code>open-meteo:knmi</code></td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>2.5 / 2.5 / 2 / 0</td><td>1.5 / 1.5 / 1.5 / 0</td></tr>
+        <tr data-region="centralEurope" data-model="dwd-brightsky:mosmix" data-weights="temp=3.5,3.5,3,2.5;wind=3.5,3.5,3,2.5;cloud=3.5,3.5,3,2.5;humidity=3.5,3.5,3,2.5;precipMm=3.5,3.5,3,2.5;precipProb=3.5,3.5,3.5,3.5"><td>DWD MOSMIX &amp; ICON-D2 (Bright Sky)<br><code>dwd-brightsky:mosmix</code></td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5 / 3.5 / 3 / 2.5</td><td>3.5</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
+<details>
+<summary><strong>Nordic</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="nordic" data-model="open-meteo:ecmwf" data-weights="temp=3,3,3.5,3.5;wind=3,3,3.5,3.5;cloud=3,3,3.5,3.5;humidity=3,3,3.5,3.5;precipMm=3,3,3.5,3.5;precipProb=1.5,1.5,1.5,1.5"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>1.5</td></tr>
+        <tr data-region="nordic" data-model="open-meteo:gfs" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="nordic" data-model="open-meteo:icon" data-weights="temp=2.5,2.5,2.5,2;wind=2.5,2.5,2.5,2;cloud=2.5,2.5,2.5,2;humidity=2.5,2.5,2.5,2;precipMm=2.5,2.5,2.5,2;precipProb=1.5,1.5,1.5,1.5"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>2.5 / 2.5 / 2.5 / 2</td><td>1.5</td></tr>
+        <tr data-region="nordic" data-model="open-meteo:gem" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="nordic" data-model="open-meteo:ukmo" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=2,2,2,2;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td></tr>
+        <tr data-region="nordic" data-model="open-meteo:meteofrance" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="nordic" data-model="met-no:ecmwf" data-weights="temp=4,4,3,2.5;wind=4,4,3,2.5;cloud=4,4,3,2.5;humidity=4,4,3,2.5;precipMm=4,4,3,2.5;precipProb=2,2,2,2"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>4 / 4 / 3 / 2.5</td><td>2</td></tr>
+        <tr data-region="nordic" data-model="open-meteo:knmi" data-weights="temp=1.5,1.5,1,0;wind=1.5,1.5,1,0;cloud=1.5,1.5,1,0;humidity=1.5,1.5,1,0;precipMm=1.5,1.5,1,0;precipProb=1,1,1,0"><td>KNMI HARMONIE-AROME (Seamless)<br><code>open-meteo:knmi</code></td><td>1.5 / 1.5 / 1 / 0</td><td>1.5 / 1.5 / 1 / 0</td><td>1.5 / 1.5 / 1 / 0</td><td>1.5 / 1.5 / 1 / 0</td><td>1.5 / 1.5 / 1 / 0</td><td>1 / 1 / 1 / 0</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), DWD MOSMIX &amp; ICON-D2 (Bright Sky), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
+<details>
+<summary><strong>Rest of Europe</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="europeOther" data-model="open-meteo:ecmwf" data-weights="temp=3,3,3.5,3.5;wind=3,3,3.5,3.5;cloud=3,3,3.5,3.5;humidity=3,3,3.5,3.5;precipMm=3,3,3.5,3.5;precipProb=1.5,1.5,1.5,1.5"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>3 / 3 / 3.5 / 3.5</td><td>1.5</td></tr>
+        <tr data-region="europeOther" data-model="open-meteo:gfs" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="europeOther" data-model="open-meteo:icon" data-weights="temp=3,3,2.5,2.5;wind=3,3,2.5,2.5;cloud=3,3,2.5,2.5;humidity=3,3,2.5,2.5;precipMm=3,3,2.5,2.5;precipProb=1.5,1.5,1.5,1.5"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>3 / 3 / 2.5 / 2.5</td><td>3 / 3 / 2.5 / 2.5</td><td>3 / 3 / 2.5 / 2.5</td><td>3 / 3 / 2.5 / 2.5</td><td>3 / 3 / 2.5 / 2.5</td><td>1.5</td></tr>
+        <tr data-region="europeOther" data-model="open-meteo:gem" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1.5,1.5,1.5,1.5;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="europeOther" data-model="open-meteo:ukmo" data-weights="temp=2.5,2.5,2,2;wind=2.5,2.5,2,2;cloud=2.5,2.5,2,2;humidity=2.5,2.5,2,2;precipMm=2.5,2.5,2,2;precipProb=1,1,1,1"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>2.5 / 2.5 / 2 / 2</td><td>1</td></tr>
+        <tr data-region="europeOther" data-model="open-meteo:meteofrance" data-weights="temp=3,3,2.5,2;wind=3,3,2.5,2;cloud=3,3,2.5,2;humidity=3,3,2.5,2;precipMm=3,3,2.5,2;precipProb=1.5,1.5,1.5,1.5"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>3 / 3 / 2.5 / 2</td><td>1.5</td></tr>
+        <tr data-region="europeOther" data-model="met-no:ecmwf" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=2,2,2,2;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>2</td><td>2</td><td>2</td><td>2</td><td>2</td><td>1</td></tr>
+        <tr data-region="europeOther" data-model="open-meteo:knmi" data-weights="temp=2,2,1.5,0;wind=2,2,1.5,0;cloud=2,2,1.5,0;humidity=2,2,1.5,0;precipMm=2,2,1.5,0;precipProb=1,1,1,0"><td>KNMI HARMONIE-AROME (Seamless)<br><code>open-meteo:knmi</code></td><td>2 / 2 / 1.5 / 0</td><td>2 / 2 / 1.5 / 0</td><td>2 / 2 / 1.5 / 0</td><td>2 / 2 / 1.5 / 0</td><td>2 / 2 / 1.5 / 0</td><td>1 / 1 / 1 / 0</td></tr>
+        <tr data-region="europeOther" data-model="dwd-brightsky:mosmix" data-weights="temp=2.5,2.5,2,1.5;wind=2.5,2.5,2,1.5;cloud=2.5,2.5,2,1.5;humidity=2.5,2.5,2,1.5;precipMm=2.5,2.5,2,1.5;precipProb=2.5,2.5,2.5,2.5"><td>DWD MOSMIX &amp; ICON-D2 (Bright Sky)<br><code>dwd-brightsky:mosmix</code></td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5 / 2.5 / 2 / 1.5</td><td>2.5</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
+<details>
+<summary><strong>Rest of the world</strong>: every model's weights</summary>
+<table>
+    <thead>
+        <tr><th>Model</th><th>Temperature</th><th>Wind</th><th>Cloud</th><th>Humidity</th><th>Rain amount</th><th>Rain chance</th></tr>
+    </thead>
+    <tbody>
+        <tr data-region="world" data-model="open-meteo:ecmwf" data-weights="temp=3,3,3,3;wind=3,3,3,3;cloud=3,3,3,3;humidity=1,1,1,1;precipMm=3,3,3,3;precipProb=1,1,1,1"><td>ECMWF IFS (Open-Meteo)<br><code>open-meteo:ecmwf</code></td><td>3</td><td>3</td><td>3</td><td>1</td><td>3</td><td>1</td></tr>
+        <tr data-region="world" data-model="open-meteo:gfs" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1,1,1,1;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>NOAA GFS Seamless<br><code>open-meteo:gfs</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="world" data-model="open-meteo:icon" data-weights="temp=2.5,2.5,2.5,2.5;wind=2.5,2.5,2.5,2.5;cloud=2.5,2.5,2.5,2.5;humidity=1,1,1,1;precipMm=2.5,2.5,2.5,2.5;precipProb=1,1,1,1"><td>DWD ICON Seamless<br><code>open-meteo:icon</code></td><td>2.5</td><td>2.5</td><td>2.5</td><td>1</td><td>2.5</td><td>1</td></tr>
+        <tr data-region="world" data-model="open-meteo:gem" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1,1,1,1;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>ECCC GEM Seamless<br><code>open-meteo:gem</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td><td>1.5</td><td>1</td></tr>
+        <tr data-region="world" data-model="open-meteo:ukmo" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=1,1,1,1;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>UK Met Office Unified Model<br><code>open-meteo:ukmo</code></td><td>2</td><td>2</td><td>2</td><td>1</td><td>2</td><td>1</td></tr>
+        <tr data-region="world" data-model="open-meteo:meteofrance" data-weights="temp=2,2,2,2;wind=2,2,2,2;cloud=2,2,2,2;humidity=1,1,1,1;precipMm=2,2,2,2;precipProb=1,1,1,1"><td>Météo-France ARPEGE / AROME<br><code>open-meteo:meteofrance</code></td><td>2</td><td>2</td><td>2</td><td>1</td><td>2</td><td>1</td></tr>
+        <tr data-region="world" data-model="met-no:ecmwf" data-weights="temp=1.5,1.5,1.5,1.5;wind=1.5,1.5,1.5,1.5;cloud=1.5,1.5,1.5,1.5;humidity=1,1,1,1;precipMm=1.5,1.5,1.5,1.5;precipProb=1,1,1,1"><td>MET Norway Locationforecast 2.0<br><code>met-no:ecmwf</code></td><td>1.5</td><td>1.5</td><td>1.5</td><td>1</td><td>1.5</td><td>1</td></tr>
+    </tbody>
+</table>
+<p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), KNMI HARMONIE-AROME (Seamless), DWD MOSMIX &amp; ICON-D2 (Bright Sky), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
+</details>
 
-<h3>Baseline World Weights (Rest of World)</h3>
-<p>In <code>.world</code>, US-only models (<code>nws</code>, <code>hrrr</code>, <code>nbm</code>) receive weight <code>0.0</code>. Global and regional models use baseline weights: <code>open-meteo:ecmwf = 3.0</code>, <code>open-meteo:icon = 2.5</code>, <code>open-meteo:ukmo = 2.0</code>, <code>open-meteo:meteofrance = 2.0</code>, <code>open-meteo:knmi = 2.0</code>, <code>open-meteo:gem = 1.5</code>, <code>open-meteo:gfs = 1.5</code>, <code>met-no:ecmwf = 1.5</code>, <code>dwd-brightsky:mosmix = 3.0</code>, and <code>eccc:hrdps = 3.5</code>.</p>
+<p>Precipitation chance is a weighted mean of the models that report a chance, combined with the share of models that forecast measurable rain when few report one. Models that only run in the US (NWS, HRRR, NBM) weigh 0 elsewhere; HRRR stops after 48 hours.</p>
         </main>
     </div>
     <script src="search-index.js"></script>

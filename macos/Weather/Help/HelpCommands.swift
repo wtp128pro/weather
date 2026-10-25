@@ -16,20 +16,46 @@ struct HelpCommands: Commands {
 
             Divider()
 
+            Button("Reading the Forecast") {
+                HelpWindowManager.shared.showHelp(page: "forecast-page.html")
+            }
+
             Button("Rain Graph & Bars Guide") {
                 HelpWindowManager.shared.showHelp(page: "rain-chart.html")
             }
 
+            Divider()
+
             Button("Data Sources & Blend Weights") {
                 HelpWindowManager.shared.showHelp(page: "sources-weights.html")
+            }
+
+            Button("Station Settings") {
+                HelpWindowManager.shared.showHelp(page: "stations-settings.html")
+            }
+
+            Button("Free Keys for More Stations") {
+                HelpWindowManager.shared.showHelp(page: "station-keys.html")
+            }
+
+            Divider()
+
+            Button("Live Station Observations") {
+                HelpWindowManager.shared.showHelp(page: "live-stations.html")
+            }
+
+            Button("Learned Local Corrections") {
+                HelpWindowManager.shared.showHelp(page: "local-corrections.html")
             }
 
             Button("Forecast Algorithms & Citations") {
                 HelpWindowManager.shared.showHelp(page: "algorithms.html")
             }
 
-            Button("Live Station 3D Assimilation") {
-                HelpWindowManager.shared.showHelp(page: "live-stations.html")
+            Divider()
+
+            Button("Troubleshooting & FAQ") {
+                HelpWindowManager.shared.showHelp(page: "troubleshooting.html")
             }
         }
     }

@@ -4,7 +4,8 @@
 // ShellCommands.swift - the menu bar (wx-app.c:1884-1891; ui-widgets.md §2 items 11-12) on the
 // standard Mac menus (DECISIONS #16): File > "Add a City…" ⌘N replaces New Window / New Item;
 // View > Refresh ⌘R (enabled from AppModel.isRefreshEnabled) and the unit switch ⌘U; the app
-// menu's About shows the About panel (SourcesAboutPanel); Quit ⌘Q, Edit and Window stay standard.
+// menu's About shows the About panel (SourcesAboutPanel), and "Data Sources & Weights…" and
+// "Stations & Keys…" open those Settings tabs; Quit ⌘Q, Edit and Window stay standard.
 // F5 is not bound (DECISIONS #13).
 
 import SwiftUI
@@ -16,6 +17,7 @@ struct ShellCommands: Commands {
     static let addTitle = "Add a City\u{2026}"
     static let aboutTitle = "About Neginato Mezora"
     static let sourcesTitle = "Data Sources & Weights\u{2026}"
+    static let stationsTitle = "Stations & Keys\u{2026}"
 
     let shell: ShellState
 
@@ -35,6 +37,10 @@ struct ShellCommands: Commands {
 
             Button(Self.sourcesTitle) {
                 shell.openSettings(tab: .weights)
+            }
+
+            Button(Self.stationsTitle) {
+                shell.openSettings(tab: .stations)
             }
         }
         CommandGroup(replacing: .newItem) {

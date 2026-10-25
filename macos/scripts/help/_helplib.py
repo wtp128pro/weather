@@ -18,23 +18,37 @@ SECTIONS = [
         "title": "Getting Started",
         "pages": [
             {"id": "index", "href": "index.html", "title": "Welcome to Neginato Mezora"},
+            {"id": "places", "href": "places.html", "title": "Adding & Managing Places"},
+            {"id": "forecast-page", "href": "forecast-page.html", "title": "Reading the Forecast"},
             {"id": "rain-chart", "href": "rain-chart.html", "title": "Rain Graph & Bars Guide"},
-            {"id": "shortcuts", "href": "shortcuts.html", "title": "Keyboard Shortcuts & Places"},
+            {"id": "units-refresh", "href": "units-refresh.html", "title": "Units, Refreshing & Offline"},
+            {"id": "shortcuts", "href": "shortcuts.html", "title": "Keyboard Shortcuts & Menus"},
         ],
     },
     {
-        "id": "sources-and-weights",
-        "title": "Sources & Ensemble Weights",
+        "id": "settings",
+        "title": "Settings",
         "pages": [
             {"id": "sources-weights", "href": "sources-weights.html", "title": "Settings: Data Sources & Weights"},
+            {"id": "stations-settings", "href": "stations-settings.html", "title": "Settings: Stations"},
+            {"id": "station-keys", "href": "station-keys.html", "title": "Free Keys for More Stations"},
         ],
     },
     {
-        "id": "algorithms-and-physics",
-        "title": "Algorithms & Meteorology",
+        "id": "how-it-works",
+        "title": "How It Works",
         "pages": [
+            {"id": "local-corrections", "href": "local-corrections.html", "title": "Learned Local Corrections"},
+            {"id": "live-stations", "href": "live-stations.html", "title": "Live Station Observations"},
             {"id": "algorithms", "href": "algorithms.html", "title": "Ensemble Blending & Citations"},
-            {"id": "live-stations", "href": "live-stations.html", "title": "Live Station 3D Assimilation"},
+        ],
+    },
+    {
+        "id": "reference",
+        "title": "Reference",
+        "pages": [
+            {"id": "privacy", "href": "privacy.html", "title": "Privacy, Data & Storage"},
+            {"id": "troubleshooting", "href": "troubleshooting.html", "title": "Troubleshooting & FAQ"},
         ],
     },
 ]

@@ -105,6 +105,18 @@ public enum WxFormat {
         return "\(cLround(pct))%"
     }
 
+    /// A distance with one decimal: "3.2 mi" (km * 0.621371192237334) or
+    /// "5.1 km"; the dash outside [0, 12000] km or not finite.
+    public static func distance(_ km: Double, units: WxUnits) -> String {
+        guard WxLimits.valueInRange(km, 0.0, 12_000.0) else {
+            return emDash
+        }
+        if units == .metric {
+            return "\(fixedText(fixedScaled(km, scale: 10), scale: 10)) km"
+        }
+        return "\(fixedText(fixedScaled(km * mphPerKmh, scale: 10), scale: 10)) mi"
+    }
+
     // MARK: - Times
 
     /// wx_format_hour_label_z (wx-format.c:595-601): the local 12-hour clock

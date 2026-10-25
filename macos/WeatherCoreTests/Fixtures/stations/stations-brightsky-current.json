@@ -1,0 +1,48 @@
+{
+ "weather": {
+  "source_id": 303711,
+  "timestamp": "2026-10-25T20:00:00+00:00",
+  "cloud_cover": 63,
+  "condition": "dry",
+  "dew_point": 6.22,
+  "solar_10": null,
+  "solar_30": null,
+  "solar_60": null,
+  "precipitation_10": 0.0,
+  "precipitation_30": 0.0,
+  "precipitation_60": 0.0,
+  "pressure_msl": 1004.0,
+  "relative_humidity": 78,
+  "visibility": 40572,
+  "wind_direction_10": 230,
+  "wind_direction_30": 230,
+  "wind_direction_60": 234,
+  "wind_speed_10": 16.9,
+  "wind_speed_30": 17.3,
+  "wind_speed_60": 17.6,
+  "wind_gust_direction_10": 220,
+  "wind_gust_direction_30": 220,
+  "wind_gust_direction_60": 220,
+  "wind_gust_speed_10": 28.8,
+  "wind_gust_speed_30": 29.5,
+  "wind_gust_speed_60": 29.5,
+  "sunshine_30": null,
+  "sunshine_60": null,
+  "temperature": 9.8,
+  "icon": "partly-cloudy-night"
+ },
+ "sources": [
+  {
+   "id": 303711,
+   "dwd_station_id": "00433",
+   "observation_type": "synop",
+   "lat": 52.4676,
+   "lon": 13.402,
+   "height": 47.7,
+   "station_name": "Berlin-Tempelhof",
+   "wmo_station_id": "10384",
+   "first_record": "2026-10-24T13:30:00+00:00",
+   "last_record": "2026-10-25T20:00:00+00:00"
+  }
+ ]
+}

@@ -152,19 +152,24 @@ enum WeatherTheme {
     /// Liquid Glass tint for weather cards.
     static let cardGlassTint = Color(red: 0.31, green: 0.38, blue: 0.47).opacity(0.65)
 
-    /// Apple Weather full-spectrum Air Quality Index bar gradient (Good -> Hazardous).
-    static let aqiGradient = LinearGradient(
-        stops: [
-            .init(color: Color(red: 0.19, green: 0.82, blue: 0.35), location: 0.00), // Good (Green)
-            .init(color: Color(red: 1.00, green: 0.84, blue: 0.04), location: 0.22), // Moderate (Yellow)
-            .init(color: Color(red: 1.00, green: 0.62, blue: 0.04), location: 0.42), // Sensitive (Orange)
-            .init(color: Color(red: 1.00, green: 0.27, blue: 0.23), location: 0.62), // Unhealthy (Red)
-            .init(color: Color(red: 0.75, green: 0.35, blue: 0.95), location: 0.82), // Very Unhealthy (Purple)
-            .init(color: Color(red: 0.52, green: 0.14, blue: 0.24), location: 1.00), // Hazardous (Maroon)
-        ],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
+    /// The AQI scale of the Air Quality card, Good -> Hazardous.
+    static let aqiGradient: LinearGradient = {
+        // The EPA category colours (AQI Technical Assistance Document, Sept 2018), one equal band
+        // per category: Good, Moderate, Unhealthy for Sensitive Groups, Unhealthy, Very
+        // Unhealthy, Hazardous.
+        let colors: [Color] = [
+            Color(red: 0 / 255, green: 228 / 255, blue: 0 / 255),
+            Color(red: 255 / 255, green: 255 / 255, blue: 0 / 255),
+            Color(red: 255 / 255, green: 126 / 255, blue: 0 / 255),
+            Color(red: 255 / 255, green: 0 / 255, blue: 0 / 255),
+            Color(red: 143 / 255, green: 63 / 255, blue: 151 / 255),
+            Color(red: 126 / 255, green: 0 / 255, blue: 35 / 255),
+        ]
+        let stops = colors.enumerated().flatMap { i, color in
+            [Gradient.Stop(color: color, location: Double(i) / 6), Gradient.Stop(color: color, location: Double(i + 1) / 6)]
+        }
+        return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
+    }()
 
     /// Detects whether `now.temperature` is formatted in Celsius (`°C`).
     static func isMetric(temperatureText: String) -> Bool {

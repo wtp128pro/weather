@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Learned Local Corrections — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link active" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Learned Local Corrections</h1>
+<p>Forecast models describe the weather on a grid. They miss what makes your spot different: the valley that runs 3 °C colder than the models on clear nights, the city centre that stays warmer, the lake shore, the hillside. These errors are not random: they come back at the same time of day, day after day. Neginato Mezora learns them for each place from the nearby stations and corrects the forecast.</p>
+
+<h2>What is learned</h2>
+<ul>
+    <li><strong>When:</strong> at each refresh, if the station readings around the place are close and fresh enough to trust (their weighted distance within about 25 km and age within 45 minutes; see <a href="live-stations.html">Live Station Observations</a>).</li>
+    <li><strong>What:</strong> the difference between the measured temperature and what the models said for that moment, before any correction.</li>
+    <li><strong>By hour of day:</strong> differences are kept separately for each of the 24 hours of the (solar) day, because a place that is too warm at noon may be too cold at dawn. At most one reading per hour of day is taken every 20 minutes.</li>
+    <li><strong>Averaging:</strong> the first readings of an hour are averaged equally; later ones update a running average that remembers about the last two weeks, so the correction follows the seasons.</li>
+    <li><strong>Plausibility:</strong> a difference above 10 °C (18 °F) is treated as a bad reading and not learned.</li>
+</ul>
+
+<h2>How it is applied</h2>
+<ul>
+    <li>Every forecast hour's temperature and feels-like are shifted by the correction of its hour of day; the daily highs and lows are recomputed from the shifted hours. So the correction reaches the whole forecast, not just "now".</li>
+    <li>An hour of day is corrected once it has about <strong>3 readings</strong> (neighbouring hours count half), at half strength, and at <strong>full strength from 6</strong>. Because one hour of day can be learned only once per day for about 20 minutes, expect the first corrections after a few days of normal use.</li>
+    <li>Corrections are smoothed with the neighbouring hours and capped at <strong>±4 °C (±7 °F)</strong>.</li>
+    <li>If a place gets no new readings for more than <strong>30 days</strong> (for example you stopped using the app over the summer), its corrections fade out gradually (to about a third after another 30 days), because the season has changed. New readings bring them back to full strength.</li>
+</ul>
+
+<h2>Seeing and controlling it</h2>
+<p>Settings › <a href="stations-settings.html">Stations</a> › Learned Local Corrections shows, for every place, how much has been learned, the correction now, and a bar for every hour of today. From there you can turn the corrections off for all places, or reset one place or all of them.</p>
+
+<h2>Good to know</h2>
+<ul>
+    <li><strong>Per Mac:</strong> the learning is stored on this Mac (<code>local-bias.json</code>, see <a href="privacy.html">Privacy, Data &amp; Storage</a>) and survives restarts and updates. Time with the app closed pauses it; it does not erase it.</li>
+    <li><strong>Places without close stations</strong> learn nothing and keep the plain blend. A free key for your country's network (<a href="station-keys.html">Free Keys for More Stations</a>) may add close stations.</li>
+    <li><strong>Only temperatures</strong> (and feels-like) are corrected. Rain, wind and clouds are not, and the weather condition (for example rain or snow) is decided before the correction.</li>
+    <li>Removing a place forgets its learning; adding it back starts from zero.</li>
+</ul>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

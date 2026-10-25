@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="AppleTitle" content="Neginato Mezora Help">
-    <title>Live Station 3D Assimilation — Neginato Mezora Help</title>
+    <title>Live Station Observations — Neginato Mezora Help</title>
     <link rel="stylesheet" href="book.css">
     <link rel="stylesheet" href="help-ui.css">
 </head>
@@ -17,47 +17,97 @@
             <nav>
                 <div class="nav-section">Getting Started</div>
 <a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
-<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
-<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
-<div class="nav-section">Sources & Ensemble Weights</div>
-<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
-<div class="nav-section">Algorithms & Meteorology</div>
-<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
-<a class="nav-link active" href="live-stations.html">Live Station 3D Assimilation</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link active" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
             </nav>
         </aside>
         <main class="help-main">
-            <h1>Live Station 3D Assimilation</h1>
-<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), <code>LiveStationFetcher.swift</code> assimilates live physical observations from nearby airport METAR stations, NWS ASOS stations, DWD/KNMI 10-minute SYNOP stations via Bright Sky, 90m DEM surface analysis, and US EPA AirNow + Copernicus CAMS/EEA air quality networks.</p>
+            <h1>Live Station Observations</h1>
+<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), Neginato Mezora reads every station network that covers the place at each refresh, tests the stations against each other, and blends the trusted ones, with <strong>the same algorithm in every country</strong>. The result is mixed with a high-resolution model analysis for the exact spot (90 m terrain) to give the forecast page's "now".</p>
 
-<h2>1. 3D Anisotropic Spatial Kernel</h2>
-<p>Each physical station at horizontal distance <code>d</code> (km) and elevation difference <code>Δz</code> (m) is weighted by:</p>
+<h2>1. Station networks</h2>
+<table>
+    <thead>
+        <tr><th>Network</th><th>Where</th><th>Updates</th><th>Key</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>Airport METAR</strong> (NOAA Aviation Weather Center)</td><td>Worldwide</td><td>Hourly, plus specials when the weather changes</td><td>No</td></tr>
+        <tr><td><strong>NWS ASOS</strong> (api.weather.gov)</td><td>US airports (the 3 nearest)</td><td>5 min</td><td>No</td></tr>
+        <tr><td><strong>Iowa Environmental Mesonet</strong></td><td>US road-weather, river-gauge, soil-climate and research stations, per NWS forecast office</td><td>5–60 min</td><td>No</td></tr>
+        <tr><td><strong>Environment Canada SWOB</strong></td><td>Canada, including partner networks</td><td>1–60 min</td><td>No</td></tr>
+        <tr><td><strong>Deutscher Wetterdienst</strong> (via Bright Sky)</td><td>Germany</td><td>10 min</td><td>No</td></tr>
+        <tr><td><strong>DMI</strong></td><td>Denmark, Faroe Islands, Greenland</td><td>10 min</td><td>No</td></tr>
+        <tr><td><strong>FMI</strong>, <strong>SMHI</strong></td><td>Finland, Sweden</td><td>10 min, hourly</td><td>No</td></tr>
+        <tr><td><strong>GeoSphere Austria</strong>, <strong>MeteoSwiss</strong></td><td>Austria, Switzerland</td><td>10 min</td><td>No</td></tr>
+        <tr><td><strong>Met Office</strong></td><td>United Kingdom</td><td>Hourly</td><td><a href="station-keys.html#metoffice">Your free key</a></td></tr>
+        <tr><td><strong>KNMI</strong></td><td>Netherlands</td><td>10 min</td><td><a href="station-keys.html#knmi">Your free key</a></td></tr>
+        <tr><td><strong>MET Norway (Frost)</strong></td><td>Norway</td><td>10 min – hourly</td><td><a href="station-keys.html#frost">Your free key</a></td></tr>
+        <tr><td><strong>Météo-France</strong></td><td>France</td><td>6 min</td><td><a href="station-keys.html#meteofrance">Your free key</a></td></tr>
+        <tr><td><strong>AEMET</strong></td><td>Spain</td><td>Hourly</td><td><a href="station-keys.html#aemet">Your free key</a></td></tr>
+    </tbody>
+</table>
+<p>National networks are searched a little beyond their borders, so places near a border also get the neighbouring country's stations. Every network can be turned off in <a href="stations-settings.html">Settings › Stations</a>.</p>
+<p>Each network starts from a <strong>trust</strong> level for its class of station: national and WMO-standard stations count fully; partner, road-weather and hydrological stations less (for example MET Norway's partner stations 70% and Météo-France's extended network 85%), and their wind much less, because many measure it low or in sheltered spots.</p>
+
+<h2>2. 3D anisotropic spatial kernel</h2>
+<p>Each station at horizontal distance <code>d</code> (km) and elevation difference <code>Δz</code> (m) is weighted by:</p>
 <pre><code>W_horiz(d) = exp(-d² / (2 * 22.0²)) / (1 + (d / 8.0)²)
 W_vert(Δz) = exp(-Δz² / (2 * 350.0²))
-W_spatial  = W_horiz(d) * W_vert(Δz)</code></pre>
+W          = W_horiz(d) * W_vert(Δz) * trust * health</code></pre>
+<p>The 12 stations of largest weight within 60 km are blended. Reports less than 1.5 km apart (an airport's METAR and its national twin) count as one station.</p>
 
-<h2>2. Diurnal Lapse-Rate Elevation Reduction</h2>
-<p>Station temperatures and dewpoints are reduced to the target location's elevation using boundary-layer lapse rates before blending:</p>
+<h2>3. Diurnal lapse-rate elevation reduction</h2>
+<p>A station's temperature is moved to the place's elevation with a lapse rate that depends on the time of day:</p>
 <ul>
-    <li><strong>Daytime Dry-Bulb Lapse Rate:</strong> <code>Γ_T = -0.0068 °C/m</code> (6.8 °C/km mixed convective boundary layer)</li>
-    <li><strong>Nighttime Dry-Bulb Lapse Rate:</strong> <code>Γ_T = -0.0042 °C/m</code> (4.2 °C/km nocturnal inversion damping)</li>
-    <li><strong>Dewpoint Lapse Rate:</strong> <code>Γ_Td = -0.0019 °C/m</code></li>
+    <li><strong>Daytime:</strong> <code>Γ_T = -0.0068 °C/m</code> (6.8 °C/km, a mixed boundary layer)</li>
+    <li><strong>Night-time:</strong> <code>Γ_T = -0.0042 °C/m</code> (4.2 °C/km, damped by inversions)</li>
+    <li><strong>Dew point:</strong> <code>Γ_Td = -0.0019 °C/m</code></li>
+</ul>
+<p>Station elevations come from the station lists or, for networks that give none, from the Open-Meteo elevation API.</p>
+
+<h2>4. De-clustering, freshness and outlier control</h2>
+<ul>
+    <li><strong>Angular de-clustering (Shepard, 1968):</strong> stations clustered along the same compass bearing from the place share an angular shadow penalty <code>W_dir = 1 / (1 + shadow)</code>, so one dense cluster cannot outvote the other directions.</li>
+    <li><strong>Freshness:</strong> weights decay with the age of the report, with time constants of 45 minutes for temperature, 20 minutes for wind and 15 minutes for the weather.</li>
+    <li><strong>Outlier control (Rousseeuw &amp; Croux, 1993):</strong> when at least 3 stations report, a sensor more than <code>3σ</code> from the median (σ = 1.4826 × MAD, at least 1.5 °C) is down-weighted by <code>(3σ / r)²</code>, so real contrasts of up to 4.5 °C are never penalised.</li>
+    <li><strong>Short-range bias decay (Glahn &amp; Lowry, 1972):</strong> the observed temperature difference from the forecast fades out over the first 6 forecast hours: <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
 </ul>
 
-<h2>3. Sub-Hourly National Station Networks &amp; Air Quality</h2>
-<ul>
-    <li><strong>US NWS ASOS &amp; Ceilometer Fusion:</strong> Queries <code>api.weather.gov/stations/{id}/observations/latest</code> for 5-minute ASOS updates and laser-ceilometer cloud layers.</li>
-    <li><strong>Germany &amp; Netherlands 10-Minute SYNOP:</strong> Queries <code>api.brightsky.dev/current_weather</code> for 10-minute DWD and KNMI surface observations across Central Europe and Benelux.</li>
-    <li><strong>Regional Air Quality (EPA AirNow + Copernicus CAMS/EEA):</strong> Uses inverse-square distance weighting across local EPA AirNow monitors in North America and Copernicus CAMS / European Environment Agency (<code>EAQI</code>, <code>PM2.5</code>, <code>NO₂</code>) in Europe.</li>
-</ul>
+<h2>5. Stations are tested continuously</h2>
+<p>At every refresh each station is compared with what its neighbours predict for it. Its track record (bias by day and by night, and scatter) sets its <strong>health</strong>: full weight while its error stays within 1.5 °C, less beyond that, none from 8 °C; a sensor whose reading has not changed for 8 hours is set aside. New stations, and stations that come back, start on probation. A station that stops reporting for 3 days <em>of app use</em> is dropped. The catalog of stations is kept on disk, so restarts lose nothing; time with the app closed never counts. Settings › <a href="stations-settings.html">Stations</a> shows each nearby station's weight and why.</p>
 
-<h2>4. Shepard Directional Isolation &amp; MAD Buddy QC</h2>
-<ul>
-    <li><strong>Angular De-Clustering (Shepard, 1968):</strong> Stations clustered along the same compass bearing from the target share angular shadow penalty <code>W_dir = 1 / (1 + shadow)</code>.</li>
-    <li><strong>Variable-Specific Temporal Decay:</strong> Exponential decay time constants <code>τ_temp = 2700 s</code> (45 min), <code>τ_wind = 1200 s</code> (20 min), and <code>τ_wx = 900 s</code> (15 min).</li>
-    <li><strong>MAD Outlier Quality Control (Rousseeuw &amp; Croux, 1993):</strong> When &ge; 3 stations report, any sensor deviating by more than <code>3.2 × MAD</code> is penalized by a quadratic Huber tail weight.</li>
-    <li><strong>6-Hour MOS Bias Decay (Glahn &amp; Lowry, 1972):</strong> The observed temperature innovation <code>ΔT_0</code> decays across the first 6 forecast hours via <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
-</ul>
+<h2>6. The forecast learns from the stations</h2>
+<p>When close, fresh stations are available (within about 25 km and 45 minutes), the app learns how far the models run from them for each place and hour of the day, and corrects the forecast temperatures by up to ±4 °C. See <a href="local-corrections.html">Learned Local Corrections</a>.</p>
+
+<h2>7. Station credits</h2>
+<p>The forecast page's credits line names every network whose readings are used, as their terms ask:</p>
+<table>
+    <thead><tr><th>Network</th><th>Credit shown</th><th>Terms</th></tr></thead>
+    <tbody>
+        <tr><td>Airport METAR, NWS</td><td>Source: NOAA Aviation Weather Center; National Weather Service</td><td>US public domain</td></tr>
+        <tr><td>Iowa Environmental Mesonet</td><td>Source: Iowa Environmental Mesonet, Iowa State University</td><td>Public, credit requested</td></tr>
+        <tr><td>Environment Canada</td><td>Contains information licenced under the Data Server End-use Licence of Environment and Climate Change Canada</td><td>Data Server End-use Licence</td></tr>
+        <tr><td>DWD, DMI, FMI, SMHI, GeoSphere Austria, MeteoSwiss, KNMI, MET Norway</td><td>Each service's source line (for example "Source: MeteoSwiss", "Source: KNMI", "Data from The Norwegian Meteorological Institute"), then <em>Station data CC BY 4.0, quality-checked and blended</em></td><td>CC BY 4.0 (MET Norway also NLOD 2.0)</td></tr>
+        <tr><td>Met Office</td><td>Powered by Met Office data</td><td>Weather DataHub licence</td></tr>
+        <tr><td>Météo-France</td><td>Source: Météo-France, data of 25 Oct 14:06 UTC</td><td>Licence Ouverte / Etalab 2.0 (source and date)</td></tr>
+        <tr><td>AEMET</td><td>Source: AEMET, data of 25 Oct 14:00 UTC</td><td>AEMET legal notice (source and date)</td></tr>
+    </tbody>
+</table>
+<p>Station elevations come from the Open-Meteo elevation API (CC BY 4.0).</p>
         </main>
     </div>
     <script src="search-index.js"></script>

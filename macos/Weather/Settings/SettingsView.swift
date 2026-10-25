@@ -60,6 +60,7 @@ final class SettingsWindowManager {
 enum SettingsTab: String, CaseIterable, Identifiable {
     case sources
     case weights
+    case stations
     case general
 
     var id: String { rawValue }
@@ -102,6 +103,12 @@ struct SettingsView: View {
                     Label("Weights", systemImage: "slider.horizontal.3")
                 }
                 .tag(SettingsTab.weights)
+
+            StationsSettingsTab(appModel: appModel)
+                .tabItem {
+                    Label("Stations", systemImage: "sensor")
+                }
+                .tag(SettingsTab.stations)
 
             GeneralSettingsTab(appModel: appModel)
                 .tabItem {
@@ -165,24 +172,12 @@ private struct SourcesSettingsTab: View {
                 }
             }
 
-            Section("Live Physical Observation Assimilation") {
-                LabeledContent("Aviation & Surface Networks") {
-                    Text("NOAA / FAA METAR, DWD / KNMI Bright Sky 10-min SYNOP & Open-Meteo 90m DEM")
-                        .foregroundStyle(.secondary)
-                }
-                LabeledContent("Sub-Hourly 15-Min Nowcasting") {
-                    Text("NOAA HRRR (US/CA), UKMO UKV 2 km (UK), KNMI HARMONIE 2 km (NL) & DWD ICON-D2 (DE)")
-                        .foregroundStyle(.secondary)
-                }
-                LabeledContent("Air Quality Network") {
-                    Text("US EPA AirNow Real-Time Ozone & PM2.5 + Copernicus CAMS / EEA")
-                        .foregroundStyle(.secondary)
-                }
-                LabeledContent("Spatial Fusion Kernel") {
-                    Text("3D Anisotropic IDW (Lh = 22 km, Lz = 350 m) + MAD Buddy QC")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
+            Section("Live Station Observations") {
+                Text("The forecast's \u{201C}now\u{201D} is grounded in live readings of nearby weather stations, "
+                    + "which also teach each place's local forecast corrections. Station networks, their keys, "
+                    + "station health and the learned corrections are in the Stations tab.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

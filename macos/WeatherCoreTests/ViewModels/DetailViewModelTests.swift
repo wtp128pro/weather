@@ -1228,6 +1228,33 @@ import Testing
         #expect(Self.page(vm)?.attributionMarkup == "<a href=\"https://open-meteo.com/\">Weather data by Open-Meteo.com</a>")
     }
 
+    // C: none - the station networks' credits appended to the line (executor-added)
+    @Test func stationCreditsAreAppendedOnce() throws {
+        var s = Spec(Self.specHours)
+        try s.addSource("bright-sky", "Bright Sky", BrightSkyProvider.attributionText, BrightSkyProvider.attributionLink, .ok)
+        let p = try #require(Self.page(Self.shown(try Self.item(s, Self.ny))))
+        let fused = p.addingAttribution(WxStationNetworks.credits(for: [.dwdSYNOP, .metar]))
+        // the DWD credit is already the provider's: only the METAR credit and the CC BY note are new
+        #expect(fused.attribution.map(\.text) == [
+            BrightSkyProvider.attributionText, "Source: NOAA Aviation Weather Center",
+            "Station data CC BY 4.0, quality-checked and blended",
+        ])
+        #expect(fused.attributionMarkup == p.attributionMarkup
+            + " \u{00B7} <a href=\"https://aviationweather.gov/\">Source: NOAA Aviation Weather Center</a>"
+            + " \u{00B7} <a href=\"https://creativecommons.org/licenses/by/4.0/\">Station data CC BY 4.0, quality-checked and blended</a>")
+        #expect(fused.now == p.now && fused.footer == p.footer && fused.days == p.days)
+        #expect(p.addingAttribution([]) == p)
+        #expect(fused.addingAttribution(WxStationNetworks.credits(for: [.metar])) == fused)
+    }
+
+    /// The page never makes up an air-quality value: the card shows the dash until a monitor or
+    /// the CAMS forecast answers (LiveStationSnapshot).
+    @Test func airQualityIsNeverEstimated() throws {
+        let item = try Self.plain(Self.ny)
+        #expect(Self.page(Self.shown(item))?.airQuality == .unavailable(offline: false))
+        #expect(Self.page(Self.shown(Self.with(item, offline: true)))?.airQuality == .unavailable(offline: true))
+    }
+
     // MARK: - Accessibility, big data, all states
 
     // C: /detail/accessible-labels, /detail/accessibility (test-detail.c:542-563, test-detail.c:514-531)

@@ -1,0 +1,367 @@
+{
+ "type": "FeatureCollection",
+ "features": [
+  {
+   "id": "2026-10-25-2004-CGMA-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.766773,
+     45.463549,
+     29.2
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "MONTREAL INT'L AIRPORT",
+    "tc_id-value": "GMA",
+    "msc_id-value": "702S007",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:04:00.000Z",
+    "air_temp": 16.4,
+    "dwpt_temp": 3.8,
+    "rel_hum": 43,
+    "avg_wnd_spd_10m_pst2mts": 15.1,
+    "avg_wnd_spd_10m_pst10mts": 14.9,
+    "max_wnd_spd_10m_pst10mts": 22.0,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2004-CWIZ-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.349847,
+     45.293967,
+     43.8
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "L'ACADIE",
+    "tc_id-value": "WIZ",
+    "msc_id-value": "702LED4",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:04:00.000Z",
+    "air_temp": 16.1,
+    "dwpt_temp": 2.5,
+    "rel_hum": 40,
+    "avg_wnd_spd_10m_pst2mts": 14.1,
+    "avg_wnd_spd_10m_pst10mts": 13.4,
+    "max_wnd_spd_10m_pst10mts": 17.4,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2004-CWTA-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.579185,
+     45.504926,
+     72.583
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "MCTAVISH",
+    "tc_id-value": "WTA",
+    "msc_id-value": "7024745",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:04:00.000Z",
+    "air_temp": 16.4,
+    "dwpt_temp": 0.7,
+    "rel_hum": 34,
+    "avg_wnd_spd_10m_pst2mts": 4.6,
+    "avg_wnd_spd_10m_pst10mts": 5.2,
+    "max_wnd_spd_10m_pst10mts": 13.6,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2004-CWVQ-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.92892,
+     45.427,
+     38.871
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "STE-ANNE-DE-BELLEVUE 1",
+    "tc_id-value": "WVQ",
+    "msc_id-value": "702FHL8",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:04:00.000Z",
+    "air_temp": 17.4,
+    "dwpt_temp": 1.9,
+    "rel_hum": 35,
+    "avg_wnd_spd_10m_pst2mts": 11.2,
+    "avg_wnd_spd_10m_pst10mts": 11.9,
+    "max_wnd_spd_10m_pst10mts": 18.6,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2004-CWEW-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.434814,
+     45.809397,
+     18.835
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "L'ASSOMPTION",
+    "tc_id-value": "WEW",
+    "msc_id-value": "7014160",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:04:00.000Z",
+    "air_temp": 17.0,
+    "dwpt_temp": 3,
+    "rel_hum": 39,
+    "avg_wnd_spd_10m_pst2mts": 10.5,
+    "avg_wnd_spd_10m_pst10mts": 11.0,
+    "max_wnd_spd_10m_pst10mts": 18.8,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2003-CWEW-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.434814,
+     45.809397,
+     18.835
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "L'ASSOMPTION",
+    "tc_id-value": "WEW",
+    "msc_id-value": "7014160",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:03:00.000Z",
+    "air_temp": 17.0,
+    "dwpt_temp": 2.6,
+    "rel_hum": 38,
+    "avg_wnd_spd_10m_pst2mts": 9.6,
+    "avg_wnd_spd_10m_pst10mts": 10.9,
+    "max_wnd_spd_10m_pst10mts": 18.8,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2003-CWTA-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.579185,
+     45.504926,
+     72.583
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "MCTAVISH",
+    "tc_id-value": "WTA",
+    "msc_id-value": "7024745",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:03:00.000Z",
+    "air_temp": 16.5,
+    "dwpt_temp": 0.6,
+    "rel_hum": 34,
+    "avg_wnd_spd_10m_pst2mts": 3.5,
+    "avg_wnd_spd_10m_pst10mts": 5.6,
+    "max_wnd_spd_10m_pst10mts": 13.6,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2003-CWIZ-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.349847,
+     45.293967,
+     43.8
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "L'ACADIE",
+    "tc_id-value": "WIZ",
+    "msc_id-value": "702LED4",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:03:00.000Z",
+    "air_temp": 16.1,
+    "dwpt_temp": 2.8,
+    "rel_hum": 41,
+    "avg_wnd_spd_10m_pst2mts": 14.6,
+    "avg_wnd_spd_10m_pst10mts": 13.6,
+    "max_wnd_spd_10m_pst10mts": 18.1,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2003-CWVQ-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.92892,
+     45.427,
+     38.871
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "STE-ANNE-DE-BELLEVUE 1",
+    "tc_id-value": "WVQ",
+    "msc_id-value": "702FHL8",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:03:00.000Z",
+    "air_temp": 17.4,
+    "dwpt_temp": 1.4,
+    "rel_hum": 34,
+    "avg_wnd_spd_10m_pst2mts": 13.7,
+    "avg_wnd_spd_10m_pst10mts": 11.9,
+    "max_wnd_spd_10m_pst10mts": 18.6,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2003-CGMA-AUTO-minute-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.766773,
+     45.463549,
+     29.2
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "MONTREAL INT'L AIRPORT",
+    "tc_id-value": "GMA",
+    "msc_id-value": "702S007",
+    "data_pvdr-value": "MSC",
+    "date_tm-value": "2026-10-25T20:03:00.000Z",
+    "air_temp": 16.5,
+    "dwpt_temp": 3.2,
+    "rel_hum": 41,
+    "avg_wnd_spd_10m_pst2mts": 15.1,
+    "avg_wnd_spd_10m_pst10mts": 14.9,
+    "max_wnd_spd_10m_pst10mts": 22.0,
+    "pcpn_amt_pst10mts": 0,
+    "pcpn_amt_pst1hr": 0
+   }
+  },
+  {
+   "id": "2026-10-25-2000-CYMX-MAN-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -74.0387,
+     45.6804,
+     82.6
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "Montreal/Mirabel International",
+    "msc_id-value": "7034900",
+    "data_pvdr-value": "NAV CANADA",
+    "date_tm-value": "2026-10-25T20:00:00.000Z",
+    "air_temp": 16.8,
+    "dwpt_temp": 2.9,
+    "rel_hum": 39,
+    "avg_wnd_spd_10m_pst2mts": 10.1
+   }
+  },
+  {
+   "id": "2026-10-25-2000-CYHU-AUTO-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.4169,
+     45.5181,
+     27.4
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "Montreal/Met(Aeroport Metropolit",
+    "msc_id-value": "7027329",
+    "data_pvdr-value": "NAV CANADA",
+    "date_tm-value": "2026-10-25T20:00:00.000Z",
+    "air_temp": 17.3,
+    "dwpt_temp": 1.8,
+    "rel_hum": 35,
+    "avg_wnd_spd_10m_pst2mts": 22.3,
+    "avg_wnd_spd_10m_pst10mts": 20.5,
+    "pcpn_amt_pst1hr": 0.0
+   }
+  },
+  {
+   "id": "2026-10-25-1900-CYHU-AUTO-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -73.4169,
+     45.5181,
+     27.4
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "Montreal/Met(Aeroport Metropolit",
+    "msc_id-value": "7027329",
+    "data_pvdr-value": "NAV CANADA",
+    "date_tm-value": "2026-10-25T19:00:00.000Z",
+    "air_temp": 17.2,
+    "dwpt_temp": 2.9,
+    "rel_hum": 38,
+    "avg_wnd_spd_10m_pst2mts": 16.6,
+    "avg_wnd_spd_10m_pst10mts": 16.6,
+    "pcpn_amt_pst1hr": 0.0
+   }
+  },
+  {
+   "id": "2026-10-25-1900-CYMX-MAN-swob.xml",
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -74.0387,
+     45.6804,
+     82.6
+    ]
+   },
+   "properties": {
+    "stn_nam-value": "Montreal/Mirabel International",
+    "msc_id-value": "7034900",
+    "data_pvdr-value": "NAV CANADA",
+    "date_tm-value": "2026-10-25T19:00:00.000Z",
+    "air_temp": 16.2,
+    "dwpt_temp": 3.3,
+    "rel_hum": 42,
+    "avg_wnd_spd_10m_pst2mts": 10.1
+   }
+  }
+ ]
+}

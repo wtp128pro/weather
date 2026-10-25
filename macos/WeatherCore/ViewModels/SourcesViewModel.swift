@@ -301,8 +301,8 @@ public final class SourcesViewModel {
             TextLine(
                 before: "Environment and Climate Change Canada data: ",
                 link: Link(
-                    text: "Open Government Licence – Canada",
-                    urlString: "https://open.canada.ca/en/open-government-licence-canada"),
+                    text: "Data Server End-use Licence",
+                    urlString: "https://eccc-msc.github.io/open-data/licence/readme_en/"),
                 after: "")
         default:
             nil

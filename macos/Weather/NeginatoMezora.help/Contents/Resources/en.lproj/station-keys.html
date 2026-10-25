@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Free Keys for More Stations — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link active" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Free Keys for More Stations</h1>
+<p>Five national weather services publish their station readings only to registered users. Registration is free, and with your key the app reads their stations like any other network: tested against their neighbours and blended into "now" and into the <a href="local-corrections.html">learned local corrections</a>. A key only matters if you have places in (or near) that country.</p>
+<table>
+    <thead><tr><th>Network</th><th>Stations</th><th>Updates</th><th>What you need</th><th>Expires</th></tr></thead>
+    <tbody>
+        <tr><td><a href="#metoffice">Met Office</a> (UK)</td><td>About 150</td><td>Hourly</td><td>A Weather DataHub API key, subscribed to Land Observations</td><td>No (the free plan allows 360 calls a day)</td></tr>
+        <tr><td><a href="#knmi">KNMI</a> (Netherlands)</td><td>About 50 with temperature</td><td>10 minutes</td><td>An <strong>EDR API</strong> key</td><td>No</td></tr>
+        <tr><td><a href="#frost">MET Norway Frost</a> (Norway)</td><td>MET Norway's stations, plus partners such as the road authority</td><td>10 minutes to hourly</td><td>A Frost client ID</td><td>No</td></tr>
+        <tr><td><a href="#meteofrance">Météo-France</a> (France)</td><td>About 2,000</td><td>6 minutes</td><td>An API key generated <strong>after</strong> subscribing to Package Observations v2</td><td>Up to 3 years (you choose); the subscription is renewed every 2 years</td></tr>
+        <tr><td><a href="#aemet">AEMET</a> (Spain)</td><td>About 830</td><td>Hourly</td><td>An AEMET OpenData API key</td><td><strong>After 3 months</strong></td></tr>
+    </tbody>
+</table>
+
+<h2>Adding a key</h2>
+<ol>
+    <li>Get the key with the steps for its service below (each service's steps are also in Settings, under <strong>How to get a free …</strong>).</li>
+    <li>Open Settings › <strong>Stations</strong> (or Neginato Mezora › <strong>Stations &amp; Keys…</strong>) and find the network under <em>Networks That Need Your Free Key</em>.</li>
+    <li>Paste the key into the field and click <strong>Save</strong>. Spaces and line breaks at the ends are removed.</li>
+    <li>The next refresh uses it, and the status line shows the result: <em>Working: …</em> (green), or why not (see <a href="#trouble">When a key does not work</a>).</li>
+</ol>
+<p>Keys are stored in your <strong>login Keychain</strong> as "Neginato Mezora: <em>network</em> key", never in a file, and each is sent only to its own service, over HTTPS. <strong>Replace…</strong> enters a new key; <strong>Remove</strong> deletes it from the Keychain. The network's switch turns it off and keeps the key.</p>
+
+<h2 id="metoffice">Met Office (United Kingdom)</h2>
+<ol>
+    <li>Open the <a href="https://datahub.metoffice.gov.uk/">Met Office Weather DataHub</a> and choose <strong>Login/Register</strong>. Register with your e-mail address and confirm it.</li>
+    <li>In the profile menu, choose <strong>My subscriptions › Subscribe</strong>, pick the <strong>Land Observations</strong> product, select its free plan and click <strong>Subscribe</strong>.</li>
+    <li>Copy the <strong>API key</strong> that is shown. It is shown only once; if you lose it, use <strong>Manage › Reset Credentials</strong> to get a new one.</li>
+    <li>Paste the key in Settings › Stations › Met Office and click Save.</li>
+</ol>
+<ul>
+    <li><strong>You get:</strong> hourly reports of about 150 UK land stations: temperature, humidity, wind and gusts, and the Met Office weather type (which also gives the condition and cloud). The service names stations by area, so a station shows as, for example, "Leeds".</li>
+    <li><strong>Limits:</strong> the free plan allows <strong>360 calls a day</strong> (reset at 00:00 UTC). The app reads at most the 3 nearest stations of a place, each at most once an hour, and looks up which stations are nearest once a week; places close together share stations. A handful of UK places far apart fit in the limit; with more, the limit can be reached late in the day (orange status), and the stations return after midnight UTC.</li>
+    <li><strong>Credit:</strong> "Powered by Met Office data", as the DataHub licence requires.</li>
+    <li>The old Met Office DataPoint service was retired on 1 December 2025. The Met Office also publishes keyless open data on AWS, but it arrives 1–2 hours late, has no gusts, and is licensed CC BY-SA, so the app uses the DataHub instead.</li>
+</ul>
+
+<h2 id="knmi">KNMI (Netherlands)</h2>
+<ol>
+    <li>Register at the <a href="https://developer.dataplatform.knmi.nl/register/">KNMI Developer Portal</a> with an e-mail address that will keep working, and confirm it.</li>
+    <li>Log in, open the <strong>API Catalog</strong>, and on the <strong>EDR API</strong> card click <strong>Request an API key</strong>. A key for the Open Data API does not work here.</li>
+    <li>Copy the key while it is displayed (it starts with <code>eyJ</code>). The catalog later shows only a short hash, which is not the key.</li>
+    <li>Paste the key in Settings › Stations › KNMI and click Save.</li>
+</ol>
+<ul>
+    <li><strong>You get:</strong> 10-minute reports of KNMI's automatic stations, about 50 of which measure temperature: temperature, humidity, dew point, wind and gusts, rain, cloud cover and present weather.</li>
+    <li><strong>Limits:</strong> free, also for commercial use, and the key does not expire. 1,000 requests an hour; the app makes about 7 an hour per area.</li>
+    <li><strong>Credit:</strong> "Source: KNMI", linked to the dataset (CC BY 4.0). KNMI asks apps to make clear that they changed the data; the credits line says the station data are quality-checked and blended.</li>
+</ul>
+
+<h2 id="frost">MET Norway Frost (Norway)</h2>
+<ol>
+    <li>Open the <a href="https://frost.met.no/auth/requestCredentials.html">Frost "Request credentials" page</a> and enter your e-mail address.</li>
+    <li>The next page shows a <strong>client ID</strong> and a <strong>client secret</strong>. Only the client ID is needed; keep both safe.</li>
+    <li>Paste the client ID in Settings › Stations › MET Norway (Frost) and click Save. Do not paste the secret.</li>
+</ol>
+<ul>
+    <li><strong>You get:</strong> the latest reports of MET Norway's stations and of partner stations (for example the Norwegian road authority): temperature, humidity, dew point, wind and gusts, and rain. MET Norway's own stations count fully; partner stations count 70%, and their wind 40%, because their siting varies.</li>
+    <li><strong>Limits:</strong> free, with no fixed quota; MET Norway asks for no more than about one request a second on average. The app makes at most 2 requests per place every 5 minutes, and keeps the station list for a day.</li>
+    <li><strong>Credit:</strong> "Data from The Norwegian Meteorological Institute" (NLOD 2.0 and CC BY 4.0).</li>
+</ul>
+
+<h2 id="meteofrance">Météo-France (France)</h2>
+<ol>
+    <li>On the <a href="https://portail-api.meteofrance.fr/web/en/">Météo-France API portal</a>, choose <strong>Sign in › Create account</strong>. Pick a user name (not your e-mail address), confirm the e-mail you receive, then sign in with the user name.</li>
+    <li>Open the <strong>Package Observations</strong> API (DonneesPubliquesPaquetObservation), <strong>version 2</strong>, and click <strong>Subscribe to the API for free</strong>.</li>
+    <li><strong>Only after subscribing:</strong> <strong>My APIs › Generate Token</strong>, choose <strong>API Key</strong>, and enter a validity in seconds (up to 3 years: <code>94608000</code>). A key generated before subscribing does not work.</li>
+    <li>Copy the key, paste it in Settings › Stations › Météo-France and click Save. The row shows the key's expiry date.</li>
+</ol>
+<ul>
+    <li><strong>You get:</strong> 6-minute reports of about 2,000 stations across France: temperature, humidity, dew point, wind and gusts, and rain. The main network counts fully; the extended network (partner and secondary stations) 85%, and its wind 60%. These reports have no cloud cover or present weather.</li>
+    <li><strong>Limits:</strong> free; 100 requests a minute. The app reads at most one 6-minute package of all of France every 6 minutes (the newest one at least 10 minutes old, so that it is complete), plus the station list once a day.</li>
+    <li><strong>Renewals:</strong> the key expires on the date you chose (the app shows it); the <strong>subscription</strong> must be renewed every 2 years under <strong>My APIs › Renew</strong>.</li>
+    <li><strong>Credit:</strong> "Source: Météo-France" with the date of the data (Licence Ouverte / Etalab 2.0 asks for both), for example <em>Source: Météo-France, data of 25 Oct 14:06 UTC</em>.</li>
+</ul>
+
+<h2 id="aemet">AEMET (Spain)</h2>
+<ol>
+    <li>Open <a href="https://opendata.aemet.es/centrodedescargas/altaUsuario">AEMET OpenData's API key request page</a>, enter your e-mail address and tick <strong>No soy un robot</strong> (I am not a robot).</li>
+    <li>Within 5 days, click the link in the e-mail <em>Petición generación API Key servicio Aemet OpenData</em>.</li>
+    <li>A second e-mail, <em>Alta en el servicio Aemet OpenData</em>, contains the key. Copy all of it: it is long, and the first or last character is easily missed.</li>
+    <li>Paste the key in Settings › Stations › AEMET and click Save. The row shows when it expires.</li>
+</ol>
+<ul>
+    <li><strong>You get:</strong> hourly reports of about 830 automatic stations across Spain (including the Balearic and Canary Islands): temperature, humidity, dew point, wind and gusts, and rain. AEMET publishes each hour's reports about half an hour after the hour.</li>
+    <li><strong>Limits:</strong> free; 40 requests a minute. The app reads all of Spain with at most 2 requests every 15 minutes.</li>
+    <li><strong>Every 3 months:</strong> AEMET keys expire 3 months after they are issued, and there is no limit on renewals. Request a new key the same way and use <strong>Replace…</strong>. Older keys issued without an expiry date are being phased out: since 15 October 2026 AEMET refuses them more and more often, until they stop working altogether.</li>
+    <li><strong>Credit:</strong> "Source: AEMET" with the date of the data (AEMET's legal notice asks for both), for example <em>Source: AEMET, data of 25 Oct 14:00 UTC</em>.</li>
+</ul>
+
+<h2 id="trouble">When a key does not work</h2>
+<table>
+    <thead><tr><th>Status</th><th>Likely cause</th><th>What to do</th></tr></thead>
+    <tbody>
+        <tr><td><em>The service refused the key</em> (red)</td><td>A character is missing or extra; the key is for another product; it expired; or the service has not activated it yet.</td><td>Paste it again with Replace…. Then check the service's specific cause below.</td></tr>
+        <tr><td>Met Office: refused</td><td>The account is not subscribed to <strong>Land Observations</strong>, or the credentials were reset.</td><td>Subscribe to Land Observations (free plan); after a reset, paste the new key.</td></tr>
+        <tr><td>KNMI: refused</td><td>The key is for the Open Data API (or is the anonymous public key); only an EDR API key works.</td><td>Request a key on the EDR API card.</td></tr>
+        <tr><td>Frost: refused</td><td>The client secret was pasted instead of the client ID.</td><td>Paste the client ID (it looks like <code>xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</code>).</td></tr>
+        <tr><td>Météo-France: refused</td><td>The key was generated before subscribing to Package Observations v2, it expired, or the subscription lapsed.</td><td>Subscribe (or renew), then generate a new key and Replace.</td></tr>
+        <tr><td>AEMET: refused or expired</td><td>The key is older than 3 months, or was issued without an expiry date.</td><td>Request a new key and Replace.</td></tr>
+        <tr><td><em>The service's limit for this key was reached</em> (orange)</td><td>The free plan's limit (usually the Met Office's 360 calls a day, with many UK places).</td><td>Nothing: the app tries again at the next refresh; the Met Office count resets at 00:00 UTC.</td></tr>
+        <tr><td><em>Could not reach the service</em> / <em>answered with an error</em> (orange)</td><td>A network problem or a service outage.</td><td>Nothing: the app keeps the network's readings of the last 90 minutes and tries again.</td></tr>
+        <tr><td><em>not needed by your places yet</em> (grey)</td><td>None of your places is in the network's area.</td><td>Nothing: the key is used as soon as a place there is refreshed.</td></tr>
+    </tbody>
+</table>
+<p>The services' own terms apply to your key. The app sends each service only what it needs (your key and the area or stations around your places; see <a href="privacy.html">Privacy, Data &amp; Storage</a>).</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

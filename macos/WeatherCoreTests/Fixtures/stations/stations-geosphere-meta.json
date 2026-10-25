@@ -1,0 +1,104 @@
+{
+ "title": "TAWES",
+ "parameters": [
+  {
+   "name": "DD",
+   "long_name": "Windrichtung",
+   "desc": "Windrichtung der letzten 10 Minuten",
+   "unit": "°"
+  },
+  {
+   "name": "DDX",
+   "long_name": "Windrichtung der Windspitze",
+   "desc": "Windrichtung der Windspitze der letzetn 10 Minuten",
+   "unit": "°"
+  },
+  {
+   "name": "FF",
+   "long_name": "Windgeschwindigkeit",
+   "desc": "Windgeschwindigkeit über 10 Minuten",
+   "unit": "m/s"
+  }
+ ],
+ "frequency": "10min",
+ "type": "station",
+ "mode": "current",
+ "response_formats": [
+  "geojson",
+  "csv"
+ ],
+ "time": "2026-10-25T20:00+00:00",
+ "stations": [
+  {
+   "type": "INDIVIDUAL",
+   "id": "11077",
+   "name": "BRUNN AM GEBIRGE",
+   "state": "Niederösterreich",
+   "lat": 48.106944444444444,
+   "lon": 16.27,
+   "altitude": 291.0,
+   "valid_from": "2008-08-27T00:00:00",
+   "valid_to": "2027-10-25T20:04:26",
+   "has_sunshine": false,
+   "has_global_radiation": false,
+   "is_active": true
+  },
+  {
+   "type": "INDIVIDUAL",
+   "id": "11037",
+   "name": "GROSSENZERSDORF",
+   "state": "Niederösterreich",
+   "lat": 48.19972222222222,
+   "lon": 16.559166666666666,
+   "altitude": 154.0,
+   "valid_from": "1994-01-12T00:00:00",
+   "valid_to": "2027-10-25T20:04:26",
+   "has_sunshine": false,
+   "has_global_radiation": false,
+   "is_active": true
+  },
+  {
+   "type": "INDIVIDUAL",
+   "id": "11044",
+   "name": "WIEN JUBILAEUMSWARTE",
+   "state": "Wien",
+   "lat": 48.221111111111114,
+   "lon": 16.26527777777778,
+   "altitude": 450.0,
+   "valid_from": "2008-09-17T00:00:00",
+   "valid_to": "2027-10-25T20:04:26",
+   "has_sunshine": false,
+   "has_global_radiation": false,
+   "is_active": true
+  },
+  {
+   "type": "INDIVIDUAL",
+   "id": "11042",
+   "name": "WIEN STAMMERSDORF",
+   "state": "Wien",
+   "lat": 48.30583333333333,
+   "lon": 16.405555555555555,
+   "altitude": 191.0,
+   "valid_from": "2008-07-02T00:00:00",
+   "valid_to": "2027-10-25T20:04:26",
+   "has_sunshine": false,
+   "has_global_radiation": false,
+   "is_active": true
+  },
+  {
+   "type": "INDIVIDUAL",
+   "id": "11090",
+   "name": "WIEN-DONAUFELD",
+   "state": "Wien",
+   "lat": 48.257222222222225,
+   "lon": 16.43138888888889,
+   "altitude": 160.0,
+   "valid_from": "2001-05-30T00:00:00",
+   "valid_to": "2027-10-25T20:04:26",
+   "has_sunshine": false,
+   "has_global_radiation": false,
+   "is_active": true
+  }
+ ],
+ "id_type": "Synop"
+}

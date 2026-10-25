@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Reading the Forecast — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link active" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Reading the Forecast</h1>
+<p>Select a place in the sidebar to see its forecast. From top to bottom: the header, <strong>Now</strong>, <strong>Rain</strong>, <strong>Air Quality</strong> and <strong>Clouds</strong> side by side, <strong>Next 48 hours</strong>, <strong>Next days</strong>, the footer, the credits, and (when a source failed) a <em>Not available right now</em> line. The background colour follows the current sky, day or night. All times are in the place's own time zone.</p>
+
+<h2>Header</h2>
+<p>The place name with its region (or your Location Name with its address line), and a <strong>Name Location</strong> / <strong>Edit Name</strong> button (see <a href="places.html">Naming a place</a>).</p>
+
+<h2>Now</h2>
+<ul>
+    <li>The condition icon, the temperature (for example <strong>77°F</strong>) and the condition: Clear, Mostly clear, Partly cloudy, Mostly cloudy, Overcast, Fog, Drizzle, Light rain, Rain, Heavy rain, Showers, Thunderstorm, Snow or Sleet.</li>
+    <li><strong>Feels like</strong>: wind chill when it is cold and windy, heat index when it is hot and humid, otherwise the temperature.</li>
+    <li><strong>High · Low</strong> of today. When the forecast only covers the rest of today, it says so, for example <em>(from 2 PM)</em>. If the live temperature is already outside the forecast range, the range is widened to include it.</li>
+    <li><strong>Wind</strong> (with <strong>gusts</strong> when they are reported meaningfully above the mean wind) and <strong>Humidity</strong>.</li>
+</ul>
+<div class="callout">
+    <strong>Where "now" comes from</strong><br>
+    When stations are near, the Now values are a blend of the live station readings (tested and weighted; see <a href="live-stations.html">Live Station Observations</a>) and a high-resolution model analysis for the exact spot. The closer and fresher the stations, the more they count: about 95% for a station next door, about 75% at 25 km, about 40% at 60 km. Without stations the model values are shown. The footer names the nearest station.
+</div>
+
+<h2>Rain</h2>
+<p>A headline and a detail line, then one or two charts.</p>
+<ul>
+    <li><strong>Headlines</strong> include <em>No rain expected for the next 48 hours</em>, <em>Raining now</em> (with <em>easing soon</em>, <em>easing around 4 PM</em> or <em>expected to continue for hours</em>), <em>Rain starting in 25 minutes</em>, <em>Rain expected tomorrow around 4 PM</em>, and <em>Showers possible … (40% chance)</em>.</li>
+    <li><strong>Detail line:</strong> how heavy (Very light below 0.5 mm/h, Light below 2.5, Moderate below 7.6, Heavy above) and when it peaks, with the chance of rain, or <em>No steady rain in the forecast, just a chance.</em></li>
+    <li><strong>Live:</strong> if the forecast says dry but a nearby station reports precipitation, the headline says so (for example <em>Light rain reported now</em>, with the station and its rate). If the 15-minute data shows rain starting within 90 minutes, the headline gives the minutes.</li>
+    <li><strong>Charts:</strong> <em>Next 2 hours</em> (15-minute bars, when available) and <em>Next 24 hours</em> (hourly bars and a chance curve). See the <a href="rain-chart.html">Rain Graph &amp; Bars Guide</a>.</li>
+</ul>
+
+<h2>Air Quality</h2>
+<p>The US Air Quality Index (AQI, 0–500) with its category, on a scale of six equal bands in the official EPA colours: <strong>Good</strong> (0–50, green), <strong>Moderate</strong> (51–100, yellow), <strong>Unhealthy for Sensitive Groups</strong> (101–150, orange), <strong>Unhealthy</strong> (151–200, red), <strong>Very Unhealthy</strong> (201–300, purple) and <strong>Hazardous</strong> (301–500, maroon). The marker always sits in the band of its category. Below the scale:</p>
+<ul>
+    <li><strong>A comparison with yesterday</strong>: the same source's value 24 hours earlier, for example <em>Air quality index is 44, similar to yesterday at this time (37).</em> Within 8 points it is <em>similar</em>; otherwise <em>better</em> (lower) or <em>worse</em> (higher). Without a value from yesterday the sentence gives the category instead (<em>which is good</em>).</li>
+    <li><strong>Where the value comes from</strong>, in a smaller line.</li>
+</ul>
+<table>
+    <thead><tr><th>Source</th><th>When</th><th>What you see</th></tr></thead>
+    <tbody>
+        <tr><td><strong>A monitor</strong> (US EPA AirNow)</td><td>Outside Europe, when an AirNow monitor within 45 km (28 mi) has reported in the last 3 hours. AirNow has monitors across the United States and Canada.</td><td>The latest hourly reading of the <strong>nearest</strong> such monitor, exactly as reported (the higher of its ozone and particle indices), never averaged with other monitors. <em>Measured at Pasadena, 8.7 mi away, at 2 PM. Preliminary data.</em> AirNow's data are preliminary: the agencies have not yet validated them, and they can change.</td></tr>
+        <tr><td><strong>A forecast</strong> (CAMS, via Open-Meteo)</td><td>Everywhere else: all of Europe, most of the world, and wherever no monitor is near.</td><td>The air-quality forecast of the Copernicus Atmosphere Monitoring Service for the hour, on an 11 km grid in Europe and 45 km elsewhere. <em>CAMS model forecast for 10 PM, not a local measurement.</em> It adds PM2.5 and NO₂ (µg/m³), and in Europe the European AQI, which uses its own scale.</td></tr>
+        <tr><td><strong>No data</strong></td><td>Before the first answer, when neither source answers, and offline.</td><td>A dash and <em>No data</em>, with <em>No air-quality reading for this place yet. It is checked again at every refresh.</em> (offline: <em>Air quality needs a network connection.</em>). If a later refresh cannot reach either source, the last reading is kept while it is less than 3 hours old.</td></tr>
+    </tbody>
+</table>
+<p>Nothing on this card is estimated from the weather. The credits line names its source, as the data terms ask: the reporting agency and U.S. EPA AirNow, or CAMS via Open-Meteo. For health advice and official alerts, follow your local air-quality agency.</p>
+
+<h2>Clouds</h2>
+<p>The cloud cover now (for example <em>Cloud cover 40% · Partly cloudy</em>) with a gauge, and how it will change (<em>Partly cloudy now, clearing around 4 PM</em>, <em>Clear skies for the next 24 hours</em>). Bands: Clear below 12.5%, Mostly clear below 37.5%, Partly cloudy below 62.5%, Mostly cloudy below 87.5%, Overcast above. With live stations, high thin cloud counts less than low thick cloud (what you actually see), and the sentence names the observing station.</p>
+
+<h2>Next 48 hours</h2>
+<p>One card per hour, scrolling sideways: the hour (<strong>Now</strong> for the current one), icon, temperature, rain chance and cloud cover. Rain chances of 30% or more, and wet hours, are highlighted. Hover for feels-like, wind and the rain amount. Wet hours near freezing show snow or sleet icons. With live stations, the Now card shows the live values, and the next 6 hours ease from the observed temperature into the forecast.</p>
+
+<h2>Next days</h2>
+<p>Up to 10 days: <em>Today</em>, <em>Tomorrow</em>, then weekdays. Each row has the day's icon, its chance of rain, the low, a range bar and the high. The bars share one scale, so you can compare days at a glance; a white dot marks the current temperature on today's bar. Hover for the rain amount and cloud cover; a day only partly covered by the forecast says so.</p>
+
+<h2>Footer, badges and credits</h2>
+<ul>
+    <li><em>Updated 5 min ago · Sources: …</em> lists the services that answered. With stations: <em>· Station: KMIA (3.2 mi) +4 nearby</em>, the nearest station and how many more were blended.</li>
+    <li>A spinner shows while the place refreshes. <strong>Offline</strong>: no network, showing the last forecast. <strong>Stale</strong>: the last refresh failed (hover for the reason); the previous forecast is shown.</li>
+    <li>The <strong>credits</strong> line links every forecast service that answered, every station network whose readings are shown, and the air-quality source, as their licences require. Networks whose licence asks for the date of the data (Météo-France, AEMET) show the time of their newest report, for example <em>Source: AEMET, data of 25 Oct 14:00 UTC</em>.</li>
+    <li><em>Not available right now: …</em> names services that failed this time; the forecast is blended from the others.</li>
+</ul>
+<p>When learned local corrections are on, the temperatures on this page (hours, days, highs and lows) include them. See <a href="local-corrections.html">Learned Local Corrections</a>.</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

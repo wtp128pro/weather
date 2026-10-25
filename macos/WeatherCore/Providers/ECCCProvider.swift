@@ -4,7 +4,8 @@
 // ECCCProvider.swift - key-free HTTPS provider for Environment and Climate
 // Change Canada (ECCC) MSC GeoMet OGC API (https://api.weather.gc.ca).
 // Delivers official Canadian Citypage / HRDPS 2.5 km hourly forecasts under the
-// Open Government Licence – Canada.
+// Environment and Climate Change Canada Data Server End-use Licence (the licence of
+// MSC's data servers, https://eccc-msc.github.io/open-data/licence/readme_en/).
 
 import Foundation
 
@@ -56,6 +57,16 @@ public final class ECCCProvider: WxProvider {
             || WxGeo.inCanada(lat: place.lat, lon: place.lon, countryCode: place.countryCode)
     }
 
+    /// Half-heights (degrees of latitude) of the successive Citypage search boxes. The API returns
+    /// the cities of a box in no particular order, capped at `searchLimit`, and each city is ~32 KB,
+    /// so a small box comes first to keep the nearest city in the answer (a ±0.75° box around
+    /// Toronto returned Richmond Hill, Vaughan, Newmarket and Markham, but not Toronto).
+    public static let searchMarginsDeg: [Double] = [0.2, 0.6, 1.4]
+    /// Most cities requested per box.
+    public static let searchLimit = 20
+    /// A Citypage forecast farther than this from the place does not describe it, km.
+    public static let maxCityDistanceKm = 75.0
+
     public func fetch(_ place: WxPlace) async throws -> WxSourceResult {
         try Task.checkCancellation()
         guard covers(place) else {
@@ -63,20 +74,22 @@ public final class ECCCProvider: WxProvider {
         }
         let outcome: Result<WxSourceResult, any Error>
         do {
-            let path = Self.forecastPath(lat: place.lat, lon: place.lon, marginDeg: 0.75)
-            let response = try await http.get(path, accept: Self.accept)
-            let fetchedS = clock.wallSeconds
-            if let primary = try? Self.parseForecast(response.body, placeLat: place.lat, placeLon: place.lon, fetchedS: fetchedS) {
-                outcome = .success(primary)
-            } else {
-                // Retry with a wider bounding box for rural / northern Canadian locations
-                let widePath = Self.forecastPath(lat: place.lat, lon: place.lon, marginDeg: 2.2)
-                let response2 = try await http.get(widePath, accept: Self.accept)
-                let fetchedS2 = clock.wallSeconds
-                let fallback = try Self.parseForecast(
-                    response2.body, placeLat: place.lat, placeLon: place.lon, fetchedS: fetchedS2)
-                outcome = .success(fallback)
+            // Widen the box until a city close enough to the place answers (rural / northern places).
+            var found: WxSourceResult?
+            var lastError = WxError(.notFound, "no usable forecast data")
+            for margin in Self.searchMarginsDeg where found == nil {
+                let path = Self.forecastPath(lat: place.lat, lon: place.lon, marginDeg: margin)
+                let response = try await http.get(path, accept: Self.accept)
+                try Task.checkCancellation()
+                do {
+                    found = try Self.parseForecast(
+                        response.body, placeLat: place.lat, placeLon: place.lon, fetchedS: clock.wallSeconds)
+                } catch {
+                    lastError = error
+                }
             }
+            guard let found else { throw lastError }
+            outcome = .success(found)
         } catch {
             outcome = .failure(error)
         }
@@ -86,12 +99,16 @@ public final class ECCCProvider: WxProvider {
 
     // MARK: - Path & Parser
 
-    public static func forecastPath(lat: Double, lon: Double, marginDeg: Double = 0.75) -> String {
-        let minLon = OpenMeteoShared.coordText(max(-180.0, lon - marginDeg))
+    /// The Citypage items request for a box of ±`marginDeg` latitude around the place; the
+    /// longitude margin grows as 1/cos(lat) so the box covers the same distance east-west.
+    public static func forecastPath(lat: Double, lon: Double, marginDeg: Double = 0.2) -> String {
+        let lonMargin = min(20.0, marginDeg / max(0.05, cos(lat * .pi / 180.0)))
+        let minLon = OpenMeteoShared.coordText(max(-180.0, lon - lonMargin))
         let minLat = OpenMeteoShared.coordText(max(-90.0, lat - marginDeg))
-        let maxLon = OpenMeteoShared.coordText(min(180.0, lon + marginDeg))
+        let maxLon = OpenMeteoShared.coordText(min(180.0, lon + lonMargin))
         let maxLat = OpenMeteoShared.coordText(min(90.0, lat + marginDeg))
-        return "/collections/citypageweather-realtime/items?f=json&limit=4&bbox=\(minLon),\(minLat),\(maxLon),\(maxLat)"
+        return "/collections/citypageweather-realtime/items?f=json&limit=\(searchLimit)"
+            + "&bbox=\(minLon),\(minLat),\(maxLon),\(maxLat)"
     }
 
     public static func parseForecast<Bytes: Collection<UInt8>>(
@@ -128,6 +145,9 @@ public final class ECCCProvider: WxProvider {
             }
         }
 
+        if bestDistKm.isFinite && bestDistKm > maxCityDistanceKm {
+            throw WxError(.notFound, "no Environment Canada city forecast near the place")
+        }
         guard let props = bestProps,
               let group = props.object("hourlyForecastGroup"),
               let hourly = group.array("hourlyForecasts"),
@@ -162,16 +182,16 @@ public final class ECCCProvider: WxProvider {
                     tempC: h.tempC, humidityPct: h.humidityPct, windKmh: h.windKmh)
             }
 
+            // The Citypage hourly forecast has no precipitation amount: the member gives the
+            // forecaster's probability (lop), sky and weather class, never a made-up amount, so
+            // the precipitation-amount median stays with the models that forecast one.
             let condText = entry.object("condition")?.string("en") ?? ""
             let rawIcon = nestedValue(entry.object("iconCode"), lo: 0, hi: 99)
             let iconCode = rawIcon.isFinite ? Int(rawIcon) : nil
-            let mapped = mapECCCCondition(condText: condText, iconCode: iconCode, lopPct: h.precipProb)
+            let mapped = mapECCCCondition(condText: condText, iconCode: iconCode)
             h.wmo = mapped.wmo
             if mapped.cloudPct.isFinite {
                 h.cloudPct = mapped.cloudPct
-            }
-            if mapped.precipMm.isFinite {
-                h.precipMm = mapped.precipMm
             }
 
             let hasNumeric =
@@ -212,79 +232,64 @@ public final class ECCCProvider: WxProvider {
         return .nan
     }
 
-    private static func mapECCCCondition(
-        condText: String, iconCode: Int?, lopPct: Double
-    ) -> (wmo: Int, cloudPct: Double, precipMm: Double) {
+    /// The WMO weather code and sky cover (%) of a Citypage condition text, else of its icon code.
+    private static func mapECCCCondition(condText: String, iconCode: Int?) -> (wmo: Int, cloudPct: Double) {
         let lower = condText.lowercased()
         var wmo = -1
         var cloud = Double.nan
-        var precip = Double.nan
 
         if lower.contains("thunder") {
             wmo = 95
             cloud = 90.0
-            precip = 2.5
         } else if lower.contains("freezing rain") || lower.contains("ice pellets") {
             wmo = 66
             cloud = 95.0
-            precip = 1.2
         } else if lower.contains("snow") || lower.contains("flurries") || lower.contains("blizzard") {
             wmo = lower.contains("heavy") ? 75 : 71
             cloud = 90.0
-            precip = lower.contains("heavy") ? 2.0 : (lower.contains("flurries") ? 0.3 : 0.8)
         } else if lower.contains("rain") || lower.contains("showers") || lower.contains("drizzle") {
             if lower.contains("drizzle") {
                 wmo = 51
-                precip = 0.2
             } else if lower.contains("heavy") {
                 wmo = 65
-                precip = 4.5
             } else if lower.contains("showers") || lower.contains("chance") {
                 wmo = 80
-                precip = lopPct.isFinite && lopPct >= 60 ? 1.0 : 0.3
             } else {
                 wmo = 61
-                precip = 1.2
             }
             cloud = 88.0
         } else if lower.contains("fog") || lower.contains("mist") {
             wmo = 45
             cloud = 95.0
-            precip = 0.0
         } else if lower.contains("overcast") || lower == "cloudy" {
             wmo = 3
             cloud = 92.0
-            precip = 0.0
         } else if lower.contains("mostly cloudy") || lower.contains("mainly cloudy") {
             wmo = 3
             cloud = 75.0
-            precip = 0.0
         } else if lower.contains("partly cloudy") || lower.contains("mix of sun and cloud") {
             wmo = 2
             cloud = 45.0
-            precip = 0.0
         } else if lower.contains("mainly sunny") || lower.contains("mainly clear") || lower.contains("a few clouds") {
             wmo = 1
             cloud = 20.0
-            precip = 0.0
         } else if lower.contains("sunny") || lower.contains("clear") {
             wmo = 0
             cloud = 5.0
-            precip = 0.0
         } else if let iconCode {
             switch iconCode {
-            case 0, 30: wmo = 0; cloud = 5.0; precip = 0.0
-            case 1, 31: wmo = 1; cloud = 20.0; precip = 0.0
-            case 2, 32: wmo = 2; cloud = 45.0; precip = 0.0
-            case 3, 33: wmo = 3; cloud = 75.0; precip = 0.0
-            case 10: wmo = 3; cloud = 92.0; precip = 0.0
-            case 6, 12, 13, 36: wmo = 61; cloud = 88.0; precip = 0.8
-            case 7, 8, 16, 17, 18, 37, 38: wmo = 71; cloud = 90.0; precip = 0.6
-            case 9, 19, 39: wmo = 95; cloud = 92.0; precip = 2.0
-            case 24: wmo = 45; cloud = 95.0; precip = 0.0
+            case 0, 30: wmo = 0; cloud = 5.0
+            case 1, 31: wmo = 1; cloud = 20.0
+            case 2, 32: wmo = 2; cloud = 45.0
+            case 3, 33: wmo = 3; cloud = 75.0
+            case 10: wmo = 3; cloud = 92.0
+            case 6, 12, 13, 36: wmo = 61; cloud = 88.0
+            case 7, 8, 16, 17, 18, 37, 38: wmo = 71; cloud = 90.0
+            case 9, 19, 39: wmo = 95; cloud = 92.0
+            case 24: wmo = 45; cloud = 95.0
             default: break
             }
         }
-        return (wmo, cloud, precip)
+        return (wmo, cloud)
     }
 }

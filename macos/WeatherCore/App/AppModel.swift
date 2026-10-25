@@ -97,7 +97,10 @@ public final class AppModel {
         public let key: String
         public var id: String { key }
         /// The forecast shown: the latest successful refresh, else the cached one; nil before either.
+        /// The blend corrected by the place's learned local bias (WxLocalBias), if any.
         public internal(set) var forecast: WxForecast?
+        /// The same forecast as blended, before the local bias correction (what the bias is learned on).
+        public internal(set) var modelForecast: WxForecast?
         /// When `forecast` was fetched, UTC unix seconds; 0 without a forecast ("Updated N ago").
         public internal(set) var fetchedS: Int64 = 0
         /// A request of the place is in flight ("Updating…").
@@ -179,6 +182,10 @@ public final class AppModel {
     public private(set) var displayNowS: Int64
     /// User-configurable source and model weight multipliers for blending.
     public private(set) var weightMultipliers = WxWeightMultipliers()
+    /// The station-layer preferences (learned corrections on/off, networks turned off).
+    public private(set) var stationSettings = WxStationSettings()
+    /// Bumped by every change of the learned local corrections; `localCorrections` reads it.
+    public private(set) var localBiasRevision: UInt64 = 0
     /// Bumped by every change of the registry (provider switch); `sources` reads it.
     private var registryRevision: UInt64 = 0
 
@@ -195,6 +202,8 @@ public final class AppModel {
     @ObservationIgnored private var placeList: WxPlaces
     @ObservationIgnored private var settings: WxSettings
     @ObservationIgnored private var cache: WxForecastCache
+    /// The learned local temperature bias of the places' forecasts.
+    @ObservationIgnored private var localBias = WxLocalBias()
     @ObservationIgnored private let engine: RefreshEngine
     @ObservationIgnored private let relay: Relay
     @ObservationIgnored private var registryHandler: WxRegistry.ChangeHandlerID?
@@ -439,6 +448,8 @@ public final class AppModel {
         }
         log(.debug, "loaded \(placeList.count) places")
         isLoaded = true
+        localBias = WxLocalBias.load(path: localBiasPath)
+        stationSettings = WxStationSettings.load(path: stationSettingsPath)
         applySettings()
         placeList.onChanged = { [relay] in
             MainActor.assumeIsolated { relay.model?.placesChanged() }
@@ -469,6 +480,168 @@ public final class AppModel {
         let loadedWeights = WxWeightMultipliers.load(fromPath: weightsPath)
         weightMultipliers = loadedWeights
         WxWeights.activeMultipliers = loadedWeights
+    }
+
+    // MARK: - Local bias
+
+    /// "<config>/weather/local-bias.json".
+    private var localBiasPath: String {
+        storage.configDirectory.isEmpty ? "" : WxLocalBias.defaultPath(configDirectory: storage.configDirectory)
+    }
+
+    /// Learns the place's local forecast bias from a trustworthy fused station temperature observed
+    /// at `nowS` (close, fresh stations: the caller decides), and re-applies the correction to its
+    /// forecast. The model value compared is the uncorrected blend at `nowS`.
+    public func learnLocalBias(key: String, observedTempC: Double, nowS: Int64) {
+        guard let i = itemIndex(key), let model = places[i].modelForecast,
+              let modelNow = WxBlend.now(model, nowS: nowS)?.tempC, modelNow.isFinite,
+              localBias.addSample(
+                placeKey: key, lon: places[i].place.lon, modelTempC: modelNow, observedTempC: observedTempC,
+                nowS: nowS)
+        else {
+            return
+        }
+        saveLocalBias()
+        localBiasRevision &+= 1
+        let corrected = shown(model, key: key, nowS: nowS)
+        if places[i].forecast != corrected {
+            places[i].forecast = corrected
+        }
+    }
+
+    /// The forecast to show for a blend: corrected by the learned local bias when the corrections
+    /// are on.
+    private func shown(_ forecast: WxForecast, key: String, nowS: Int64? = nil) -> WxForecast {
+        guard stationSettings.localCorrectionsEnabled else { return forecast }
+        return localBias.corrected(forecast, placeKey: key, nowS: nowS ?? clock.wallSeconds)
+    }
+
+    /// Re-derives every shown forecast from its blend (after the corrections changed).
+    private func reapplyLocalCorrections() {
+        for i in places.indices {
+            guard let model = places[i].modelForecast else { continue }
+            let next = shown(model, key: places[i].key)
+            if places[i].forecast != next {
+                places[i].forecast = next
+            }
+        }
+    }
+
+    /// What has been learned for one place, for the Settings list.
+    public struct LocalCorrection: Sendable, Identifiable, Equatable {
+        /// One local clock hour of today.
+        public struct Hour: Sendable, Equatable {
+            /// The local clock hour, 0...23.
+            public let hour: Int
+            /// Its middle, UTC unix seconds.
+            public let tS: Int64
+            /// The correction applied at that time, °C (0 until enough is learned).
+            public let correctionC: Double
+            /// The samples learned for that time of day.
+            public let samples: Int
+        }
+
+        public let key: String
+        public var id: String { key }
+        public let place: WxPlace
+        /// Samples learned, all hours together (0: nothing yet).
+        public let samples: Int
+        /// Hours of the day with at least one sample, of 24.
+        public let hoursLearned: Int
+        /// The newest sample, UTC unix seconds; nil when nothing is learned.
+        public let lastUpdateS: Int64?
+        /// 1 while fresh; below 1 when fading (no sample for more than 30 days).
+        public let strength: Double
+        /// The correction applied now, °C.
+        public let nowC: Double
+        /// Today's 24 local hours.
+        public let hours: [Hour]
+    }
+
+    /// The learned corrections of the places, in list order (also places with nothing learned).
+    public var localCorrections: [LocalCorrection] {
+        _ = localBiasRevision
+        let nowS = clock.wallSeconds
+        return places.map { item in
+            let p = item.place
+            let summary = localBias.summary(placeKey: item.key, nowS: nowS)
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: p.timezone) ?? TimeZone(secondsFromGMT: 0) ?? .current
+            let now = Date(timeIntervalSince1970: TimeInterval(nowS))
+            let hours = (0..<24).map { h -> LocalCorrection.Hour in
+                let date = calendar.date(bySettingHour: h, minute: 30, second: 0, of: now) ?? now
+                let tS = Int64(date.timeIntervalSince1970)
+                return LocalCorrection.Hour(
+                    hour: h, tS: tS,
+                    correctionC: localBias.correctionC(placeKey: item.key, lon: p.lon, at: tS, nowS: nowS),
+                    samples: localBias.samples(placeKey: item.key, lon: p.lon, at: tS))
+            }
+            return LocalCorrection(
+                key: item.key, place: p, samples: summary?.samples ?? 0, hoursLearned: summary?.hoursLearned ?? 0,
+                lastUpdateS: summary?.lastUpdateS, strength: summary?.strength ?? 1.0,
+                nowC: localBias.correctionC(placeKey: item.key, lon: p.lon, at: nowS, nowS: nowS), hours: hours)
+        }
+    }
+
+    /// Turns the learned local corrections on or off for every forecast shown (learning goes on).
+    public func setLocalCorrectionsEnabled(_ enabled: Bool) {
+        guard !isShuttingDown, isLoaded, stationSettings.localCorrectionsEnabled != enabled else { return }
+        stationSettings.localCorrectionsEnabled = enabled
+        saveStationSettings()
+        reapplyLocalCorrections()
+    }
+
+    /// Forgets what was learned for one place; its forecast is the blend again.
+    public func resetLocalCorrections(key: String) {
+        guard !isShuttingDown, isLoaded, localBias.places[key] != nil else { return }
+        localBias.remove(placeKey: key)
+        saveLocalBias()
+        localBiasRevision &+= 1
+        reapplyLocalCorrections()
+    }
+
+    /// Forgets what was learned for every place.
+    public func resetAllLocalCorrections() {
+        guard !isShuttingDown, isLoaded, !localBias.places.isEmpty else { return }
+        localBias = WxLocalBias()
+        saveLocalBias()
+        localBiasRevision &+= 1
+        reapplyLocalCorrections()
+    }
+
+    // MARK: - Station settings
+
+    /// "<config>/weather/station-settings.json".
+    private var stationSettingsPath: String {
+        storage.configDirectory.isEmpty ? "" : WxStationSettings.defaultPath(configDirectory: storage.configDirectory)
+    }
+
+    /// Turns one station network on or off (off: not fetched, not blended).
+    public func setStationNetworkEnabled(_ network: WxStationNetwork, _ enabled: Bool) {
+        guard !isShuttingDown, isLoaded, stationSettings.isEnabled(network) != enabled else { return }
+        if enabled {
+            stationSettings.disabledNetworks.remove(network)
+        } else {
+            stationSettings.disabledNetworks.insert(network)
+        }
+        saveStationSettings()
+    }
+
+    private func saveStationSettings() {
+        stationSettings.save(path: stationSettingsPath)
+    }
+
+    /// The learned correction (°C, added to the model temperature) of a place at `tS`; 0 until
+    /// enough is learned.
+    public func localBiasCorrection(key: String, at tS: Int64) -> Double {
+        guard let i = itemIndex(key) else { return 0 }
+        return localBias.correctionC(placeKey: key, lon: places[i].place.lon, at: tS, nowS: clock.wallSeconds)
+    }
+
+    /// Writes the local bias (a few KB, at most a few times an hour per place) in place, as the
+    /// weights are: writes started on other tasks could land out of order and keep an older one.
+    private func saveLocalBias() {
+        localBias.save(path: localBiasPath)
     }
 
     private var weightsPath: String {
@@ -511,7 +684,8 @@ public final class AppModel {
             if var item = old[key] {
                 if item.place != place {
                     item = Place(
-                        place: place, key: key, forecast: item.forecast, fetchedS: item.fetchedS,
+                        place: place, key: key, forecast: item.forecast, modelForecast: item.modelForecast,
+                        fetchedS: item.fetchedS,
                         loading: item.loading, stale: item.stale, offline: item.offline,
                         units: item.units, nowS: item.nowS, errorText: item.errorText
                     )
@@ -531,6 +705,11 @@ public final class AppModel {
             if cache.remove(key: key) {
                 scheduleSave()
             }
+            if localBias.places[key] != nil {
+                localBias.remove(placeKey: key)
+                saveLocalBias()
+                localBiasRevision &+= 1
+            }
         }
     }
 
@@ -539,7 +718,8 @@ public final class AppModel {
         guard let hit = cache.get(key: item.key) else {
             return
         }
-        item.forecast = hit.forecast
+        item.modelForecast = hit.forecast
+        item.forecast = shown(hit.forecast, key: item.key)
         item.fetchedS = clock.wallSeconds - hit.ageMs / 1000
     }
 
@@ -1108,7 +1288,8 @@ public final class AppModel {
             scheduleSave()
         }
         setErrorText(i, nil)
-        places[i].forecast = forecast
+        places[i].modelForecast = forecast
+        places[i].forecast = shown(forecast, key: key)
         places[i].fetchedS = clock.wallSeconds
     }
 

@@ -32,11 +32,11 @@ import Testing
 
     /// miami_models / london_models / gfs_only (test-openmeteo.c:165-171).
     static let miamiModels: [OpenMeteoModel] = [
-        .ncepHrrrConus, .ncepNbmConus, .gfsSeamless, .ecmwfIfs025, .iconSeamless, .gemSeamless,
+        .ncepHrrrConus, .ncepNbmConus, .gfsSeamless, .ecmwfIfs, .iconSeamless, .gemSeamless,
     ]
     static let miamiIDs = ["hrrr", "nbm", "gfs", "ecmwf", "icon", "gem"]
     static let londonModels: [OpenMeteoModel] = [
-        .ecmwfIfs025, .iconSeamless, .gemSeamless, .gfsSeamless, .ukmoSeamless, .meteofranceSeamless,
+        .ecmwfIfs, .iconSeamless, .gemSeamless, .gfsSeamless, .ukmoSeamless, .meteofranceSeamless,
     ]
     static let londonIDs = ["ecmwf", "icon", "gem", "gfs", "ukmo", "meteofrance"]
     static let gfsOnly: [OpenMeteoModel] = [.gfsSeamless]
@@ -317,6 +317,7 @@ import Testing
         }
         let ids = [
             "ncep_hrrr_conus": "hrrr", "ncep_nbm_conus": "nbm", "gfs_seamless": "gfs", "ecmwf_ifs025": "ecmwf",
+            "ecmwf_ifs": "ecmwf",
             "icon_seamless": "icon", "gem_seamless": "gem", "ukmo_seamless": "ukmo", "meteofrance_seamless": "meteofrance",
         ]
         var next = 0
@@ -500,11 +501,11 @@ import Testing
         Self.jsonText(try #require(hourly.member("time")), &single)
         for v in vars {
             single += ",\"" + v + "\":"
-            Self.jsonText(try #require(hourly.member(v + "_ecmwf_ifs025")), &single)
+            Self.jsonText(try #require(hourly.member(v + "_ecmwf_ifs")), &single)
         }
         single += "}}"
 
-        let one: [OpenMeteoModel] = [.ecmwfIfs025]
+        let one: [OpenMeteoModel] = [.ecmwfIfs]
         guard let result = Self.ok(Self.forecast(single, one)) else { return }
         Self.expectModelIDs(result, ["ecmwf"])
         guard let multi = Self.ok(Self.forecast(bytes: text, Self.miamiModels)), multi.members.count > 3,
@@ -517,7 +518,7 @@ import Testing
         }
         // Keys of the other form are not found (:534-548)
         Self.fails(Self.forecast(single, Self.miamiModels), .notFound)
-        Self.fails(Self.forecast(single, [.ecmwfIfs025, .gfsSeamless]), .notFound)
+        Self.fails(Self.forecast(single, [.ecmwfIfs, .gfsSeamless]), .notFound)
         Self.fails(Self.forecast(bytes: text, one), .notFound)
     }
 

@@ -22,11 +22,11 @@ struct OpenMeteoProviderTests {
     /// london_ids (test-openmeteo.c:170).
     static let londonIDs = ["ecmwf", "icon", "gem", "gfs", "ukmo", "meteofrance"]
     /// The model lists of test_net_model_selection (test-openmeteo.c:2577-2580).
-    static let conusModels = "ncep_hrrr_conus,ncep_nbm_conus,gfs_seamless,ecmwf_ifs025,icon_seamless,gem_seamless"
-    static let usOtherModels = "gfs_seamless,ecmwf_ifs025,icon_seamless,gem_seamless"
-    static let worldModels = "ecmwf_ifs025,icon_seamless,gem_seamless,gfs_seamless"
+    static let conusModels = "ncep_hrrr_conus,ncep_nbm_conus,gfs_seamless,ecmwf_ifs,icon_seamless,gem_seamless"
+    static let usOtherModels = "gfs_seamless,ecmwf_ifs,icon_seamless,gem_seamless"
+    static let worldModels = "ecmwf_ifs,icon_seamless,gem_seamless,gfs_seamless"
     static let europeModels =
-        "ecmwf_ifs025,icon_seamless,gem_seamless,gfs_seamless,ukmo_seamless,meteofrance_seamless"
+        "ecmwf_ifs,icon_seamless,gem_seamless,gfs_seamless,ukmo_seamless,meteofrance_seamless"
 
     /// expect_path_a (test-openmeteo.c:2487-2496).
     static func expectPathA(_ lat: String, _ lon: String, _ models: String) -> String {
@@ -249,7 +249,8 @@ struct OpenMeteoProviderTests {
             ("Antarctica", -90, -180, "-90.0000", "-180.0000", Self.worldModels, false),
         ]  // test-openmeteo.c:2586-2608
         let allow = [
-            "ncep_hrrr_conus", "ncep_nbm_conus", "gfs_seamless", "ecmwf_ifs025", "icon_seamless", "gem_seamless",
+            "ncep_hrrr_conus", "ncep_nbm_conus", "gfs_seamless", "ecmwf_ifs025", "ecmwf_ifs", "icon_seamless",
+            "gem_seamless",
             "ukmo_seamless", "meteofrance_seamless", "knmi_seamless",
         ]  // test-openmeteo.c:2609-2610
         for (name, lat, lon, latText, lonText, models, nowcast) in cases {

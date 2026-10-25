@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="AppleTitle" content="Neginato Mezora Help">
-    <title>Keyboard Shortcuts & Places — Neginato Mezora Help</title>
+    <title>Keyboard Shortcuts &amp; Menus — Neginato Mezora Help</title>
     <link rel="stylesheet" href="book.css">
     <link rel="stylesheet" href="help-ui.css">
 </head>
@@ -17,38 +17,62 @@
             <nav>
                 <div class="nav-section">Getting Started</div>
 <a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
-<a class="nav-link" href="rain-chart.html">Rain Graph & Bars Guide</a>
-<a class="nav-link active" href="shortcuts.html">Keyboard Shortcuts & Places</a>
-<div class="nav-section">Sources & Ensemble Weights</div>
-<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
-<div class="nav-section">Algorithms & Meteorology</div>
-<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
-<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link active" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
             </nav>
         </aside>
         <main class="help-main">
-            <h1>Keyboard Shortcuts &amp; Places</h1>
-<h2>Keyboard Shortcuts</h2>
+            <h1>Keyboard Shortcuts &amp; Menus</h1>
+<h2>Shortcuts</h2>
 <table>
-    <thead>
-        <tr><th>Shortcut</th><th>Command</th></tr>
-    </thead>
+    <thead><tr><th>Shortcut</th><th>Command</th></tr></thead>
     <tbody>
-        <tr><td><code>⌘N</code></td><td>Open <strong>Add a City / Street Address / Pin</strong> window</td></tr>
-        <tr><td><code>⌘R</code></td><td>Refresh the selected place now</td></tr>
-        <tr><td><code>⌘U</code></td><td>Switch between Imperial (<code>°F, mph, in</code>) and Metric (<code>°C, km/h, mm</code>)</td></tr>
-        <tr><td><code>⌘,</code></td><td>Open <strong>Neginato Mezora Settings</strong> (<code>Sources</code>, <code>Weights</code>, <code>General</code>)</td></tr>
-        <tr><td><code>⌘?</code></td><td>Open <strong>Neginato Mezora Help</strong></td></tr>
-        <tr><td><code>⌘Q</code></td><td>Flush unsaved changes and quit Neginato Mezora</td></tr>
+        <tr><td><kbd>⌘N</kbd></td><td>File › Add a City… (opens the <strong>Add a city</strong> window)</td></tr>
+        <tr><td><kbd>⌘R</kbd></td><td>View › Refresh (the selected place)</td></tr>
+        <tr><td><kbd>⌘U</kbd></td><td>View › Switch to Celsius / Switch to Fahrenheit</td></tr>
+        <tr><td><kbd>⌃⌘S</kbd></td><td>View › Show/Hide Sidebar</td></tr>
+        <tr><td><kbd>⌘,</kbd></td><td>Neginato Mezora › Settings… (opens on the Sources tab)</td></tr>
+        <tr><td><kbd>⌘?</kbd> (<kbd>⇧⌘/</kbd>)</td><td>Help › Neginato Mezora Help</td></tr>
+        <tr><td><kbd>⌘Q</kbd></td><td>Quit (pending changes are saved first)</td></tr>
+        <tr><td><kbd>↑</kbd> <kbd>↓</kbd></td><td>Select the previous or next place in the sidebar</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>Close the Add a city window</td></tr>
+        <tr><td><kbd>Return</kbd> / <kbd>Space</kbd></td><td>In the Add a city window: add the highlighted result</td></tr>
     </tbody>
 </table>
 
-<h2>Adding Custom Locations, Street Addresses &amp; Map Pins</h2>
-<p>Press <code>⌘N</code> or click the <code>+</code> button in the toolbar to open the location picker:</p>
+<h2>Menus</h2>
 <ul>
-    <li><strong>Search Tab:</strong> Enter any city name, street address, postal code, landmark, or raw <code>latitude, longitude</code> pair. Neginato Mezora queries Apple MapKit, US Census TIGER/Line, OpenStreetMap Nominatim, OSM Photon, and Open-Meteo in parallel.</li>
-    <li><strong>Pin on Map Tab:</strong> Click anywhere on the interactive Apple Map (or enter exact coordinates and a custom label) to save a hyper-local pin.</li>
+    <li><strong>Neginato Mezora:</strong> About Neginato Mezora; Settings… (<kbd>⌘,</kbd>, Sources tab); Data Sources &amp; Weights… (the Weights tab); Stations &amp; Keys… (the Stations tab); Quit.</li>
+    <li><strong>File:</strong> Add a City… (<kbd>⌘N</kbd>).</li>
+    <li><strong>View:</strong> Refresh (<kbd>⌘R</kbd>); Switch to Celsius/Fahrenheit (<kbd>⌘U</kbd>); Show/Hide Sidebar.</li>
+    <li><strong>Help:</strong> Neginato Mezora Help (<kbd>⌘?</kbd>), then direct links to Reading the Forecast, the Rain Graph &amp; Bars Guide, Data Sources &amp; Blend Weights, Station Settings, Free Keys for More Stations, Live Station Observations, Learned Local Corrections, Forecast Algorithms &amp; Citations, and Troubleshooting &amp; FAQ.</li>
 </ul>
+
+<h2>Toolbar</h2>
+<table>
+    <thead><tr><th>Button</th><th>What it does</th></tr></thead>
+    <tbody>
+        <tr><td><strong>+</strong></td><td>Add a city (<kbd>⌘N</kbd>).</td></tr>
+        <tr><td>Refresh</td><td>Refresh this place (<kbd>⌘R</kbd>); dimmed while it loads or when offline.</td></tr>
+        <tr><td><strong>°F</strong> / <strong>°C</strong></td><td>Shows the current unit; click to switch.</td></tr>
+        <tr><td>Gear</td><td>Settings (<kbd>⌘,</kbd>).</td></tr>
+    </tbody>
+</table>
+<p>Each sidebar row's <strong>…</strong> button holds Name / Edit Location…, Set Location Name, Move up, Move down and Remove (also available to VoiceOver as row actions). Rows have no right-click menu.</p>
         </main>
     </div>
     <script src="search-index.js"></script>

@@ -20,6 +20,10 @@ public enum OpenMeteoModel: String, CaseIterable, Sendable {
     case ncepNbmConus = "ncep_nbm_conus"
     case gfsSeamless = "gfs_seamless"
     case ecmwfIfs025 = "ecmwf_ifs025"
+    /// ECMWF IFS HRES at its native 9 km (O1280) grid; requested instead of the 0.25° regrid
+    /// `ecmwfIfs025` since ECMWF opened the full-resolution data (same model, sharper coasts
+    /// and terrain). Both series are the "ecmwf" member.
+    case ecmwfIfs = "ecmwf_ifs"
     case iconSeamless = "icon_seamless"
     case gemSeamless = "gem_seamless"
     case ukmoSeamless = "ukmo_seamless"
@@ -49,7 +53,7 @@ public enum OpenMeteoModel: String, CaseIterable, Sendable {
         case .ncepHrrrConus: return "hrrr"
         case .ncepNbmConus: return "nbm"
         case .gfsSeamless: return "gfs"
-        case .ecmwfIfs025: return "ecmwf"
+        case .ecmwfIfs025, .ecmwfIfs: return "ecmwf"
         case .iconSeamless: return "icon"
         case .gemSeamless: return "gem"
         case .ukmoSeamless: return "ukmo"
@@ -91,7 +95,7 @@ public enum OpenMeteoShared {
     /// WX_OPEN_METEO_SEARCH_MAX_BYTES: longest accepted search text after trimming, bytes.
     public static let searchMaxBytes = 64
     /// MAX_MODELS: most models of one request (the whole allow-list).
-    public static let maxModels = 9
+    public static let maxModels = 10
     /// SEARCH_COUNT: hits requested from the place search ("count=10").
     public static let searchCount = 10
     /// REASON_MAX_CHARS: longest server error reason put into a message, characters.
@@ -117,12 +121,12 @@ public enum OpenMeteoShared {
                 out.append(.ncepNbmConus)
             }
             out.append(.gfsSeamless)
-            out.append(.ecmwfIfs025)
+            out.append(.ecmwfIfs)
             out.append(.iconSeamless)
             out.append(.gemSeamless)
             return (out, conus)
         }
-        out.append(.ecmwfIfs025)
+        out.append(.ecmwfIfs)
         out.append(.iconSeamless)
         out.append(.gemSeamless)
         out.append(.gfsSeamless)
@@ -145,25 +149,25 @@ public enum OpenMeteoShared {
         switch region {
         case .ukIreland:
             let m: [OpenMeteoModel] = [
-                .ukmoSeamless, .ecmwfIfs025, .iconSeamless, .knmiSeamless, .meteofranceSeamless, .gfsSeamless,
+                .ukmoSeamless, .ecmwfIfs, .iconSeamless, .knmiSeamless, .meteofranceSeamless, .gfsSeamless,
                 .gemSeamless,
             ]
-            return (m, nowcastPath(lat: lat, lon: lon, model: nil))
+            return (m, nowcastPath(lat: lat, lon: lon, model: .ukmoSeamless))
         case .beneluxNorthSea:
             let m: [OpenMeteoModel] = [
-                .knmiSeamless, .iconSeamless, .ecmwfIfs025, .ukmoSeamless, .meteofranceSeamless, .gfsSeamless,
+                .knmiSeamless, .iconSeamless, .ecmwfIfs, .ukmoSeamless, .meteofranceSeamless, .gfsSeamless,
                 .gemSeamless,
             ]
             return (m, nowcastPath(lat: lat, lon: lon, model: .knmiSeamless))
         case .centralEurope:
             let m: [OpenMeteoModel] = [
-                .iconSeamless, .ecmwfIfs025, .knmiSeamless, .meteofranceSeamless, .ukmoSeamless, .gfsSeamless,
+                .iconSeamless, .ecmwfIfs, .knmiSeamless, .meteofranceSeamless, .ukmoSeamless, .gfsSeamless,
                 .gemSeamless,
             ]
             return (m, nowcastPath(lat: lat, lon: lon, model: .iconSeamless))
         case .nordic, .europeOther:
             let m: [OpenMeteoModel] = [
-                .ecmwfIfs025, .iconSeamless, .ukmoSeamless, .meteofranceSeamless, .knmiSeamless, .gemSeamless,
+                .ecmwfIfs, .iconSeamless, .ukmoSeamless, .meteofranceSeamless, .knmiSeamless, .gemSeamless,
                 .gfsSeamless,
             ]
             let nc = (lat <= 65.0 && lon >= -11.0 && lon <= 25.0)
@@ -177,7 +181,7 @@ public enum OpenMeteoShared {
                 m.append(.ncepHrrrConus)
                 m.append(.ncepNbmConus)
             }
-            m.append(contentsOf: [.ecmwfIfs025, .iconSeamless, .gfsSeamless])
+            m.append(contentsOf: [.ecmwfIfs, .iconSeamless, .gfsSeamless])
             let nc = inHrrrDomain
                 ? nowcastPath(lat: lat, lon: lon, model: .ncepHrrrConus)
                 : nowcastPath(lat: lat, lon: lon, model: nil)

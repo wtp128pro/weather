@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Adding &amp; Managing Places — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link active" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Adding &amp; Managing Places</h1>
+<p>You can save up to <strong>50 places</strong>. The list, its order, the names you give and the selected place are kept between launches.</p>
+
+<h2>Adding a place</h2>
+<p>Press <kbd>⌘N</kbd>, click <strong>+</strong> in the toolbar, or (when the list is empty) click <strong>Add a city</strong>. The <strong>Add a city</strong> window opens.</p>
+<ol>
+    <li><strong>Type what you are looking for</strong> in <em>Address, Landmark, or City</em>: a city ("Lyon"), a street address ("1600 Pennsylvania Ave NW, Washington"), a ZIP or postal code, a landmark, or coordinates such as <code>25.76, -80.19</code>, <code>25.76 -80.19</code> or <code>25.76°, -80.19°</code>. At least 2 characters are needed. With an empty field the window suggests a few cities.</li>
+    <li><strong>Optionally give it a name</strong> in <em>Location Name</em>: type one, or click a preset (Home, Work, Friend's place, Family, School, Gym, Vacation; click again to clear it). The name replaces the place name in the sidebar and in the forecast header, and picks a matching symbol (a house for Home, a briefcase for Work, and so on).</li>
+    <li><strong>Add it:</strong> double-click a result, press Return or Space on the highlighted result, or click its <strong>Add</strong> button. Return in the name field adds the highlighted (or first) result. A place you already saved shows <strong>Added</strong>.</li>
+</ol>
+<p>The window closes after a successful add, and the new place is selected. <kbd>Esc</kbd> closes the window without adding. There is no map to pick a point on: to save an exact spot, type its coordinates.</p>
+
+<h3>How the search works</h3>
+<ul>
+    <li>Two searches run side by side as you type: a weather-location search of cities (Open-Meteo, up to 10 results), and an address search that asks Apple Maps, OpenStreetMap Nominatim and Photon, plus the US Census geocoder for text that starts with a house number.</li>
+    <li>When the address search finds anything, its results are shown (up to 20, duplicates merged: the same title within 150 m, or the same city within 5 km). Otherwise the city results are shown.</li>
+    <li>Typed coordinates are named by a reverse lookup; when that fails the result is titled with the coordinates and described as <em>Exact coordinates</em>.</li>
+    <li>The status line tells you what is happening: <em>Searching addresses and weather locations…</em>, <em>Matching addresses &amp; locations (N)</em>, <em>Type at least 2 letters</em>, <em>No results</em>, or <em>Search failed: …</em>.</li>
+</ul>
+
+<h3>When a place cannot be added</h3>
+<table>
+    <thead><tr><th>Message</th><th>Why</th><th>What to do</th></tr></thead>
+    <tbody>
+        <tr><td><em>This location is already in your list</em></td><td>A city within 5 km of a saved city, or a named or address place with the same name and region within 50 m of a saved one.</td><td>Give it a distinct Location Name (for example "Home" or "Work"); named places may sit close to each other.</td></tr>
+        <tr><td><em>You can save at most 50 places</em></td><td>The list is full.</td><td>Remove a place first.</td></tr>
+        <tr><td><em>Could not add this location</em></td><td>The place data was not usable (or saving failed).</td><td>Try another result.</td></tr>
+    </tbody>
+</table>
+
+<h2>The sidebar</h2>
+<p>Each row shows the condition icon, the name (or your Location Name), the region ("State, Country"), a rain hint, and the temperature. The rain hint is the first of: <em>Raining until 3:30 PM</em>, <em>Raining now</em>, <em>Rain in 25 min</em>, <em>Rain starting now</em>, <em>Rain at 4 PM</em>, <em>Rain tomorrow, 4 PM</em>, <em>Rain Friday, 4 PM</em>, <em>Rain expected</em>, <em>Showers possible</em>, <em>Dry for 48 h</em>; or <em>Loading…</em>, <em>Can't load forecast</em>, <em>Offline</em>, <em>No data yet</em>, <em>No rain data</em>. When a nearby station reports precipitation while the forecast says dry, the hint says so (for example <em>Light rain now</em>).</p>
+<p>An orange pill marks a row whose forecast is <strong>Offline</strong>, <strong>Stale</strong> (the last refresh failed) or <strong>Updating…</strong>; offline and stale rows are dimmed. Hover over a row for the full place name.</p>
+
+<h3>Selecting, reordering and removing</h3>
+<ul>
+    <li><strong>Select</strong> a row with a click or the arrow keys. The selection is remembered.</li>
+    <li><strong>Reorder:</strong> drag a row onto another row; a blue line shows where it will go. Or use <strong>Move up</strong> / <strong>Move down</strong> in the row's <strong>…</strong> menu.</li>
+    <li><strong>Remove:</strong> <strong>…</strong> › <strong>Remove</strong>. There is no confirmation and no undo; the place's cached forecast and its <a href="local-corrections.html">learned local corrections</a> are forgotten with it.</li>
+</ul>
+
+<h3>Naming a place</h3>
+<p>Use <strong>…</strong> › <strong>Set Location Name</strong> for a preset (and <strong>Clear Custom Name</strong>), or <strong>…</strong> › <strong>Name / Edit Location…</strong> (also the <strong>Name Location</strong> / <strong>Edit Name</strong> button in the forecast header) for the <em>Name &amp; Address Details</em> sheet:</p>
+<ul>
+    <li><strong>Location Name</strong>: your name for the place, with the same presets.</li>
+    <li><strong>Street Address / Locality Subtitle</strong>: the line shown under the name.</li>
+    <li>The coordinates are shown for reference; they do not change. <strong>Save</strong> (or Return) keeps the forecast and the list position; <strong>Clear Name</strong> removes the custom name.</li>
+</ul>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

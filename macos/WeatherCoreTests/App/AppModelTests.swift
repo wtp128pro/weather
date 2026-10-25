@@ -1766,4 +1766,105 @@ struct AppModelTests {
         #expect(flushed)
         fx.model = nil
     }
+
+    // MARK: Local bias
+
+    // C: none - the learned local temperature bias through the model (executor-added): stations
+    // read 22 degC where the models say 24; the shown forecast is corrected, the raw blend is kept,
+    // the days follow the corrected hours, and the learning survives a restart.
+    @Test func learnedLocalBiasCorrectsTheShownForecast() async throws {
+        let fx = try Fx("local-bias")
+        let place = try miami()
+        try fx.storePlaces([place])
+        var m = await fx.start()
+        #expect(await waitFor { m.places.first?.forecast != nil })
+        let key = place.key
+        // three samples 20 min apart inside one solar hour, starting at its first second
+        let offset = Int64((place.lon / 15.0 * 3600.0).rounded())
+        let wall = fx.clock.wallSeconds
+        let binStart = wall + ((3600 - (wall + offset) % 3600) % 3600 + 3600) % 3600
+        for i in 0..<3 {
+            m.learnLocalBias(key: key, observedTempC: 22, nowS: binStart + Int64(i) * WxLocalBias.minSpacingS)
+        }
+        // the first whole forecast hour inside that solar hour
+        let hourS = binStart + (3600 - binStart % 3600) % 3600
+        #expect(WxLocalBias.solarHour(hourS, lon: place.lon) == WxLocalBias.solarHour(binStart, lon: place.lon))
+        #expect(abs(m.localBiasCorrection(key: key, at: hourS) + 1) < 1e-9)  // 3 samples: half of -2
+        let item = try #require(m.places.first)
+        let raw = try #require(item.modelForecast?.hours.first { $0.tS == hourS })
+        let shown = try #require(item.forecast?.hours.first { $0.tS == hourS })
+        #expect(abs(raw.tempC - 24) < 1e-6 && abs(shown.tempC - 23) < 1e-6)
+        #expect(abs(shown.feelsC - (raw.feelsC - 1)) < 1e-6)
+        #expect(m.localBiasCorrection(key: key, at: hourS + 12 * 3600) == 0)  // other hours keep the model
+        #expect(item.modelForecast?.days.allSatisfy { abs($0.tempMinC - 24) < 1e-6 } == true)
+        #expect(item.forecast?.days.contains { abs($0.tempMinC - 23) < 1e-6 } == true)  // the days were rebuilt
+        // a sample too soon after the last one of its bin is not taken
+        m.learnLocalBias(key: key, observedTempC: 18, nowS: binStart + 2 * WxLocalBias.minSpacingS + 60)
+        #expect(abs(m.localBiasCorrection(key: key, at: hourS) + 1) < 1e-9)
+        // what was learned is on disk and corrects the forecast after a restart
+        #expect(FileManager.default.fileExists(
+            atPath: WxLocalBias.defaultPath(configDirectory: fx.storage.configDirectory)))
+        m = await fx.restart()
+        #expect(await waitFor { m.places.first?.forecast != nil })
+        #expect(abs(m.localBiasCorrection(key: key, at: hourS) + 1) < 1e-9)
+        let restored = try #require(m.places.first?.forecast?.hours.first { $0.tS == hourS })
+        #expect(abs(restored.tempC - 23) < 1e-6)
+        // removing the place forgets it
+        #expect(m.remove(key: key))
+        #expect(m.localBiasCorrection(key: key, at: hourS) == 0)
+        await fx.stop()
+        #expect(WxLocalBias.load(path: WxLocalBias.defaultPath(configDirectory: fx.storage.configDirectory))
+            .places.isEmpty)
+    }
+
+    // C: none - Settings > Stations: the learned corrections listed, turned off and on (the choice
+    // survives a restart), and reset (executor-added).
+    @Test func localCorrectionsCanBeTurnedOffAndReset() async throws {
+        let fx = try Fx("local-bias-settings")
+        let place = try miami()
+        try fx.storePlaces([place])
+        var m = await fx.start()
+        #expect(await waitFor { m.places.first?.forecast != nil })
+        let key = place.key
+        #expect(m.stationSettings.localCorrectionsEnabled)
+        #expect(m.localCorrections.map(\.samples) == [0])
+        let offset = Int64((place.lon / 15.0 * 3600.0).rounded())
+        let wall = fx.clock.wallSeconds
+        let binStart = wall + ((3600 - (wall + offset) % 3600) % 3600 + 3600) % 3600
+        let revision = m.localBiasRevision
+        for i in 0..<3 {
+            m.learnLocalBias(key: key, observedTempC: 22, nowS: binStart + Int64(i) * WxLocalBias.minSpacingS)
+        }
+        #expect(m.localBiasRevision != revision)
+        let hourS = binStart + (3600 - binStart % 3600) % 3600
+        func shownTemp() -> Double? { m.places.first?.forecast?.hours.first { $0.tS == hourS }?.tempC }
+        #expect(abs((shownTemp() ?? 0) - 23) < 1e-6)
+        let summary = try #require(m.localCorrections.first)
+        #expect(summary.samples == 3 && summary.hoursLearned == 1 && summary.lastUpdateS == binStart + 2 * 1200)
+        #expect(summary.hours.count == 24 && summary.hours.map(\.hour) == Array(0..<24))
+        #expect(summary.hours.contains { $0.samples == 3 && abs($0.correctionC + 1) < 1e-9 })
+        // off: the plain blend is shown; learning is kept
+        m.setLocalCorrectionsEnabled(false)
+        #expect(abs((shownTemp() ?? 0) - 24) < 1e-6)
+        #expect(m.localCorrections.first?.samples == 3)
+        m = await fx.restart()
+        #expect(await waitFor { m.places.first?.forecast != nil })
+        #expect(!m.stationSettings.localCorrectionsEnabled)
+        #expect(abs((shownTemp() ?? 0) - 24) < 1e-6)
+        m.setLocalCorrectionsEnabled(true)
+        #expect(abs((shownTemp() ?? 0) - 23) < 1e-6)
+        // a network turned off is remembered
+        m.setStationNetworkEnabled(.iemMesonet, false)
+        #expect(!m.stationSettings.isEnabled(.iemMesonet))
+        // reset: nothing learned, the blend again
+        m.resetLocalCorrections(key: key)
+        #expect(m.localCorrections.first?.samples == 0)
+        #expect(abs((shownTemp() ?? 0) - 24) < 1e-6)
+        m.learnLocalBias(key: key, observedTempC: 22, nowS: binStart + 3 * WxLocalBias.minSpacingS)
+        m.resetAllLocalCorrections()
+        #expect(m.localCorrections.first?.samples == 0)
+        await fx.stop()
+        let saved = WxStationSettings.load(path: WxStationSettings.defaultPath(configDirectory: fx.storage.configDirectory))
+        #expect(saved.localCorrectionsEnabled && saved.disabledNetworks == [.iemMesonet])
+    }
 }

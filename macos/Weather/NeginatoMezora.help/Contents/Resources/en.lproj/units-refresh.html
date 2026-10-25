@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Units, Refreshing &amp; Offline — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link active" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Units, Refreshing &amp; Offline</h1>
+
+<h2>Units</h2>
+<p>Switch between <strong>Imperial</strong> (°F, mph, inches) and <strong>Metric</strong> (°C, km/h, mm) with the unit button in the toolbar (it shows the current unit), <kbd>⌘U</kbd>, or Settings › General › Display Units. The choice is saved. Temperatures, wind, rain amounts and rates, the rain chart scale, and station and monitor distances (mi or km) change; percentages and the air quality index do not. Times are shown in 12-hour form in each place's time zone.</p>
+
+<h2>When forecasts refresh</h2>
+<ul>
+    <li>Forecasts are fetched only while the window is visible (on screen, not minimised or hidden) and the Mac is online.</li>
+    <li>When the window appears, comes back to the front, or the network returns, places whose forecast is at least 2 minutes old are refreshed.</li>
+    <li>Every 10 minutes, places whose forecast is at least 9 minutes old are refreshed. At most 3 places are fetched at once, the selected place first.</li>
+    <li><kbd>⌘R</kbd> (View › Refresh, or the refresh button) refreshes the selected place now. It does nothing while that place is loading, within 10 seconds of its last refresh, for 60 seconds after a service asked for fewer requests, or while offline.</li>
+    <li>Changing a source switch or a weight re-fetches every place once.</li>
+    <li>A refresh waits up to 30 seconds for the services; one that has not answered by then is listed as <em>Not available right now</em>. Network errors are retried twice.</li>
+</ul>
+
+<h2>Live stations and air quality</h2>
+<ul>
+    <li>Live station readings and air quality are fetched with each forecast refresh of a place, and again for every place when a station setting (a key, a network switch) changes.</li>
+    <li>Answers are kept for a short time and shared by places close together: 2–10 minutes for most station networks, 15 minutes for AEMET, an hour per Met Office station (its free plan allows 360 calls a day); station lists are kept for a day (the Met Office's list of nearest stations for a week). Air quality: monitors 10 minutes, yesterday's monitor readings an hour, the CAMS forecast 15 minutes.</li>
+    <li>A network that cannot be reached contributes its readings of the last 90 minutes.</li>
+</ul>
+
+<h2>Offline</h2>
+<p>When the Mac loses its connection, rows show <strong>Offline</strong>, the forecast page shows the <strong>Offline</strong> badge and the last forecast (without live station values or air quality), and refreshing is off. As soon as the connection is back, places are refreshed. At launch, each place shows its last forecast from the cache with its age until the new one arrives.</p>
+
+<h2>Saving and quitting</h2>
+<p>Changes are saved a few seconds after you make them. Quitting (or closing the window, which quits) waits up to 5 seconds for pending saves.</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Settings: Stations — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link active" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Settings: Stations</h1>
+<p>Open Settings (<kbd>⌘,</kbd>) and choose <strong>Stations</strong>, or use Neginato Mezora › <strong>Stations &amp; Keys…</strong>. The tab has four sections; the <strong>Help</strong> links in their headers open the matching help pages.</p>
+
+<h2>1. Learned Local Corrections</h2>
+<ul>
+    <li><strong>Correct forecasts with what nearby stations measure</strong> turns the corrections on or off for every place. When off, the forecasts show the plain model blend; learning continues, so turning it back on needs no new learning.</li>
+    <li>One row per place, with its status, for example <em>7 of 24 hours learned from 19 readings, last 12 min ago</em>, or <em>Nothing learned yet: this needs station readings within about 25 km that are less than 45 minutes old.</em> A place without updates for over 30 days adds <em>fading: no new readings for N days</em>.</li>
+    <li><strong>Now</strong>: the correction applied at this moment (for example <code>−1.2 °F</code>: the forecast is lowered by 1.2 °F).</li>
+    <li><strong>The bars</strong>: one per local hour of today. Up (orange) means the forecast is raised at that hour, down (blue) lowered. A small dot marks an hour with readings but not yet enough to correct it. The current hour is highlighted; hover over a bar for its value and number of readings.</li>
+    <li><strong>Reset</strong> forgets one place's learning; <strong>Reset All…</strong> forgets every place's (after a confirmation).</li>
+</ul>
+<p>How the learning works: <a href="local-corrections.html">Learned Local Corrections</a>.</p>
+
+<h2>2. Networks That Need Your Free Key</h2>
+<p>Met Office (UK), KNMI (Netherlands), MET Norway Frost (Norway), Météo-France (France) and AEMET (Spain). For each one:</p>
+<ul>
+    <li>Paste your key into the field and click <strong>Save</strong> (or press Return). The key is stored in your login Keychain, not in a file. Once saved, the row shows <em>… saved in your Keychain</em> with <strong>Replace…</strong> and <strong>Remove</strong>. For AEMET and Météo-France keys, which carry an expiry date, the row shows it, and warns when it is near or past.</li>
+    <li><strong>How to get a free …</strong> opens the steps for that service, with a button to its sign-up page. The full walk-through, with limits and troubleshooting, is in <a href="station-keys.html">Free Keys for More Stations</a>.</li>
+    <li>The switch turns the network off without removing the key.</li>
+    <li>The status line and dot tell you whether the key works (see below).</li>
+</ul>
+
+<h2>3. Networks Used Without a Key</h2>
+<p>Airport reports (worldwide), NWS airport stations and the Iowa Environmental Mesonet (US), Environment Canada stations, Deutscher Wetterdienst, DMI, FMI, SMHI, GeoSphere Austria and MeteoSwiss. Each has a switch: a network turned off is neither fetched nor used. Each row links the network's credit.</p>
+
+<h3>Status lines and dots</h3>
+<table>
+    <thead><tr><th>Dot</th><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td>green</td><td><em>Working: 12 reports within 95 km near Leeds (3 min ago)</em></td><td>The latest fetch worked (for the place named).</td></tr>
+        <tr><td>red</td><td><em>The service refused the key (HTTP 401…)</em></td><td>The key is wrong, incomplete, expired, or not yet activated. Paste it again or create a new one.</td></tr>
+        <tr><td>orange</td><td><em>The service's limit for this key was reached</em></td><td>Too many requests for the free plan; the app tries again at the next refresh.</td></tr>
+        <tr><td>orange</td><td><em>Could not reach the service</em> / <em>answered with an error</em></td><td>A network or server problem. The network's readings of the last 90 minutes are used meanwhile.</td></tr>
+        <tr><td>grey</td><td><em>Needs your free API key</em>, <em>Key saved. It is tried on the next refresh…</em>, <em>Turned off</em>, <em>not needed by your places yet</em></td><td>Nothing fetched yet (no place in its area, or no key).</td></tr>
+    </tbody>
+</table>
+
+<h2>4. Stations Near the Selected Place</h2>
+<p>The stations within 60 km of the place selected in the main window, nearest first (12 shown; <strong>Show All</strong> for the rest). Each row gives the station's name and code, network, distance, the age of its latest report, its <strong>weight</strong> (0–100%) and why:</p>
+<table>
+    <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td><strong>Good</strong> (green)</td><td>Agrees with its neighbours within 1.5 °C (2.7 °F): full weight.</td></tr>
+        <tr><td><strong>On probation (N of 6 tests)</strong> (blue)</td><td>New or returning: weight rises from 60% to 100% over its first 6 tests.</td></tr>
+        <tr><td><strong>Reduced weight (off by X)</strong> (yellow)</td><td>Its typical error is above 1.5 °C; the larger the error, the lower the weight.</td></tr>
+        <tr><td><strong>Not used: off by X</strong> (red)</td><td>Error of 8 °C (14 °F) or more. It keeps being tested and can recover.</td></tr>
+        <tr><td><strong>Not used: reading stuck</strong> (red)</td><td>The reading has not changed for 8 hours (a failed sensor). Used again as soon as it changes.</td></tr>
+    </tbody>
+</table>
+<p><strong>Forget All Stations…</strong> clears the station list and every track record (after a confirmation). The stations are found again at the next refresh and start over on probation; learned local corrections are kept.</p>
+<p>How stations are tested and blended: <a href="live-stations.html">Live Station Observations</a>.</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

@@ -2,10 +2,11 @@
 """Validates the NeginatoMezora.help bundle structure, TOC, links, and search index."""
 
 from __future__ import annotations
+import html
 import json
 import re
 import sys
-from _helplib import CONTENTS_DIR, EN_LPROJ, all_pages
+from _helplib import CONTENTS_DIR, EN_LPROJ, REPO_ROOT, all_pages
 
 
 def main() -> int:
@@ -29,13 +30,26 @@ def main() -> int:
             errors.append(f"Missing help page: {page_path}")
             continue
         html_text = page_path.read_text(encoding="utf-8")
-        if page["title"] not in html_text:
+        if html.escape(page["title"]) not in html_text:
             errors.append(f"Page {page['href']} does not contain its title '{page['title']}'")
-        for href in re.findall(r'href="([^"#]+)"', html_text):
+        for href in re.findall(r'href="([^"]+)"', html_text):
             if href.startswith(("http://", "https://")):
                 continue
-            if not (EN_LPROJ / href).is_file():
+            target, _, anchor = href.partition("#")
+            target_path = EN_LPROJ / target if target else page_path
+            if not target_path.is_file():
                 errors.append(f"Broken relative link '{href}' in {page['href']}")
+            elif anchor and f'id="{anchor}"' not in target_path.read_text(encoding="utf-8"):
+                errors.append(f"Missing anchor '#{anchor}' for link '{href}' in {page['href']}")
+        if "<!-- WEIGHT_TABLES -->" in html_text:
+            errors.append(f"Unfilled weight tables in {page['href']}")
+
+    # Every page the app opens (HelpWindowManager.shared.showHelp(page:)) must exist.
+    for swift in (REPO_ROOT / "Weather").rglob("*.swift"):
+        for call in re.findall(r"showHelp\(page:([^)]*)\)", swift.read_text(encoding="utf-8")):
+            for target in re.findall(r'"([^"]+)"', call):
+                if target not in known_hrefs:
+                    errors.append(f"{swift.relative_to(REPO_ROOT)} opens help page '{target}', which is not in the book")
 
     search_js_path = EN_LPROJ / "search-index.js"
     if search_js_path.is_file():

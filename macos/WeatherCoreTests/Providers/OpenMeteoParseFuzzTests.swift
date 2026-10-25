@@ -298,6 +298,7 @@ extension OpenMeteoParseTests {
         // the allow-list, API name -> model id (wx-openmeteo.h:23-25)
         let table: [(String, String)] = [
             ("ncep_hrrr_conus", "hrrr"), ("ncep_nbm_conus", "nbm"), ("gfs_seamless", "gfs"), ("ecmwf_ifs025", "ecmwf"),
+            ("ecmwf_ifs", "ecmwf"),
             ("icon_seamless", "icon"), ("gem_seamless", "gem"), ("ukmo_seamless", "ukmo"),
             ("meteofrance_seamless", "meteofrance"), ("knmi_seamless", "knmi"),
         ]
@@ -308,10 +309,10 @@ extension OpenMeteoParseTests {
     // C: /openmeteo/net/model-selection (test-openmeteo.c:2575-2651), the
     // request paths and model lists only; the fetch itself is the provider unit's.
     @Test func sharedModelSelectionAndPaths() {
-        let conus = "ncep_hrrr_conus,ncep_nbm_conus,gfs_seamless,ecmwf_ifs025,icon_seamless,gem_seamless"
-        let usOther = "gfs_seamless,ecmwf_ifs025,icon_seamless,gem_seamless"
-        let world = "ecmwf_ifs025,icon_seamless,gem_seamless,gfs_seamless"
-        let europe = "ecmwf_ifs025,icon_seamless,gem_seamless,gfs_seamless,ukmo_seamless,meteofrance_seamless"
+        let conus = "ncep_hrrr_conus,ncep_nbm_conus,gfs_seamless,ecmwf_ifs,icon_seamless,gem_seamless"
+        let usOther = "gfs_seamless,ecmwf_ifs,icon_seamless,gem_seamless"
+        let world = "ecmwf_ifs,icon_seamless,gem_seamless,gfs_seamless"
+        let europe = "ecmwf_ifs,icon_seamless,gem_seamless,gfs_seamless,ukmo_seamless,meteofrance_seamless"
         let cases: [(String, Double, Double, String, String, String, Bool)] = [
             ("Miami", 25.7617, -80.1918, "25.7617", "-80.1918", conus, true),
             ("New York", 40.7128, -74.006, "40.7128", "-74.0060", conus, true),
@@ -401,7 +402,7 @@ extension OpenMeteoParseTests {
         let caSel = OpenMeteoShared.models(for: calgary)
         #expect(caSel.models.contains(.gemSeamless))
         #expect(caSel.models.contains(.ncepHrrrConus))
-        #expect(caSel.nowcastPath?.contains("models=gem_seamless") == true)
+        #expect(caSel.nowcastPath?.contains("models=ncep_hrrr_conus") == true)
 
         // NWS must reject Canadian places even when near the US border
         let toronto = try WxPlace(name: "Toronto", admin1: "Ontario", country: "Canada", countryCode: "CA",

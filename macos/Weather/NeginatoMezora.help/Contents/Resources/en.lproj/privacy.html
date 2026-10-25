@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Privacy, Data &amp; Storage — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link active" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Privacy, Data &amp; Storage</h1>
+<p>Neginato Mezora has no account, no analytics and no server of its own. It talks directly to public weather services. This page lists what it sends and what it stores.</p>
+
+<h2>What is sent, and to whom</h2>
+<table>
+    <thead><tr><th>Service</th><th>What it receives</th><th>When</th></tr></thead>
+    <tbody>
+        <tr><td>Open-Meteo (forecasts, current conditions, 15-minute rain, CAMS air quality, elevations)</td><td>Place coordinates; station coordinates for elevations</td><td>Every place</td></tr>
+        <tr><td>MET Norway (api.met.no)</td><td>Place coordinates</td><td>Every place, when the source is on</td></tr>
+        <tr><td>US National Weather Service (api.weather.gov)</td><td>Place coordinates; nearby airport codes</td><td>US places</td></tr>
+        <tr><td>Bright Sky (DWD data)</td><td>Place coordinates</td><td>Germany, Benelux, Central Europe</td></tr>
+        <tr><td>Environment Canada (api.weather.gc.ca)</td><td>Place coordinates or an area around them</td><td>Canada and near it</td></tr>
+        <tr><td>NOAA Aviation Weather Center</td><td>An area of about 95 km around the place</td><td>Every place</td></tr>
+        <tr><td>Iowa Environmental Mesonet</td><td>The NWS forecast-office code of the area</td><td>US places</td></tr>
+        <tr><td>US EPA AirNow (services.arcgis.com)</td><td>Place coordinates (monitors within 45 km)</td><td>Places outside Europe</td></tr>
+        <tr><td>DMI, FMI</td><td>An area around the place</td><td>Denmark, Finland</td></tr>
+        <tr><td>SMHI</td><td>Nothing about the place (all of Sweden is fetched)</td><td>Sweden</td></tr>
+        <tr><td>GeoSphere Austria, MeteoSwiss</td><td>Codes of nearby stations</td><td>Austria, Switzerland</td></tr>
+        <tr><td>Met Office, KNMI, MET Norway Frost</td><td>Your key for that service, and the place's coordinates or area</td><td>Only with your key, for places in their country</td></tr>
+        <tr><td>Météo-France, AEMET</td><td>Your key for that service (all of France or Spain is fetched)</td><td>Only with your key, for places in their country</td></tr>
+        <tr><td>Place search: Open-Meteo geocoding, Apple Maps, OpenStreetMap Nominatim, Photon (komoot), US Census geocoder</td><td>The text you type in the Add a city window</td><td>While you search</td></tr>
+    </tbody>
+</table>
+<p>Requests identify the app by name in their User-Agent; no personal identifier is sent. Turning a forecast source off in Settings › Sources stops its forecast requests; station networks have their own switches in Settings › Stations.</p>
+
+<h2>What is stored on this Mac</h2>
+<p>The app is sandboxed. Its files are in <code>~/Library/Containers/io.github.wtp128pro.Weather/Data/Library/</code>:</p>
+<table>
+    <thead><tr><th>File</th><th>Contents</th></tr></thead>
+    <tbody>
+        <tr><td><code>Application Support/weather/places.json</code></td><td>Your places, names and order</td></tr>
+        <tr><td><code>Application Support/weather/settings.json</code></td><td>Units, sources turned off, the selected place</td></tr>
+        <tr><td><code>Application Support/weather/weights.json</code></td><td>Your weight multipliers</td></tr>
+        <tr><td><code>Application Support/weather/station-settings.json</code></td><td>Corrections on or off, station networks turned off</td></tr>
+        <tr><td><code>Application Support/weather/local-bias.json</code></td><td>The learned local corrections</td></tr>
+        <tr><td><code>Application Support/weather/stations.json</code></td><td>The stations seen, their latest readings and track records</td></tr>
+        <tr><td><code>Caches/weather/forecasts.json</code></td><td>The last forecast of each place, shown at launch and offline</td></tr>
+    </tbody>
+</table>
+<p><strong>API keys</strong> for the station networks are stored in your <strong>login Keychain</strong> (as "Neginato Mezora: … key"), never in these files, and are sent only to their own service over HTTPS. Remove one in Settings › Stations, or in the Keychain Access app.</p>
+<p>To start completely fresh, quit the app and delete the folder above (and the keys in Keychain Access).</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

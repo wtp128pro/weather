@@ -1,0 +1,50 @@
+{
+ "@context": "https://frost.met.no/schema",
+ "@type": "SourceResponse",
+ "apiVersion": "v0",
+ "license": "https://creativecommons.org/licenses/by/3.0/no/",
+ "currentItemCount": 2,
+ "data": [
+  {
+   "@type": "SensorSystem",
+   "id": "SN18700",
+   "name": "OSLO - BLINDERN",
+   "shortName": "Blindern",
+   "countryCode": "NO",
+   "geometry": {
+    "@type": "Point",
+    "coordinates": [
+     10.72,
+     59.9423
+    ]
+   },
+   "masl": 94,
+   "stationHolders": [
+    "MET.NO"
+   ]
+  },
+  {
+   "@type": "SensorSystem",
+   "id": "SN18815",
+   "name": "OSLO - BRYN",
+   "shortName": "Bryn",
+   "geometry": {
+    "@type": "Point",
+    "coordinates": [
+     10.8228,
+     59.9028
+    ]
+   },
+   "masl": "77",
+   "stationHolders": [
+    "STATENS VEGVESEN"
+   ]
+  },
+  {
+   "@type": "SensorSystem",
+   "id": "SN76920",
+   "name": "TROLL A",
+   "shortName": "Troll A"
+  }
+ ]
+}

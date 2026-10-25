@@ -15,9 +15,9 @@
 3. [Heuristic Forecast Weights, Horizon Bands & User Multipliers (`Weights.swift`)](#3-heuristic-forecast-weights-horizon-bands--user-multipliers)
 4. [15-Minute HRRR Nowcast & Mass-Conserving Sub-Hourly Rescaling (`Nowcast.swift`, `OpenMeteoProvider.swift`)](#4-15-minute-hrrr-nowcast--mass-conserving-sub-hourly-rescaling)
 5. [Sky Condition Derivation, Hydrometeor Classification & Daily Aggregation (`ConditionRules.swift`, `Daily.swift`, `RainRules.swift`)](#5-sky-condition-derivation-hydrometeor-classification--daily-aggregation)
-6. [Live Physical Station Assimilation & 3D Anisotropic Kernel Fusion (`LiveStationFetcher.swift`)](#6-live-physical-station-assimilation--3d-anisotropic-kernel-fusion)
+6. [Live Physical Station Assimilation & 3D Anisotropic Kernel Fusion (`StationFusion.swift`, `StationNetworks.swift`, `StationCatalog.swift`, `LocalBias.swift`, `LiveStationFetcher.swift`)](#6-live-physical-station-assimilation--3d-anisotropic-kernel-fusion)
 7. [Psychrometrics, Thermodynamics & Apparent Temperature (`LiveStationFetcher.swift`, `Format.swift`)](#7-psychrometrics-thermodynamics--apparent-temperature)
-8. [Radiative Cloud Transmittance & EPA AirNow AQI Interpolation (`LiveStationFetcher.swift`)](#8-radiative-cloud-transmittance--epa-airnow-aqi-interpolation)
+8. [Radiative Cloud Transmittance & the Air Quality Card (`AirQuality.swift`)](#8-radiative-cloud-transmittance--the-air-quality-card)
 9. [Solar Position & Spherical Geodesy (`Geo.swift`)](#9-solar-position--spherical-geodesy)
 10. [Rain Graph & Bars Visual Encoding (`ChartData.swift`, `DetailRainChart.swift`, `DetailView.swift`)](#10-rain-graph--bars-visual-encoding)
 11. [Multi-Source Street-Address Geocoding & Proximity Deduplication (`AddressGeocoder.swift`, `Places.swift`)](#11-multi-source-street-address-geocoding--proximity-deduplication)
@@ -29,7 +29,7 @@
 
 ## 1. Executive Overview & Architectural Philosophy
 
-**Neginato Mezora** is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes numerical weather prediction (NWP) guidance from up to **10 distinct forecast models across 3 independent upstream providers** (`Open-Meteo`, `NOAA National Weather Service`, and `MET Norway`), fuses them with **real-time physical surface observations** (`NOAA/FAA AviationWeather METAR`, `Open-Meteo 90m DEM surface analysis`, and `US EPA AirNow`), and renders high-contrast Apple Weather–inspired visual cards.
+**Neginato Mezora** is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes numerical weather prediction (NWP) guidance from up to **10 distinct forecast models across 3 independent upstream providers** (`Open-Meteo`, `NOAA National Weather Service`, and `MET Norway`), fuses them with **real-time physical surface observations** from up to 10 keyless station networks (`NOAA AviationWeather METAR` worldwide, `NWS ASOS` and the `Iowa Environmental Mesonet` in the US, `ECCC SWOB` in Canada, `DWD`, `DMI`, `FMI`, `SMHI`, `GeoSphere Austria` and `MeteoSwiss` in Europe) plus the `Open-Meteo 90m DEM surface analysis` and `US EPA AirNow`, and renders high-contrast Apple Weather–inspired visual cards.
 
 The system is split into two strict layers:
 
@@ -37,7 +37,7 @@ The system is split into two strict layers:
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                         Weather (macOS SwiftUI Target)                       │
 │  ShellWindow · DetailView · DetailRainChart · SettingsView · HelpWindowMgr   │
-│  LiveStationFetcher (3D Anisotropic Station & AirNow Assimilation)           │
+│  LiveStationFetcher · StationNetworkFetcher (stations & AirNow, HTTP)        │
 └──────────────────────────────────────┬───────────────────────────────────────┘
                                        │
                                        ▼
@@ -45,6 +45,7 @@ The system is split into two strict layers:
 │                       WeatherCore (Framework Target)                         │
 │  AppModel · ServiceOrchestrator · RefreshEngine · WxScheduler                │
 │  WxBlend · WxWeights · WxWeightedMedian · WxNowcast · WxRainRules · WxGeo    │
+│  WxStationFusion · WxStationNetworks · WxStationCatalog · WxLocalBias        │
 │  OpenMeteoProvider · NWSProvider · METNorwayProvider · AddressGeocoder       │
 │  WxPlaces · WxSettings · WxForecastCache · StoreJSON · FileIO (F_FULLFSYNC)  │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -54,7 +55,7 @@ The system is split into two strict layers:
 1. **Robust Order Statistics over Arithmetic Averaging:** Continuous atmospheric variables (temperature, feels-like, wind speed, gusts, cloud fraction, relative humidity, and precipitation amount) are combined via a **weighted median** rather than a weighted mean so a single outlier NWP model cannot skew the forecast ([`Blend.swift`](WeatherCore/Blend/Blend.swift), [`WeightedMedian.swift`](WeatherCore/Blend/WeightedMedian.swift)).
 2. **Horizon-Dependent Model Trust:** Short-range convection-allowing models (`NOAA HRRR` 3 km) dominate the 0–18 h window, calibrated multi-model ensembles (`NOAA NBM`) and human-edited grids (`NWS NDFD`) anchor medium/extended ranges, and global spectral models (`ECMWF IFS`, `DWD ICON`, `UKMO`, `Météo-France`, `NOAA GFS`, `ECCC GEM`) provide global coverage ([`Weights.swift`](WeatherCore/Blend/Weights.swift)).
 3. **User-Transparent & Customizable Weights:** All provider and per-model weights are exposed in the native **Settings (`⌘,`)** dialogue ([`SettingsView.swift`](Weather/Settings/SettingsView.swift)), allowing users to inspect the baseline table across all 6 variable groups and 4 horizon bands and apply custom `[0.00×, 3.00×]` multipliers persisted to `weights.json`.
-4. **Physical Observation Grounding:** Model grid points can miss sub-grid coastal breezes, valley inversions, and urban heat islands. [`LiveStationFetcher.swift`](Weather/Detail/LiveStationFetcher.swift) assimilates live airport/ASOS/AWOS METARs within 95 km using a 3D anisotropic kernel with environmental lapse-rate elevation reduction, Shepard directional isolation, and Median Absolute Deviation (MAD) buddy quality control.
+4. **Physical Observation Grounding:** Model grid points can miss sub-grid coastal breezes, valley inversions, and urban heat islands. [`StationFusion.swift`](WeatherCore/Blend/StationFusion.swift) assimilates every reachable station within 95 km — airports and national, road-weather, hydrological and research networks — with one algorithm in every country: a 3D anisotropic kernel with lapse-rate elevation reduction, Shepard de-clustering, a MAD buddy check, and a per-station health record learned by leave-one-out cross-validation ([`StationCatalog.swift`](WeatherCore/Storage/StationCatalog.swift)). Close, fresh station readings also teach each place's **local forecast bias** by time of day ([`LocalBias.swift`](WeatherCore/Blend/LocalBias.swift)), which corrects the whole forecast, not just "now".
 
 ---
 
@@ -166,24 +167,27 @@ Each cell lists the four horizon band weights `[H0, H1, H2, H3]` (or a single nu
 | `open-meteo:gem` (ECCC GEM) | Worldwide | `0.5` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` |
 | `open-meteo:ukmo` (UK Met Office) | Worldwide | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` |
 | `open-meteo:meteofrance` | Worldwide | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` |
-| `open-meteo:knmi` (KNMI HARMONIE) | Benelux / North Sea | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` |
+| `open-meteo:knmi` (KNMI HARMONIE) | Benelux / North Sea | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) |
 | `met-no:ecmwf` (MET Norway) | Worldwide | `0.5` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` |
 | `dwd-brightsky:mosmix` (DWD MOSMIX) | DE / NL / Central Europe | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) |
 | `eccc:hrdps` (ECCC GeoMet) | Canada | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) |
 
 ### 3.3 Regional 4-Band Horizon Profiles (`WxRegion`) & World Weights
 
-Instead of a binary `US vs. Rest-of-World` split, [`Geo.swift`](WeatherCore/Core/Geo.swift) and [`Weights.swift`](WeatherCore/Blend/Weights.swift) classify every location into one of 8 meteorological domains (`WxRegion`) with 4-band lead-time horizon weights (`H0: 0–3h`, `H1: 3–18h`, `H2: 18–72h`, `H3: 72h+`) so that national convection-allowing models lead in short ranges (`0–48 h`) and gracefully hand off to `ECMWF IFS` and `DWD ICON` in medium/extended ranges (`72 h+`):
+Instead of a binary `US vs. Rest-of-World` split, [`Geo.swift`](WeatherCore/Core/Geo.swift) and [`Weights.swift`](WeatherCore/Blend/Weights.swift) classify every location into one of 8 meteorological domains (`WxRegion`) with 4-band lead-time horizon weights (`H0: 0–3h`, `H1: 3–18h`, `H2: 18–72h`, `H3: 72h+`) so that national convection-allowing models lead in short ranges (`0–48 h`) and gracefully hand off to `ECMWF IFS` and `DWD ICON` in medium/extended ranges (`72 h+`). In these regional profiles **relative humidity uses the same band weights as temperature** (a near-surface thermodynamic field the high-resolution models also resolve best), rather than the flat `1.0` of the US/world table:
 
-| Region (`WxRegion`) | Primary Short-Range (H0/H1, 0–18h) | Medium/Extended Anchor (H2/H3, 18h+) | Sub-Hourly 15-min Nowcast Model |
+| Region (`WxRegion`) | Leads H0 (0–3 h), temperature `[H0/H1/H2/H3]` | Leads H3 (72 h+) | Sub-Hourly 15-min Nowcast Model |
 | :--- | :--- | :--- | :--- |
-| `.ukIreland` (UK & Ireland) | `open-meteo:ukmo` (UKV 2 km, weight `4.5`), `meteofrance` (`2.5`), `ecmwf` (`2.5`) | `open-meteo:ecmwf` (`3.5`), `ukmo` (`2.5`), `icon` (`2.2`) | `ukmo_seamless` |
-| `.beneluxNorthSea` (Netherlands & Benelux) | `open-meteo:knmi` (HARMONIE 2 km, `4.5`, $0\text{ at }72\text{h+}$), `dwd-brightsky:mosmix` (`3.2`), `icon` (`3.5`), `ukmo` (`2.8`) | `open-meteo:ecmwf` (`3.5`), `dwd-brightsky:mosmix` (`2.8`), `icon` (`2.5`) | `knmi_seamless` |
-| `.centralEurope` (Germany, CH, AT) | `open-meteo:icon` (ICON-D2 2 km, `4.5`), `dwd-brightsky:mosmix` (`3.8`), `meteofrance` (`2.5`), `ecmwf` (`2.5`) | `open-meteo:ecmwf` (`3.5`), `dwd-brightsky:mosmix` (`3.2`), `icon` (`3.0`) | `icon_seamless` |
-| `.canada` (Canada) | `eccc:hrdps` (MSC GeoMet, `4.2`), `open-meteo:gem` (HRDPS 2.5 km + RDPS, `4.0`), `hrrr` (`3.2`, $\le 48\text{h}$) | `open-meteo:ecmwf` (`3.2`), `gem` (`2.8`), `eccc:hrdps` (`2.8`), `gfs` (`2.0`) | `gem_seamless` |
-| `.nordic` (Nordic & Baltic) | `met-no:ecmwf` (MEPS 2.5 km, `4.2`), `ecmwf` (`3.0`), `icon` (`2.5`) | `open-meteo:ecmwf` (`3.5`), `met-no:ecmwf` (`2.5`), `icon` (`2.2`) | `icon_seamless` |
+| `.canada` (Canada) | `eccc:hrdps` (`4/4/3.5/3.5`), `open-meteo:gem` (`4/4/3.5/3`), `open-meteo:hrrr` (`3/3/0.5/0`) | `eccc:hrdps` (`4/4/3.5/3.5`), `open-meteo:ecmwf` (`2/2.5/3.5/3.5`), `open-meteo:gem` (`4/4/3.5/3`) | `ncep_hrrr_conus` inside the HRRR domain, else Open-Meteo best match |
+| `.ukIreland` (UK & Ireland) | `open-meteo:ukmo` (`4/4/3/2.5`), `open-meteo:ecmwf` (`3/3/3.5/3.5`), `met-no:ecmwf` (`2.5/2.5/2/2`) | `open-meteo:ecmwf` (`3/3/3.5/3.5`), `open-meteo:ukmo` (`4/4/3/2.5`), `met-no:ecmwf` (`2.5/2.5/2/2`) | `ukmo_seamless` |
+| `.beneluxNorthSea` (Netherlands & Benelux) | `open-meteo:knmi` (`4/4/2/0`), `open-meteo:icon` (`3.5/3.5/3/2.5`), `dwd-brightsky:mosmix` (`3/3/2.5/2`) | `open-meteo:ecmwf` (`2.5/2.5/3.5/3.5`), `open-meteo:icon` (`3.5/3.5/3/2.5`), `dwd-brightsky:mosmix` (`3/3/2.5/2`) | `knmi_seamless` |
+| `.centralEurope` (DE, AT, CH, LI, PL, CZ) | `open-meteo:icon` (`4/4/3.5/2.5`), `dwd-brightsky:mosmix` (`3.5/3.5/3/2.5`), `open-meteo:ecmwf` (`2.5/2.5/3.5/3.5`) | `open-meteo:ecmwf` (`2.5/2.5/3.5/3.5`), `dwd-brightsky:mosmix` (`3.5/3.5/3/2.5`), `open-meteo:icon` (`4/4/3.5/2.5`) | `icon_seamless` |
+| `.nordic` (NO, SE, FI, DK, IS, FO, SJ) | `met-no:ecmwf` (`4/4/3/2.5`), `open-meteo:ecmwf` (`3/3/3.5/3.5`), `open-meteo:icon` (`2.5/2.5/2.5/2`) | `open-meteo:ecmwf` (`3/3/3.5/3.5`), `met-no:ecmwf` (`4/4/3/2.5`), `open-meteo:icon` (`2.5/2.5/2.5/2`) | Open-Meteo best match (lat ≤ 65°, lon −11…25°) |
+| `.europeOther` (rest of Europe) | `open-meteo:ecmwf` (`3/3/3.5/3.5`), `open-meteo:icon` (`3/3/2.5/2.5`), `open-meteo:meteofrance` (`3/3/2.5/2`) | `open-meteo:ecmwf` (`3/3/3.5/3.5`), `open-meteo:icon` (`3/3/2.5/2.5`), `met-no:ecmwf` (`2/2/2/2`) | Open-Meteo best match (lat ≤ 65°, lon −11…25°) |
 
-In `.world` (Rest of World), US/regional-only models receive weight `0.0`, while global models use flat horizon weights defined by `WORLD_MAIN(w)` (`[w, w, w, 1.0, w, 1.0]`):
+These rows are the three largest temperature weights of each profile, taken from the code. The complete per-model, per-variable tables of all eight profiles are generated from `WxWeights` into the Help Book (`scripts/help/weight_tables.py` → *Settings: Data Sources & Weights*), and `HelpBookTests` fails when they no longer match the code.
+
+In `.world` (Rest of World), US/regional-only models receive weight `0.0`, while global models use flat horizon weights defined by `WORLD_MAIN(w)` (`[w, w, w, 1.0, w, 1.0]`). The `knmi`, `dwd-brightsky` and `eccc` rows below are their world baseline (shown in the Weights tab); `baseWeight(region: .world)` gives them `0.0`, since those models do not cover the rest of the world:
 
 | Source : Model | `.temp` | `.wind` | `.cloud` | `.humidity` | `.precipMm` | `.precipProb` | Rationale |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
@@ -198,6 +202,8 @@ In `.world` (Rest of World), US/regional-only models receive weight `0.0`, while
 | `dwd-brightsky:mosmix` | `3.0` | `2.8` | `2.8` | `1.0` | `3.0` | `2.5` | DWD MOSMIX station-calibrated statistical post-processing + ICON-D2. |
 | `eccc:hrdps` | `3.5` | `3.0` | `3.0` | `1.0` | `3.5` | `3.5` | Environment and Climate Change Canada MSC GeoMet Official Citypage & HRDPS. |
 | Unknown `(src, model)` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` | `WxWeights.unknownWeight = 1.0`. |
+
+**ECCC citypage forecasts (`ECCCProvider.swift`).** The place's own city is found with progressively wider boxes (0.2°, 0.6°, 1.4°; longitude ÷ cos lat, up to 20 cities each) and the nearest one is used, or none beyond 75 km (a narrow 4-city query used to return a neighbouring city, e.g. Richmond Hill for Toronto). Text forecasts contribute the forecaster's precipitation probability, sky cover and condition class; no precipitation **amount** is invented from wording such as "chance of showers".
 
 ### 3.4 User-Configurable Source & Model Multipliers (`WxWeightMultipliers`)
 
@@ -220,7 +226,7 @@ Custom multipliers are persisted atomically to `<configDirectory>/weather/weight
 ### 4.1 Parallel CONUS Sub-Hourly Fetching (`OpenMeteoProvider`)
 
 For places inside the Continental United States (`WxGeo.inCONUS`: $\text{lat} \in [24.0^\circ, 50.0^\circ]$, $\text{lon} \in [-125.0^\circ, -66.0^\circ]$, or `countryCode == "US"` within those bounds), `OpenMeteoProvider` issues two concurrent HTTPS requests:
-- **Request A (Main Multi-Model Hourly):** Queries `ncep_hrrr_conus,ncep_nbm_conus,ecmwf_ifs025,gfs_seamless,icon_seamless,gem_seamless`.
+- **Request A (Main Multi-Model Hourly):** Queries `ncep_hrrr_conus,ncep_nbm_conus,ecmwf_ifs,gfs_seamless,icon_seamless,gem_seamless` (every region requests ECMWF IFS at its native 9 km, `ecmwf_ifs`, rather than the 0.25° regrid `ecmwf_ifs025`).
 - **Request B (15-Minute HRRR Nowcast):** Queries `models=ncep_hrrr_conus&minutely_15=precipitation&forecast_minutely_15=12` with a **2,000 ms grace window** (`nowcastGraceMs = 2000`) after Request A completes so a slow sub-hourly response never blocks the main forecast.
 
 ### 4.2 Contiguous Run Validation (`WxNowcast.extract`)
@@ -316,71 +322,137 @@ The state machine transitions into one of 5 states:
 
 ## 6. Live Physical Station Assimilation & 3D Anisotropic Kernel Fusion
 
-**Implementation:** [`Weather/Detail/LiveStationFetcher.swift`](Weather/Detail/LiveStationFetcher.swift)
+**Implementation:** [`WeatherCore/Blend/StationFusion.swift`](WeatherCore/Blend/StationFusion.swift) (the fusion, pure), [`WeatherCore/Providers/StationNetworks.swift`](WeatherCore/Providers/StationNetworks.swift) (request builders and parsers), [`WeatherCore/Storage/StationCatalog.swift`](WeatherCore/Storage/StationCatalog.swift) (station health), [`WeatherCore/Blend/LocalBias.swift`](WeatherCore/Blend/LocalBias.swift) (learned forecast bias), [`Weather/Detail/StationNetworkFetcher.swift`](Weather/Detail/StationNetworkFetcher.swift) and [`Weather/Detail/LiveStationFetcher.swift`](Weather/Detail/LiveStationFetcher.swift) (HTTP and orchestration)
 
-While `WeatherCore` produces the multi-model NWP grid blend, [`LiveStationFetcher.swift`](Weather/Detail/LiveStationFetcher.swift) performs real-time **mesoscale data assimilation** every 5 minutes (300 s cache TTL) by querying:
-1. **NOAA / FAA AviationWeather METAR API** (`https://aviationweather.gov/api/data/metar`) in a $\pm 0.55^\circ \text{ lat} \times \pm 0.70^\circ \text{ lon}$ bounding box around the target coordinate (up to 16 physical airport/ASOS/AWOS stations within $95\text{ km}$).
-2. **Open-Meteo 90m DEM Downscaled Current Analysis** (`https://api.open-meteo.com/v1/forecast?current=...`).
-3. **US EPA AirNow Real-Time Observations** (`https://www.airnowapi.org` / EnviroFlash + Open-Meteo CAMS/GEOS-CF fallback).
+While `WeatherCore` produces the multi-model NWP grid blend, the station layer grounds the "now" values (and, through §6.9, the forecast) in real observations. **Every country goes through the same pool and the same algorithm**; what differs is only which networks cover the place. Ten networks are keyless; five more are used once the user saves their own free key in Settings › Stations (§6.10).
 
-### 6.1 3D Anisotropic Spatial Distance Kernel
+| Network (`WxStationNetwork`) | Coverage | Cadence | Endpoint | Trust prior (temp / wind) |
+| :--- | :--- | :--- | :--- | :--- |
+| `metar` | Worldwide airports | hourly + specials | `aviationweather.gov/api/data/metar` (one bbox query covering 95 km; longitude half-width ÷ cos lat) | 1.0 / 1.0 |
+| `nwsASOS` | US airports (3 nearest) | 5 min | `api.weather.gov/stations/{id}/observations/latest` (MADIS QC flags X/Q/B dropped) | 1.0 / 1.0 |
+| `iemMesonet` | US non-airport networks | 5–60 min | `mesonet.agron.iastate.edu/api/1/currents.json?wfo=XXX` (one request per NWS forecast office, from `/points` `cwa`) | USCRN 1.0/0.8, SCAN/ISUSM 0.85/0.6, RWIS 0.6/0.35, DCP 0.5/0.3; ASOS/AWOS/COOP skipped |
+| `ecccSWOB` | Canada | 1–60 min | `api.weather.gc.ca` SWOB real-time collection | MSC, NAV CANADA, DND 1.0; partner networks 0.6 / 0.35 |
+| `dwdSYNOP` | Germany (+ border margin) | 10 min | Bright Sky `sources` → up to 8 nearest live SYNOP → `current_weather?source_id=` (`fallback_source_ids` values dropped) | 1.0 |
+| `dmi` | Denmark | 10 min | `opendataapi.dmi.dk/v2/metObs` | Synop 1.0, others 0.9 |
+| `fmi` | Finland | 10 min | `opendata.fmi.fi/wfs` multipointcoverage | 1.0 |
+| `smhi` | Sweden | hourly | `opendata-download-metobs.smhi.se` latest-hour, all stations, 8 parameters | CORE 1.0, ADDITIONAL 0.9 |
+| `geosphere` | Austria | 10 min | `dataset.api.hub.geosphere.at` TAWES current | 1.0 |
+| `meteoSwiss` | Switzerland | 10 min | `data.geo.admin.ch` open data per-station `ogd-smn_<abbr>_t_now.csv` | 1.0 |
+| `metOffice` (key) | United Kingdom | hourly | Weather DataHub Land Observations, header `apikey`: `observation-land/1/nearest?lat=&lon=&max=5` (2 dp; cached 7 days) → `observation-land/1/{geohash}` for at most the 3 nearest stations (each cached 1 h; the free plan allows 360 calls a day). Stations are identified by geohash, decoded to their position; the 0–30 weather code gives condition and cloud | 1.0 |
+| `knmi` (key) | Netherlands | 10 min | KNMI EDR API, header `Authorization: <key>`: `collections/10-minute-in-situ-meteorological-observations/cube?bbox=…&datetime=<last hour>&parameter-name=ta,t10,rh,rh10,td,td10,ff,gff,fx,rg,n,nc,ww` (CoverageJSON; cached 5 min) and `/locations` (names, heights; 24 h). An Open Data API key is refused (403) | 1.0 |
+| `frost` (key) | Norway | 10 min – hourly | Frost API, HTTP Basic `client_id:`: `sources/v0.jsonld?…nearest(POINT(lon lat))` (40 sensor systems; 24 h) → `observations/v0.jsonld?referencetime=latest&maxage=PT3H` (5 min); main sensor, quality code < 5, 2 m temperature and 10 m wind preferred | MET Norway 1.0; other station holders 0.7 / 0.4 |
+| `meteoFrance` (key) | France | 6 min | Météo-France DPPaquetObs v2, header `apikey`: `paquet/stations/infrahoraire-6m?date=<newest 6-min slot at least 10 min old>` (all of France, ~2,000 stations; cached 6 min) and `liste-stations` (CSV; 24 h). Kelvin → °C, 6-min rain × 10 → mm/h | RADOME 1.0; ETENDU 0.85 / 0.6 |
+| `aemet` (key) | Spain | hourly | AEMET OpenData, header `api_key`: `observacion/convencional/todas` returns an envelope whose `datos` URL (followed only on `opendata.aemet.es`) holds all ~830 stations; ISO-8859-15 tolerated; an expired data URL is retried once; cached 15 min | 1.0 |
 
-Station $i$ at horizontal great-circle distance $d_i$ ($\text{km}$) and elevation difference $\Delta z_i = z_{\text{station},i} - z_{\text{target}}$ ($\text{m}$) receives a base spatial weight $W_{\text{spatial},i}$ combining a horizontal Cauchy-Gaussian product kernel with a vertical Gaussian boundary-layer decoupling kernel ([`LiveStationFetcher.swift:268-281`](Weather/Detail/LiveStationFetcher.swift#L268-L281)):
+National networks are queried inside boxes with a ~50 km margin beyond the border, so places near a border also get the neighbour's stations. Responses are cached per URL (120–600 s for reports, 24 h for station lists) with in-flight request sharing; a network that cannot be reached falls back to its readings of the last 90 minutes in the station catalog (§6.7). Station elevations missing from a network come from the Open-Meteo elevation API (Copernicus DEM) and are kept in the catalog. Also fused (§6.6): **Open-Meteo 90 m DEM downscaled current analysis**; air quality uses **US EPA AirNow** monitors with an Open-Meteo CAMS fallback (§8.2).
+
+### 6.1 Same-Site Merge and the 3D Anisotropic Spatial Kernel
+
+Reports closer than $1.5\text{ km}$ are one site (an airport METAR and its ASOS/SYNOP/SWOB twin): the freshest report wins and older ones only fill variables it lacks; the site's trust is the best of its sensors.
+
+Station $i$ at great-circle distance $d_i$ (km) and elevation difference $\Delta z_i = z_{\text{target}} - z_i$ (m, clamped to $\pm 1800$) receives
 
 $$W_{\text{horiz}}(d_i) = \exp\!\left(-\frac{d_i^2}{2 L_h^2}\right) \cdot \frac{1}{1 + (d_i / d_0)^2}, \qquad L_h = 22.0\text{ km},\quad d_0 = 8.0\text{ km}$$
 
 $$W_{\text{vert}}(\Delta z_i) = \exp\!\left(-\frac{\Delta z_i^2}{2 L_z^2}\right), \qquad L_z = 350.0\text{ m}$$
 
-$$W_{\text{spatial},i} = W_{\text{horiz}}(d_i) \cdot W_{\text{vert}}(\Delta z_i)$$
+$$W_{\text{prior},i} = W_{\text{horiz}}(d_i) \cdot W_{\text{vert}}(\Delta z_i) \cdot \text{trust}_i \cdot \text{health}_i$$
 
-- **Why Cauchy × Gaussian horizontally?** The inner Cauchy factor $\left(1 + (d_i / 8\text{ km})^2\right)^{-1}$ provides sharp local localization when an airport or ASOS station is within a few kilometers, while the outer Gaussian $\exp(-d_i^2 / (2 \cdot 22^2))$ smoothly suppresses stations beyond $50\text{ km}$.
-- **Why $L_z = 350\text{ m}$ vertically?** Atmospheric boundary layers decouple across mountain ridges and marine inversions (~300–400 m depth); a mountaintop station $700\text{ m}$ above a valley floor is attenuated by $\exp(-490000 / 245000) = e^{-2} \approx 0.135$.
+where `trust` is the network-class prior of the table above and `health` the station's measured track record (§6.7). Candidates must lie within $95\text{ km}$ and be at most $3\text{ h}$ old. **The pool** is the $12$ sites of largest $W_{\text{prior}}$ within $60\text{ km}$ (not merely the nearest, so a crowd of low-trust gauges cannot push out a first-class station a little farther away); if none is that close, the nearest usable site alone.
+
+- **Why Cauchy × Gaussian horizontally?** The inner Cauchy factor provides sharp localization when a station is within a few kilometers, while the outer Gaussian smoothly suppresses stations beyond $50\text{ km}$.
+- **Why $L_z = 350\text{ m}$?** Boundary layers decouple across ridges and inversions (~300–400 m deep); a station $700\text{ m}$ above the target is attenuated by $e^{-2} \approx 0.135$.
 
 ### 6.2 Diurnal Boundary-Layer Lapse Rate Elevation Correction
 
-Before blending temperatures or dewpoints from station $i$ at elevation $z_i$ to the target elevation $z_{\text{target}}$, observations are adiabatically reduced to $z_{\text{target}}$ ([`LiveStationFetcher.swift:283-295`](Weather/Detail/LiveStationFetcher.swift#L283-L295)):
+Temperatures and dewpoints are reduced to the target elevation before blending:
 
-$$T_{\text{reduced},i} = T_i + \Gamma_T \cdot (z_i - z_{\text{target}}), \qquad \Gamma_T = \begin{cases} +0.0068\text{ }^\circ\text{C/m} & \text{Daytime (mixed convective boundary layer)} \\ +0.0042\text{ }^\circ\text{C/m} & \text{Nighttime (radiatively stratified boundary layer)} \end{cases}$$
+$$T_{\text{reduced},i} = T_i + \Gamma_T \cdot \Delta z_i, \qquad \Gamma_T = \begin{cases} -0.0068\text{ }^\circ\text{C/m} & \text{sun up (mixed boundary layer)} \\ -0.0042\text{ }^\circ\text{C/m} & \text{night (stable boundary layer)} \end{cases}$$
 
-$$T_{d,\text{reduced},i} = T_{d,i} + \Gamma_{Td} \cdot (z_i - z_{\text{target}}), \qquad \Gamma_{Td} = +0.0019\text{ }^\circ\text{C/m}$$
+$$T_{d,\text{reduced},i} = \min\!\big(T_{\text{reduced},i},\; T_{d,i} - 0.0019 \cdot \Delta z_i\big)$$
 
-(Note: when $z_i > z_{\text{target}}$, $(z_i - z_{\text{target}}) > 0$, so descending to a lower target elevation warms the parcel by $+\Gamma \Delta z$, matching the ICAO Standard Atmosphere lapse rate of $6.5\text{ K/km}$ during daytime and a damped nocturnal inversion lapse rate of $4.2\text{ K/km}$ at night.)
+A station $300\text{ m}$ above the target ($\Delta z = -300$) is warmed by $2.0\,^\circ\text{C}$ by day and $1.3\,^\circ\text{C}$ at night. A dewpoint missing from a report is derived from its relative humidity (Magnus, §7.1).
 
-### 6.3 Shepard (1968) Directional Isolation (Angular De-Clustering)
+### 6.3 Shepard (1968) Directional De-Clustering
 
-When three airport stations cluster tightly to the north of a city while only one station lies to the south, naive distance weighting over-represents the northern cluster. Following **Shepard (1968)** ([`LiveStationFetcher.swift:297-318`](Weather/Detail/LiveStationFetcher.swift#L297-L318)), we compute the initial compass bearing $\theta_i$ from the target to each station $i$ and evaluate the angular shadow cast by other stations $j \neq i$:
+A tight cluster of sites on one bearing must not outvote an isolated site on the other side. With $\theta_i$ the bearing from the target to site $i$:
 
-$$S_i = \frac{\sum_{j \neq i} W_{\text{spatial},j} \cdot \max\!\big(0, \cos(\theta_i - \theta_j)\big)}{\sum_{j \neq i} W_{\text{spatial},j}}, \qquad W_{\text{dir},i} = \frac{1}{1 + 0.85 \, S_i}$$
+$$S_i = \sum_{j \neq i} \min\!\left(3,\; \sqrt{\frac{W_{\text{prior},j}}{W_{\text{prior},i}}}\right) \cdot \left(\frac{1 + \cos(\theta_i - \theta_j)}{2}\right)^{4}, \qquad W_{\text{dir},i} = \frac{1}{1 + S_i}$$
 
-Stations sharing the same azimuth ($\theta_i \approx \theta_j \implies \cos(\theta_i - \theta_j) \approx 1$) have their weights damped by up to $1 / 1.85 \approx 0.54$, whereas an isolated station in its own quadrant ($S_i \approx 0$) retains full weight $W_{\text{dir},i} = 1.0$.
+A site shadowed by a stronger one on the same bearing loses weight; a site alone in its direction keeps $W_{\text{dir}} = 1$.
 
 ### 6.4 Variable-Specific Temporal Exponential Decay
 
-Observations age at different physical rates depending on atmospheric decorrelation scales ([`LiveStationFetcher.swift:320-335`](Weather/Detail/LiveStationFetcher.swift#L320-L335)). For observation age $\Delta t_i = \max(0, t_{\text{now}} - t_{\text{obs},i})$ (rejected if $\Delta t_i > 5400\text{ s} = 90\text{ min}$):
+For observation age $\Delta t_i$ (a report without a time counts as $20\text{ min}$ old):
 
-$$W_{\text{time},i}^{(\text{var})} = \exp\!\left(-\frac{\Delta t_i}{\tau_{\text{var}}}\right), \qquad \begin{cases} \tau_{\text{temp}} = 2700\text{ s} & (45\text{ min — thermal inertia}) \\ \tau_{\text{wind}} = 1200\text{ s} & (20\text{ min — mesoscale gust fronts}) \\ \tau_{\text{wx}} = 900\text{ s} & (15\text{ min — convective precipitation/sky}) \end{cases}$$
+$$W_{\text{time},i}^{(\text{var})} = \exp\!\left(-\frac{\Delta t_i}{\tau_{\text{var}}}\right), \qquad \tau_{\text{temp}} = 2700\text{ s},\quad \tau_{\text{wind}} = 1200\text{ s},\quad \tau_{\text{sky/precip}} = 900\text{ s}$$
 
-### 6.5 Spatial Buddy Quality Control via Median Absolute Deviation (MAD)
+Wind is further weighted by $\text{windTrust}_i / \text{trust}_i$ (many road-weather and hydrological sites measure wind well below 10 m). The gust is the mean wind plus the weighted RMS gust excess, reported only when that excess is at least $3.5\text{ km/h}$. Present weather comes from the nearest site that codes weather, within $38\text{ km}$ and $90\text{ min}$ (its "no weather" counts; sites that never code weather are skipped). An automated station's ceilometer sees only low cloud: its "mostly clear" report ($< 25\%$) under substantial model cloud aloft ($> 30\%$) is combined with that cloud by random overlap (§8.1).
 
-To reject malfunctioning sensors (e.g., an ASOS thermometer stuck or sun-heated on a tarmac), when $N \ge 3$ stations report a variable, we compute the median $M = \operatorname{median}(x_1, \dots, x_N)$ and the Median Absolute Deviation (Rousseeuw & Croux, 1993) ([`LiveStationFetcher.swift:337-360`](Weather/Detail/LiveStationFetcher.swift#L337-L360)):
+### 6.5 Robust Buddy Check (Median Absolute Deviation)
 
-$$\operatorname{MAD} = \max\!\big(\sigma_{\min},\; 1.4826 \cdot \operatorname{median}_i |x_i - M|\big)$$
+With $N \ge 3$ sites in the pool, from the elevation-reduced temperatures:
 
-where $\sigma_{\min} = 1.2^\circ\text{C}$ for temperature/dewpoint and $4.0\text{ km/h}$ for wind. A Huber-style quadratic tail penalty down-weights any station deviating by more than $3.2 \times \operatorname{MAD}$:
+$$M = \operatorname{median}_i\, T_{\text{reduced},i}, \qquad \sigma = \max\!\big(1.5\,^\circ\text{C},\; 1.4826 \cdot \operatorname{median}_i |T_{\text{reduced},i} - M|\big), \qquad r_i = |T_{\text{reduced},i} - M|$$
 
-$$W_{\text{QC},i} = \begin{cases} 1.0 & \text{if } |x_i - M| \le 3.2 \cdot \operatorname{MAD} \\[6pt] \dfrac{1}{1 + \left(\dfrac{|x_i - M|}{3.2 \cdot \operatorname{MAD}}\right)^4} & \text{if } |x_i - M| > 3.2 \cdot \operatorname{MAD} \end{cases}$$
+$$W_{\text{QC},i} = \begin{cases} 1 & r_i \le 3\sigma \\[4pt] \left(\dfrac{3\sigma}{r_i}\right)^{2} & r_i > 3\sigma \end{cases}$$
 
-### 6.6 Multiscale Observation-to-Model Fusion & MOS Exponential Bias Decay
+The floor keeps real mesoscale contrasts of up to $4.5\,^\circ\text{C}$ (sea breeze, urban heat island, cold-air pool) unpenalized; the penalty only catches gross errors (a sun-baked, indoor or failed sensor). Persistent smaller errors are the job of the health record (§6.7). Each site's weight is $W_i = W_{\text{prior},i} \cdot W_{\text{dir},i} \cdot W_{\text{QC},i} \cdot W_{\text{time},i}^{(\text{var})}$.
 
-The assimilated station observation $X_{\text{obs}}$ is fused with the 90m DEM downscaled model analysis $X_{\text{model}}$ using an adaptive confidence weight $\alpha_{\text{obs}} \in [0.35, 0.95]$ governed by the nearest station distance $d_{\min}$ and age $\Delta t_{\min}$ ([`LiveStationFetcher.swift:415-455`](Weather/Detail/LiveStationFetcher.swift#L415-L455)):
+### 6.6 Observation-to-Model Fusion and Short-Range Bias Decay
 
-$$\alpha_{\text{obs}} = \operatorname{clamp}_{[0.35, 0.95]}\!\left(\exp\!\left(-\frac{d_{\min}}{38.0\text{ km}}\right) \cdot \exp\!\left(-\frac{\Delta t_{\min}}{3600\text{ s}}\right) \cdot \min\!\left(1.0,\; 0.70 + 0.10 \, N_{\text{stations}}\right)\right)$$
+The pool's kernel-weighted **effective distance** $\bar d$ and **effective age** $\bar t$ (weighted means over the temperature weights) set the confidence in the stations against Open-Meteo's 90 m DEM downscaled analysis:
 
-$$X_{\text{fused}} = \alpha_{\text{obs}} X_{\text{obs}} + (1 - \alpha_{\text{obs}}) X_{\text{model}}$$
+$$\alpha_{\text{obs}} = \operatorname{clamp}_{[0.35,\, 0.95]}\!\left(0.35 + 0.60 \cdot \exp\!\left(-\left(\frac{\bar d}{38\text{ km}}\right)^{2}\right) \cdot \exp\!\left(-\frac{\bar t}{3600\text{ s}}\right)\right), \qquad X_{\text{fused}} = \alpha_{\text{obs}} X_{\text{obs}} + (1 - \alpha_{\text{obs}}) X_{\text{model}}$$
 
-Furthermore, siguiendo **Model Output Statistics (MOS)** nowcast bias correction (Glahn & Lowry, 1972), the observed temperature innovation $\Delta T_0 = T_{\text{fused}}(t_{\text{now}}) - T_{\text{NWP}}(t_{\text{now}})$ is propagated into the upcoming 6 hours of the hourly strip with an exponential relaxation timescale $\tau_{\text{MOS}} = 3.5\text{ hours}$:
+for temperature, humidity and wind ($\alpha \approx 0.95$ at $0\text{ km}$, $0.74$ at $25\text{ km}$, $0.40$ at $60\text{ km}$ for fresh reports). Following **Model Output Statistics** nowcast practice (Glahn & Lowry, 1972), the remaining innovation $\Delta T_0 = T_{\text{fused}} - T_{\text{forecast}}(t_{\text{now}})$ (clamped to $\pm 8\,^\circ\text{C}$) is carried into the next 6 hours of the strip with
 
-$$T_{\text{corrected}}(t_k) = T_{\text{NWP}}(t_k) + \Delta T_0 \cdot \exp\!\left(-\frac{t_k - t_{\text{now}}}{3.5\text{ h}}\right), \qquad 0 \le t_k - t_{\text{now}} \le 6\text{ h}$$
+$$T(t_k) = T_{\text{forecast}}(t_k) + \Delta T_0 \cdot \exp\!\left(-\frac{t_k - t_{\text{now}}}{3.5\text{ h}}\right)$$
+
+where $T_{\text{forecast}}$ already includes the learned local bias (§6.9), so the two never double-count.
+
+### 6.7 Station Catalog: Reachability, Testing and Health (`WxStationCatalog`)
+
+Every station ever retrieved is kept in `<config>/weather/stations.json` (at most 6000 records) with its metadata, DEM elevation, last report and track record.
+
+- **Reachability.** Each fetch records which stations it was expected to return (its box, its forecast-office area, or its requested ids). An expected station that did not report accumulates silence by the time since the previous check, **at most 1 h per check**, so time with the app closed never counts; after $72\text{ h}$ of silence while the app was checking, the station is dropped. A new report resets the clock; a returning station starts again on probation.
+- **Leave-one-out testing (`WxStationFusion.crossValidate`).** On every refresh, each site with at least two usable neighbours within $40\text{ km}$ (reports at most $90\text{ min}$ old) is predicted from its neighbours with the same kernel, trust, health, Shepard and buddy check; the residual $e = T_{\text{reduced}} - \hat T$ (clipped to $\pm 15\,^\circ\text{C}$) updates the station's record (at most once per $9\text{ min}$) as exponentially weighted moving averages ($\alpha = \max(0.08,\, 1/(n+1))$) of the bias, kept **separately by day and by night** (a sun-exposed sensor is only wrong by day), and of the squared error.
+- **Health.** After 3 tests, with $E = \sqrt{\text{bias}^2 + \text{scatter}^2}$ (the bias of the current day/night half once it has 3 tests, else the overall mean bias; the scatter from the mean squared error):
+
+$$\text{health} = \underbrace{\min\!\left(1,\; 0.6 + 0.4\,\frac{n_{\text{tests}}}{6}\right)}_{\text{probation}} \cdot \begin{cases} 1 & E \le 1.5\,^\circ\text{C} \\[2pt] \dfrac{1}{1 + \left(\frac{E - 1.5}{1.5}\right)^{2}} & 1.5 < E < 8 \\[6pt] 0 & E \ge 8\,^\circ\text{C} \end{cases} \cdot \underbrace{[\text{not stuck}]}_{\text{non-METAR, unchanged} \ge 8\text{ h} \Rightarrow 0}$$
+
+METARs (whole degrees, often steady overnight) are exempt from the stuck test. Health multiplies the prior weight (§6.1) in both the blend and the cross-validation.
+
+### 6.8 Station Credits
+
+The forecast page credits every network whose reports could enter the blend ([`StationNetworks.swift`](WeatherCore/Providers/StationNetworks.swift) `credits(for:)`): NOAA AWC / NWS and the Iowa Environmental Mesonet (public domain, credit appreciated); Environment and Climate Change Canada's Data Server End-use Licence statement, linked to the licence; DWD, DMI, FMI, SMHI, GeoSphere Austria, MeteoSwiss, KNMI ("Source: KNMI", linked to the dataset) and MET Norway ("Data from The Norwegian Meteorological Institute") by name (CC BY 4.0), followed by one CC BY 4.0 link noting that the readings are quality-checked and blended; "Powered by Met Office data" (DataHub licence); and "Source: Météo-France" and "Source: AEMET" with the time of the network's newest report used (`credits(for:newestReportS:)`, e.g. ", data of 25 Oct 14:00 UTC"), since Licence Ouverte 2.0 and AEMET's legal notice require the source and the date of the data. The snapshot keeps each network's newest report time for this. The Air Quality card adds its own credit (§8.2).
+
+### 6.9 Learned Local Forecast Bias (`WxLocalBias`)
+
+Models carry systematic local errors that one grid point cannot see (a valley that runs $3\,^\circ\text{C}$ colder at dawn, a coast that stays warmer at night). When the station pool is close and fresh ($\bar d \le 25\text{ km}$, $\bar t \le 45\text{ min}$), the fused station temperature is compared with the **uncorrected** model blend at that moment, and the error $e = T_{\text{obs}} - T_{\text{model}}$ is learned per place in **24 mean-solar-hour bins**:
+
+- **Sampling:** at most one sample per bin every $20\text{ min}$; $|e| > 10\,^\circ\text{C}$ is rejected as implausible; $b_h \leftarrow b_h + \alpha (e - b_h)$ with $\alpha = \max(0.07,\, 1/(n_h+1))$ (a plain mean for the first samples, then a ~2-week memory).
+- **Applying:** the correction at solar hour $h$ is the $[1, 2, 1]$-smoothed bias of bins $h-1, h, h+1$, with an effective sample count $n_{\text{eff}} = n_h + \tfrac12(n_{h-1} + n_{h+1})$; nothing is applied below $n_{\text{eff}} = 3$, confidence $\min(1, n_{\text{eff}}/6)$ above; the correction is capped at $\pm 4\,^\circ\text{C}$.
+- **Staleness:** a place not updated for more than 30 days (the season has changed) fades with an e-folding time of 30 days until new samples arrive.
+- **Effect:** every forecast hour's temperature and feels-like are shifted by the correction of its solar hour, and the days (highs/lows) are rebuilt from the shifted hours (`WxDaily.build`). `AppModel.Place.modelForecast` keeps the raw blend; `Place.forecast` (what every view shows) is the corrected one. The record is saved in `<config>/weather/local-bias.json`, survives restarts, and is deleted with its place. Learning happens on each Mac while the app runs.
+
+### 6.10 Networks That Need the User's Key
+
+**Implementation:** [`KeyedStationNetworks.swift`](WeatherCore/Providers/KeyedStationNetworks.swift) (pure URL builders and parsers, tested against real and published responses), [`StationNetworkInfo.swift`](WeatherCore/Providers/StationNetworkInfo.swift) (names, coverage, and the sign-up steps and limits shown in Settings and the Help Book), [`StationKeys.swift`](Weather/Detail/StationKeys.swift) (Keychain), [`StationNetworkFetcher.swift`](Weather/Detail/StationNetworkFetcher.swift).
+
+- **Keys** live in the login Keychain (generic passwords, service `io.github.wtp128pro.Weather.station-keys`, account = the network's raw value), are trimmed on save, never logged, and sent only to their own host over HTTPS. The HTTP cache key includes the request headers, so a replaced key is never answered from the old key's cache. AEMET and Météo-France keys are JSON Web Tokens: their `exp` claim is read (not verified) to show the expiry in Settings.
+- **Gathering.** `StationNetworkFetcher.gather(…, configuration:)` skips networks the user turned off and keyed networks without a key, and records each network's outcome (`StationNetworkStatus`: ok with the report count, key refused (401/403, or AEMET's empty answer), rate limited (429), failed, unreachable) with its time and place for the Stations tab. A key or switch change bumps `LiveStationStore.configRevision`, so every place is fetched again.
+- **Budgets.** The fetchers stay far inside the free plans: Met Office at most 3 stations per place, each at most hourly; KNMI one box query per 5 min; Frost two requests per place per 5 min; Météo-France one national 6-minute package per 6 min; AEMET two requests per 15 min. A network that cannot be reached contributes its catalog readings of the last 90 minutes (§6.7), as the keyless ones do.
+- **Not used:** the Met Office's keyless AWS bucket (1–2 h behind, no gusts, CC BY-SA), and keyless Météo-France files (rebuilt once a day).
+
+### 6.11 Settings › Stations
+
+**Implementation:** [`StationsSettingsTab.swift`](Weather/Settings/StationsSettingsTab.swift), [`StationSettings.swift`](WeatherCore/Storage/StationSettings.swift), `AppModel` (`stationSettings`, `localCorrections`).
+
+- **Learned Local Corrections:** on/off for all places (`WxStationSettings.localCorrectionsEnabled`; learning continues while off, and `AppModel.shown` applies the bias only when on), and per place a status (`WxLocalBias.summary`), the correction now, today's 24 local clock hours as bars (`WxLocalBias.samples`), Reset and Reset All.
+- **Networks** with and without a key: key entry (Save / Replace / Remove), the expiry, the service's sign-up steps, an on/off switch per network (`WxStationSettings.disabledNetworks`) and the status line.
+- **Stations near the selected place** (`WxStationCatalog.nearby`, 60 km): each station's weight and why (`WxStationCatalog.assessment`: probation, good, reduced, excluded, stuck), and Forget All Stations (`removeAll()`).
+- The settings are saved in `<config>/weather/station-settings.json`.
 
 ---
 
@@ -428,9 +500,9 @@ To compute apparent ("Feels Like") temperature from assimilated surface observat
 
 ---
 
-## 8. Radiative Cloud Transmittance & EPA AirNow AQI Interpolation
+## 8. Radiative Cloud Transmittance & the Air Quality Card
 
-**Implementation:** [`Weather/Detail/LiveStationFetcher.swift:362-414, 620-730`](Weather/Detail/LiveStationFetcher.swift#L362-L414)
+**Implementation:** [`Weather/Detail/LiveStationFetcher.swift`](Weather/Detail/LiveStationFetcher.swift) (cloud cover, HTTP), [`WeatherCore/Providers/AirQuality.swift`](WeatherCore/Providers/AirQuality.swift) (air quality, pure)
 
 ### 8.1 Multi-Layer Random-Overlap Radiative Cloud Cover
 
@@ -443,13 +515,16 @@ where $c_k \in [0, 1]$ is layer $k$'s geometric sky fraction and $\alpha_k$ is i
 - Mid deck ($6{,}500\text{ ft} \le z_{\text{base}} < 18{,}000\text{ ft}$): $\alpha_k = 0.85$
 - High cirrus deck ($z_{\text{base}} \ge 18{,}000\text{ ft}$): $\alpha_k = 0.55$
 
-### 8.2 US EPA AirNow Inverse-Distance-Squared AQI Interpolation
+### 8.2 The Air Quality Card: One Monitor As Reported, Else the CAMS Forecast
 
-For US locations, [`LiveStationFetcher.swift`](Weather/Detail/LiveStationFetcher.swift) queries real-time EPA AirNow monitors (`O3`, `PM2.5`, `PM10`) and interpolates the Air Quality Index using inverse-distance-squared weighting with a $2.0\text{ km}$ core softening radius:
+The card shows a real reading or nothing; it never estimates air quality from the weather (an earlier version did, and showed the estimate like a measurement).
 
-$$w_{\text{AQI},i} = \frac{1}{\max(d_i, 2.0\text{ km})^2}, \qquad \text{AQI}_{\text{interp}} = \operatorname{round}\!\left(\frac{\sum_i w_{\text{AQI},i} \, \text{AQI}_i}{\sum_i w_{\text{AQI},i}}\right)$$
+1. **Nearest monitor (outside Europe).** AirNow's public ArcGIS layers are queried within $45\text{ km}$: the current layer (`Air_Now_Current_Monitors_Ozone_and_PM`) for the latest reading of every monitor, and in parallel the hourly layer (`Air_Now_Monitor_Data_Public`, which keeps about 27 h) for the hours $[t_h - 27\text{ h},\, t_h - 23\text{ h}]$. The card shows `OZONEPM_AQI` (the higher of the ozone and particle NowCast indices) of the **nearest** monitor whose newest reading is at most $3\text{ h}$ old, as reported; when the current layer has none, the hourly layer's last 3 hours are used. Readings are not interpolated between monitors: AirNow's Data Exchange Guidelines ask that observed values be disseminated as received, marked preliminary, and credited to the reporting agency and the EPA AirNow program (the card's credit: *"Air quality: South Coast AQMD via U.S. EPA AirNow (preliminary data)"*).
+2. **CAMS forecast (elsewhere, or no monitor).** Open-Meteo's air-quality API (`current=us_aqi,european_aqi,pm2_5,nitrogen_dioxide&hourly=us_aqi&past_days=1&timeformat=unixtime`): CAMS European (0.1°) or global (0.4°). The card says it is a model forecast, adds PM2.5 and NO₂, and the European AQI in Europe; credit *"Air quality: Copernicus Atmosphere Monitoring Service (CAMS) via Open-Meteo"*, as Open-Meteo's terms require.
+3. **Yesterday.** The comparison uses the **same source 24 hours earlier**: the same monitor (by AQS site id) within ±30 min of $t - 24\text{ h}$, or the CAMS hourly value whose time is the current hour minus 24 h. Within ±8 the sentence says *similar*, otherwise *better* or *worse*, with yesterday's value. (Before: the monitor path took the oldest of the 30 newest records of all monitors — a few hours earlier, at another monitor — and the CAMS path the 24th value from the end after dropping gaps, i.e. 00:00 UTC today.)
+4. **No reading.** The card shows the dash; a later refresh in which neither source answers keeps the previous reading while it is less than 3 h old.
 
-and classifies into the 6 statutory US EPA categories (40 CFR Part 58 Appendix G):
+The scale has six equal bands in the EPA category colours (TAD 2018: green, yellow, orange, red, purple, maroon), and `scalePosition` places a value inside its own category's band:
 - `0–50`: **Good**
 - `51–100`: **Moderate**
 - `101–150`: **Unhealthy for Sensitive Groups**
@@ -552,7 +627,7 @@ When a user searches for a street address, postal code, landmark, or city in the
 - **Service Orchestrator (`ServiceOrchestrator`):** Enforces a `cooldownUs = 60,000,000 µs` ($60\text{ s}$) per-place rate-limit cooldown if all providers return `.rateLimited`.
 
 ### 12.3 Crash-Safe Atomic Persistence (`FileIO.swift`)
-All JSON stores (`places.json`, `settings.json`, `forecasts.json`, `weights.json`) are written via a temporary sibling file (`<name>.tmp.<pid>.<counter>`) with mode `0600`, flushed to physical non-volatile media via `fcntl(fd, F_FULLFSYNC)` (falling back to `fsync`), atomically renamed over the target path via POSIX `rename(2)`, and followed by `fsync` on the parent directory descriptor.
+All JSON stores (`places.json`, `settings.json`, `forecasts.json`, `weights.json`, `stations.json`, `local-bias.json`, `station-settings.json`) are written via a temporary sibling file (`<name>.tmp.<pid>.<counter>`) with mode `0600`, flushed to physical non-volatile media via `fcntl(fd, F_FULLFSYNC)` (falling back to `fsync`), atomically renamed over the target path via POSIX `rename(2)`, and followed by `fsync` on the parent directory descriptor.
 
 ---
 
@@ -562,9 +637,13 @@ All JSON stores (`places.json`, `settings.json`, `forecasts.json`, `weights.json
 | :--- | :--- | :--- |
 | **ADR-01** | **Preserve Bundle ID `io.github.wtp128pro.Weather` while renaming display name to `Neginato Mezora`** | Keeps Apple Developer ID provisioning profiles, notarization tickets, Keychain / UserDefaults domains, and macOS sandbox container paths (`~/Library/Containers/io.github.wtp128pro.Weather/`) 100% compatible without data migration loss. |
 | **ADR-02** | **Weighted Median for Continuous Variables, Weighted Mean for Probability** | Eliminates single-model outlier contamination ("ensemble drizzle bias") on physical quantities while preserving calibrated probability expectations. |
-| **ADR-03** | **Native macOS Settings (`⌘,`) Replacing Hamburger Popover** | Aligns with macOS Human Interface Guidelines and `Neginato` (`../../music`), providing dedicated grouped tabs (`Sources`, `Weights`, `General`) with interactive sliders for both provider and per-model weights. |
+| **ADR-03** | **Native macOS Settings (`⌘,`) Replacing Hamburger Popover** | Aligns with macOS Human Interface Guidelines and `Neginato` (`../../music`), providing dedicated grouped tabs (`Sources`, `Weights`, `Stations`, `General`) with interactive sliders for both provider and per-model weights. |
 | **ADR-04** | **Persist Custom Weights in `weights.json` Separate from `settings.json`** | Guarantees byte-for-byte backward compatibility with the strict C `settings.json` schema (`version`, `units`, `disabled_providers`, `selected`) and its fuzz/roundtrip test suite. |
 | **ADR-05** | **Dual-Series Labeled Rain Charts with Direct Peak Callouts & Hover Inspection** | Resolves ambiguity between bars (Rain rate in `in/h` or `mm/h`, left Y-axis) and curve (Rain chance in `%`, right Y-axis) via explicit pill legends, color-matched axis labels (`Rate · <max>/h`, `<mid>/h`, `0`, `100%`, `50%`, `0%`), peak badges, and live hover inspection. |
+| **ADR-06** | **One station pool and one algorithm for every country, from every keyless network** | Airports alone leave most places 20–60 km from the nearest report; national, road-weather and research networks are denser. Trust priors and a measured per-station health record (leave-one-out cross-validation, persisted in `stations.json`) let lower-grade sites help without letting a bad sensor hurt. Networks that need a key join the same pool when the user supplies one (ADR-08). |
+| **ADR-07** | **Learned local bias corrects the shown forecast; the raw blend is kept** | `Place.modelForecast` stays the pure model blend, so learning compares observations with the uncorrected model and never feeds on its own corrections; `Place.forecast` is the corrected one. Silence and staleness clocks advance only while the app runs, so closing the app never ages the station catalog or the learned bias. |
+| **ADR-08** | **Keyed national networks use the user's own free key, kept in the Keychain** | The Met Office, KNMI, MET Norway Frost, Météo-France and AEMET publish real-time station data only to registered users, free. The app cannot ship a shared key (each service's terms tie a key to its registrant, and quotas are per key), so the user registers and pastes their key; Settings gives each service's exact steps and limits. Keys never touch a file or a log, and requests stay well inside the free quotas. |
+| **ADR-09** | **Air quality: a real reading or nothing** | A number estimated from wind, rain and heat looked like a measurement and could not be checked. The card shows the nearest AirNow monitor as reported (AirNow's guidelines: as received, preliminary, credited) or the CAMS forecast, says which, and compares with the same source 24 h earlier; without either it shows the dash. |
 
 ---
 

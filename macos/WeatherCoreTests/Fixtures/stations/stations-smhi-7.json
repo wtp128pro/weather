@@ -1,0 +1,145 @@
+{
+ "updated": 1792954800000,
+ "parameter": {
+  "key": "7",
+  "name": "Nederbördsmängd",
+  "summary": "summa 1 timme, 1 gång/tim",
+  "unit": "millimeter"
+ },
+ "period": {
+  "key": "latest-hour",
+  "from": 1792951201000,
+  "to": 1792954800000,
+  "summary": "Data från senaste timmen",
+  "sampling": "1 timme"
+ },
+ "link": [
+  {
+   "href": "https://opendata-download-metobs.smhi.se/api/version/1.0/parameter/7/station-set/all/period/latest-hour/data.json",
+   "rel": "data",
+   "type": "application/json"
+  },
+  {
+   "href": "https://opendata-download-metobs.smhi.se/api/version/1.0/parameter/7/station-set/all/period/latest-hour/data.xml",
+   "rel": "data",
+   "type": "application/xml"
+  },
+  {
+   "href": "https://opendata-download-metobs.smhi.se/api/version/1.0/parameter/7/station-set/all/period/latest-hour/data.csv",
+   "rel": "data",
+   "type": "text/plain"
+  },
+  {
+   "href": "https://opendata-download-metobs.smhi.se/api/version/1.0/parameter/7/station-set/all/period/latest-hour.atom",
+   "rel": "period",
+   "type": "application/atom+xml"
+  },
+  {
+   "href": "https://opendata-catalog.smhi.se/md/25080190-38ba-4279-a65d-d9ef8d0bf949",
+   "rel": "iso19139",
+   "type": "application/vnd.iso.19139+xml"
+  },
+  {
+   "href": "https://opendata-catalog.smhi.se/md/2cdaac6d-e9eb-4857-a44f-b07521a18afd",
+   "rel": "iso19139",
+   "type": "application/vnd.iso.19139+xml"
+  }
+ ],
+ "station": [
+  {
+   "key": "188790",
+   "name": "Abisko Aut",
+   "owner": "Polarforskningssekretariatet",
+   "ownerCategory": "CLIMATE",
+   "measuringStations": "CORE",
+   "from": 1543622400000,
+   "to": 1792956022000,
+   "height": 392.235,
+   "latitude": 68.3538,
+   "longitude": 18.8164,
+   "value": [
+    {
+     "date": 1792954800000,
+     "value": "0.0",
+     "quality": "G"
+    }
+   ]
+  },
+  {
+   "key": "97280",
+   "name": "Adelsö A",
+   "owner": "SMHI",
+   "ownerCategory": "CLIMATE",
+   "measuringStations": "CORE",
+   "from": 817776000000,
+   "to": 1792956022000,
+   "height": 5.612,
+   "latitude": 59.3579,
+   "longitude": 17.5213,
+   "value": [
+    {
+     "date": 1792954800000,
+     "value": "0.0",
+     "quality": "G"
+    }
+   ]
+  },
+  {
+   "key": "167710",
+   "name": "Arjeplog A",
+   "owner": "SMHI",
+   "ownerCategory": "CLIMATE",
+   "measuringStations": "CORE",
+   "from": 959817600000,
+   "to": 1792956022000,
+   "height": 430.839,
+   "latitude": 66.0513,
+   "longitude": 17.8396,
+   "value": [
+    {
+     "date": 1792954800000,
+     "value": "0.3",
+     "quality": "G"
+    }
+   ]
+  },
+  {
+   "key": "159880",
+   "name": "Arvidsjaur A",
+   "owner": "SMHI",
+   "ownerCategory": "CLIMATE",
+   "measuringStations": "CORE",
+   "from": 823132800000,
+   "to": 1792956022000,
+   "height": 382.45,
+   "latitude": 65.5941,
+   "longitude": 19.2642,
+   "value": [
+    {
+     "date": 1792954800000,
+     "value": "0.0",
+     "quality": "G"
+    }
+   ]
+  },
+  {
+   "key": "92410",
+   "name": "Arvika A",
+   "owner": "SMHI",
+   "ownerCategory": "CLIMATE",
+   "measuringStations": "CORE",
+   "from": 820454400000,
+   "to": 1792956022000,
+   "height": 65.758,
+   "latitude": 59.6743,
+   "longitude": 12.6354,
+   "value": [
+    {
+     "date": 1792954800000,
+     "value": "0.2",
+     "quality": "G"
+    }
+   ]
+  }
+ ]
+}

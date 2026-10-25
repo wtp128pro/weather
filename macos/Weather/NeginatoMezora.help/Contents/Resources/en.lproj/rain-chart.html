@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="AppleTitle" content="Neginato Mezora Help">
-    <title>Rain Graph & Bars Guide — Neginato Mezora Help</title>
+    <title>Rain Graph &amp; Bars Guide — Neginato Mezora Help</title>
     <link rel="stylesheet" href="book.css">
     <link rel="stylesheet" href="help-ui.css">
 </head>
@@ -17,48 +17,75 @@
             <nav>
                 <div class="nav-section">Getting Started</div>
 <a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
-<a class="nav-link active" href="rain-chart.html">Rain Graph & Bars Guide</a>
-<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts & Places</a>
-<div class="nav-section">Sources & Ensemble Weights</div>
-<a class="nav-link" href="sources-weights.html">Settings: Data Sources & Weights</a>
-<div class="nav-section">Algorithms & Meteorology</div>
-<a class="nav-link" href="algorithms.html">Ensemble Blending & Citations</a>
-<a class="nav-link" href="live-stations.html">Live Station 3D Assimilation</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link active" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
             </nav>
         </aside>
         <main class="help-main">
             <h1>Rain Graph &amp; Bars Guide</h1>
-<p>The <strong>Rain</strong> card in the detail pane displays up to two charts side-by-side: <strong>Next 2 hours</strong> (15-minute intervals, shown across the US, Canada, UK, Netherlands, Germany, and Europe when sub-hourly nowcast data is available) and <strong>Next 24 hours</strong> (hourly intervals). Each visual series is explicitly labeled in the header legend and on the axes.</p>
+<p>The <strong>Rain</strong> card shows up to two charts side by side: <strong>Next 2 hours</strong> (15-minute bars) when 15-minute data is available for the place, and <strong>Next 24 hours</strong> (hourly bars and a chance curve), always. Each chart's legend names its series.</p>
 
 <div class="callout">
-    <strong>Bars = Rain Rate (Intensity, Left Axis)</strong><br>
-    The vertical aqua-to-cobalt bars show <em>how hard it is expected to rain</em> in <code>in/h</code> (Imperial) or <code>mm/h</code> (Metric). Read bar heights against the <strong>Left Y-Axis</strong> (labeled <code>Rate · 0.10 in/h</code> / <code>2.5 mm/h</code> at the top, half-scale at the middle dashed line, and <code>0</code> at the baseline).
+    <strong>Bars = rain rate (how hard), left axis</strong><br>
+    The blue bars show the expected precipitation rate in <code>in/h</code> (Imperial) or <code>mm/h</code> (Metric). Read them against the <strong>left axis</strong>: the top label (<code>Rate · 0.1 in/h</code> or <code>Rate · 2.5 mm/h</code>), the middle line (half of it) and <code>0</code>. The scale starts at 0.1 in/h (2.5 mm/h) and doubles until the largest bar fits, so light rain still shows. On the 2-hour chart each bar is the 15-minute amount expressed as an hourly rate.
 </div>
 
 <div class="callout amber">
-    <strong>Curve = Rain Chance (Probability %, Right Axis)</strong><br>
-    On the 24-hour chart, the smooth amber-rose curve with glowing circular nodes shows <em>how likely measurable rain (&ge; 0.1 mm/h) is</em> during each hour, from <code>0%</code> to <code>100%</code>. Read the curve against the <strong>Right Y-Axis</strong> (labeled <code>100%</code> at top, <code>50%</code> at midline, and <code>0%</code> at bottom).
+    <strong>Curve = rain chance, right axis</strong><br>
+    On the 24-hour chart the amber curve shows the chance of measurable precipitation (at least 0.1 mm, about 0.004 in) in each hour, read against the <strong>right axis</strong> (<code>100%</code>, <code>50%</code>, <code>0%</code>).
 </div>
 
-<h2>Reading On-Chart Callouts &amp; Hover Inspection</h2>
+<h2>Callouts and hover</h2>
 <ul>
-    <li><strong>Peak Bar Badges:</strong> Up to two highest non-zero bars display a cyan badge directly above the bar cap showing the exact precipitation rate (e.g., <code>0.08 in/h</code> or <code>1.5 mm/h</code>).</li>
-    <li><strong>Peak Chance Badge:</strong> The highest probability hour on the 24-hour curve displays an amber-rose badge (e.g., <code>Peak 80%</code>).</li>
-    <li><strong>Interactive Hover Readout:</strong> Move the pointer across any time slot on either chart to reveal a vertical guide line and a floating summary banner at the top of the plot: <code>3:00 PM · Bar: 0.06 in/h · Chance: 70%</code>.</li>
+    <li><strong>Peak bars:</strong> the two highest bars carry their rate (for example <code>0.08 in/h</code>).</li>
+    <li><strong>Peak chance:</strong> the highest point of the curve is labelled (for example <code>Peak 80%</code>).</li>
+    <li><strong>Hover</strong> over any slot for a guide line and a readout such as <code>3 PM · Bar: 0.06 in/h · Chance: 70%</code>; slots without a time label read <code>+2h</code> or <code>+30m</code>.</li>
+    <li>The time axis shows up to 5 labels, starting with <strong>Now</strong>. A chart without data says <em>No data</em>.</li>
+    <li>VoiceOver reads a summary of each chart, for example <em>Highest chance: 70% at 3 PM</em>.</li>
 </ul>
 
-<h2>Precipitation Intensity Classification</h2>
+<h2>How heavy is it?</h2>
+<p>These are the bands the Rain card's sentences use.</p>
 <table>
     <thead>
-        <tr><th>Category</th><th>Metric Rate (mm/h)</th><th>Imperial Rate (in/h)</th><th>Physical Description</th></tr>
+        <tr><th>Words used</th><th>Metric rate</th><th>Imperial rate</th><th>What it is like</th></tr>
     </thead>
     <tbody>
-        <tr><td><strong>Dry / Trace</strong></td><td><code>&lt; 0.1 mm/h</code></td><td><code>&lt; 0.004 in/h</code></td><td>No measurable accumulation.</td></tr>
-        <tr><td><strong>Light Rain</strong></td><td><code>0.1 – 2.5 mm/h</code></td><td><code>0.004 – 0.10 in/h</code></td><td>Individual drops easily identified; small puddles form slowly.</td></tr>
-        <tr><td><strong>Moderate Rain</strong></td><td><code>2.5 – 7.6 mm/h</code></td><td><code>0.10 – 0.30 in/h</code></td><td>Rapid puddle formation; visible spray off roofs and pavement.</td></tr>
-        <tr><td><strong>Heavy Rain</strong></td><td><code>&ge; 7.6 mm/h</code></td><td><code>&ge; 0.30 in/h</code></td><td>Sheets of rain; rapid runoff and reduced visibility.</td></tr>
+        <tr><td><strong>Very light</strong></td><td>below 0.5 mm/h</td><td>below 0.02 in/h</td><td>Drizzle or scattered drops; surfaces barely wet.</td></tr>
+        <tr><td><strong>Light</strong></td><td>0.5 – 2.5 mm/h</td><td>0.02 – 0.10 in/h</td><td>Steady light rain; puddles form slowly.</td></tr>
+        <tr><td><strong>Moderate</strong></td><td>2.5 – 7.6 mm/h</td><td>0.10 – 0.30 in/h</td><td>Puddles form quickly; spray off roofs and roads.</td></tr>
+        <tr><td><strong>Heavy</strong></td><td>7.6 mm/h and more</td><td>0.30 in/h and more</td><td>Sheets of rain, fast runoff, poor visibility.</td></tr>
     </tbody>
 </table>
+
+<h2>Where the 2-hour chart comes from</h2>
+<table>
+    <thead><tr><th>Where</th><th>15-minute model</th></tr></thead>
+    <tbody>
+        <tr><td>Contiguous United States, and southern Canada</td><td>NOAA HRRR (3 km)</td></tr>
+        <tr><td>Rest of Canada</td><td>Open-Meteo's best 15-minute model for the spot</td></tr>
+        <tr><td>UK &amp; Ireland</td><td>UK Met Office (2 km)</td></tr>
+        <tr><td>Netherlands, Belgium, Luxembourg</td><td>KNMI HARMONIE-AROME (2 km)</td></tr>
+        <tr><td>Germany &amp; Central Europe</td><td>DWD ICON-D2 (2 km)</td></tr>
+        <tr><td>Rest of Europe and the Nordic countries, south of 65°N and between 11°W and 25°E</td><td>Open-Meteo's best 15-minute model for the spot</td></tr>
+        <tr><td>Alaska, Hawaii and the rest of the world</td><td>None: only the 24-hour chart is shown</td></tr>
+    </tbody>
+</table>
+<p>The quarters are rescaled so that each hour's four quarters add up to the blended hourly amount, so the two charts never disagree about how much falls in an hour.</p>
         </main>
     </div>
     <script src="search-index.js"></script>

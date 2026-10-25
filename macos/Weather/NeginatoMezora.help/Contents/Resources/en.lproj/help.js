@@ -5,7 +5,7 @@
 
     input.addEventListener('input', function() {
         const q = input.value.trim().toLowerCase();
-        resultsBox.innerHTML = '';
+        resultsBox.replaceChildren();
         if (q.length < 2) {
             resultsBox.classList.remove('visible');
             return;
@@ -14,13 +14,20 @@
             item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q)
         );
         if (hits.length === 0) {
-            resultsBox.innerHTML = '<div class="search-hit">No matching topics found.</div>';
+            const none = document.createElement('div');
+            none.className = 'search-hit';
+            none.textContent = 'No matching topics found.';
+            resultsBox.appendChild(none);
         } else {
             hits.forEach(hit => {
                 const a = document.createElement('a');
                 a.className = 'search-hit';
                 a.href = hit.href;
-                a.innerHTML = '<strong>' + hit.title + '</strong><span>' + hit.section + '</span>';
+                const title = document.createElement('strong');
+                title.textContent = hit.title;
+                const section = document.createElement('span');
+                section.textContent = hit.section;
+                a.append(title, section);
                 resultsBox.appendChild(a);
             });
         }

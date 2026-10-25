@@ -658,8 +658,8 @@ private struct ChartSeriesLegend: View {
     }
 }
 
-/// Apple Weather-style Air Quality card with index, category, full-spectrum AQI rainbow bar,
-/// and comparison summary.
+/// The Air Quality card: index, category, the AQI scale, the comparison with yesterday and where
+/// the value comes from.
 private struct AirQualityCardView: View {
     let airQuality: DetailViewModel.AirQualityCard
 
@@ -685,12 +685,19 @@ private struct AirQualityCardView: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(WeatherTheme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
+            if let source = airQuality.source {
+                Text(source)
+                    .font(.caption)
+                    .foregroundStyle(WeatherTheme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .accessibilityElement(children: .combine)
     }
 }
 
-/// Apple Weather full-spectrum AQI bar with a white-ringed position dot.
+/// The AQI scale: six equal bands in the EPA category colours, with a white-ringed dot inside the
+/// value's band.
 private struct AQIScaleBar: View {
     let index: Int?
 
@@ -703,7 +710,7 @@ private struct AQIScaleBar: View {
                     .frame(height: 6)
 
                 if let index {
-                    let frac = max(0.0, min(1.0, CGFloat(index) / 300.0))
+                    let frac = CGFloat(DetailViewModel.AirQualityCard.scalePosition(index))
                     let dotX = min(max(4, width * frac), max(4, width - 4))
                     Circle()
                         .fill(Color.white)

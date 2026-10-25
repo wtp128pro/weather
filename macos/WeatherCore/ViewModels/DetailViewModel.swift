@@ -194,23 +194,50 @@ public final class DetailViewModel {
         }
     }
 
-    /// The "Air Quality" card modeled on Apple Weather's AQI module.
+    /// The "Air Quality" card: the US AQI of the nearest AirNow monitor as reported, else the CAMS
+    /// model's forecast (WxAirQuality), compared with the same source 24 hours earlier. Never
+    /// estimated from the weather: without a reading the card shows the dash.
     public struct AirQualityCard: Sendable, Equatable {
         public static let title = "Air Quality"
-        /// Numeric US AQI (0...500), nil when current conditions are unavailable.
+        /// The category of a card without a reading.
+        public static let unavailableCategory = "No data"
+        /// Numeric US AQI (0...500), nil without a reading.
         public let index: Int?
         /// Display string for the AQI value ("40" or "—").
         public let valueText: String
         /// Category label ("Good", "Moderate", etc.).
         public let category: String
-        /// Descriptive comparison / advisory sentence.
+        /// The comparison with yesterday, or why there is no value.
         public let summary: String
+        /// Where and when the value was measured or forecast; nil without a reading.
+        public let source: String?
+        /// The hour the value is valid for, UTC unix seconds; nil without a reading.
+        public let validS: Int64?
+        /// The credit its source's terms ask for on the attribution line; nil without a reading.
+        public let credit: WxStationNetworks.Credit?
 
-        public init(index: Int?, valueText: String, category: String, summary: String) {
+        public init(index: Int?, valueText: String, category: String, summary: String,
+                    source: String? = nil, validS: Int64? = nil, credit: WxStationNetworks.Credit? = nil) {
             self.index = index
             self.valueText = valueText
             self.category = category
             self.summary = summary
+            self.source = source
+            self.validS = validS
+            self.credit = credit
+        }
+
+        /// The card without a reading: offline, before the first air-quality fetch or when no
+        /// source answered.
+        public nonisolated static func unavailable(offline: Bool) -> AirQualityCard {
+            AirQualityCard(
+                index: nil,
+                valueText: WxFormat.emDash,
+                category: unavailableCategory,
+                summary: offline
+                    ? "Air quality needs a network connection."
+                    : "No air-quality reading for this place yet. It is checked again at every refresh."
+            )
         }
 
         /// Category label for a US AQI value.
@@ -225,19 +252,29 @@ public final class DetailViewModel {
             }
         }
 
-        /// Summary sentence comparing `aqi` with `referenceAQI` (e.g. 24h earlier/later).
-        public nonisolated static func summarySentence(aqi: Int, referenceAQI: Int?) -> String {
-            if let ref = referenceAQI {
-                let delta = aqi - ref
-                if abs(delta) <= 8 {
-                    return "Air quality index is \(aqi), which is similar to yesterday at about this time."
-                } else if delta < 0 {
-                    return "Air quality index is \(aqi), which is better than yesterday at about this time."
-                } else {
-                    return "Air quality index is \(aqi), which is higher than yesterday at about this time."
-                }
+        /// "Air quality index is 44, similar to yesterday at this time (37)." when the same source
+        /// had a value 24 hours earlier (within 8 points: similar), else "Air quality index is 44,
+        /// which is good."
+        public nonisolated static func summarySentence(aqi: Int, dayAgoAQI: Int?) -> String {
+            guard let dayAgoAQI else {
+                return "Air quality index is \(aqi), which is \(categoryLabel(for: aqi).lowercased())."
             }
-            return "Air quality index is \(aqi), which is \(categoryLabel(for: aqi).lowercased())."
+            let delta = aqi - dayAgoAQI
+            let comparison = abs(delta) <= 8 ? "similar to" : delta < 0 ? "better than" : "worse than"
+            return "Air quality index is \(aqi), \(comparison) yesterday at this time (\(dayAgoAQI))."
+        }
+
+        /// The category bounds of the US AQI (the lower bound of each of the six categories, then 501).
+        nonisolated static let categoryBounds = [0, 51, 101, 151, 201, 301, 501]
+
+        /// Where `aqi` sits on the card's scale, 0...1: the six categories take equal widths (as
+        /// the scale's six colour bands do), and a value sits inside its own category's band.
+        public nonisolated static func scalePosition(_ aqi: Int) -> Double {
+            let v = max(0, min(500, aqi))
+            let band = (categoryBounds.lastIndex { $0 <= v } ?? 0)
+            let lo = Double(categoryBounds[band])
+            let hi = Double(categoryBounds[band + 1])
+            return (Double(band) + (Double(v) - lo + 0.5) / (hi - lo)) / 6.0
         }
     }
 
@@ -389,7 +426,7 @@ public final class DetailViewModel {
             rain: rainCard(item, forecast: forecast, outlook: outlook, placeZone: placeZone,
                            forecastZone: forecastZone),
             clouds: cloudCard(item, forecast: forecast, current: current, zone: placeZone),
-            airQuality: airQualityCard(forecast: forecast, current: current),
+            airQuality: .unavailable(offline: item.offline),
             hours: HourCard.cards(forecast: forecast, units: item.units, nowS: item.nowS, zone: forecastZone),
             days: DayRow.rows(forecast: forecast, units: item.units, nowS: item.nowS, zone: forecastZone),
             footer: WxFormat.updated(ageS: ageS(item.nowS, item.fetchedS)) + separator + "Sources: "
@@ -605,46 +642,25 @@ public final class DetailViewModel {
                             + WxConditionRules.cloudLabel(cloud),
                          sentence: WxFormat.cloudSentence(forecast, nowS: item.nowS, zone: zone))
     }
+}
 
-    /// Computes a deterministic meteorological AQI baseline from current dispersion/washout conditions.
-    private nonisolated static func airQualityCard(forecast: WxForecast, current: WxBlendHour?) -> AirQualityCard {
-        guard let cur = current else {
-            return AirQualityCard(
-                index: nil,
-                valueText: "\u{2014}",
-                category: "Unavailable",
-                summary: "Air quality data is currently unavailable."
-            )
+extension DetailViewModel.ForecastPage {
+    /// The page with `credits` appended to its attribution line (entries and markup built as the
+    /// sources' are); a credit whose text is already on the line is not repeated.
+    public func addingAttribution(_ credits: [WxStationNetworks.Credit]) -> Self {
+        var shown = Set(attribution.map(\.text))
+        var fresh: [DetailViewModel.SourceText] = []
+        for c in credits where shown.insert(c.text).inserted {
+            fresh.append(.init(state: .ok, attribution: Array(c.text.utf8), url: Array(c.url.utf8)))
         }
-        let aqi = estimateAQI(for: cur)
-        let refHour = forecast.hours.first { abs(($0.tS - cur.tS) - 86_400) < 1800 }
-        let refAQI = refHour.map(estimateAQI(for:)) ?? aqi
-        return AirQualityCard(
-            index: aqi,
-            valueText: "\(aqi)",
-            category: AirQualityCard.categoryLabel(for: aqi),
-            summary: AirQualityCard.summarySentence(aqi: aqi, referenceAQI: refAQI)
-        )
-    }
-
-    private nonisolated static func estimateAQI(for h: WxBlendHour) -> Int {
-        var score: Double = 28.0
-        if h.windKmh.isFinite {
-            // Wind ventilation lowers particulate concentration; stagnant air raises it.
-            score -= min(10.0, max(-8.0, (h.windKmh - 12.0) * 0.55))
-        }
-        if h.precipMm.isFinite && h.precipMm > 0 {
-            // Wet scavenging / rain washout improves air quality.
-            score -= min(12.0, 3.0 + h.precipMm * 2.5)
-        }
-        if h.tempC.isFinite && h.isDay && h.tempC > 25.0 {
-            // Daytime photochemical ozone formation on warm days.
-            score += min(12.0, (h.tempC - 25.0) * 1.1)
-        }
-        if h.condition == .fog {
-            score += 14.0
-        }
-        let rounded = Int(score.rounded())
-        return max(12, min(160, rounded))
+        let added = DetailViewModel.attributionEntries(fresh)
+        guard !added.isEmpty else { return self }
+        let markup = ([attributionMarkup].filter { !$0.isEmpty } + added.map(\.markup))
+            .joined(separator: DetailViewModel.separator)
+        return Self(
+            place: place, showsOfflineBadge: showsOfflineBadge, showsStaleBadge: showsStaleBadge,
+            staleBadgeTooltip: staleBadgeTooltip, now: now, rain: rain, clouds: clouds, airQuality: airQuality,
+            hours: hours, days: days, footer: footer, showsRefreshing: showsRefreshing,
+            attribution: attribution + added.map(\.entry), attributionMarkup: markup, partial: partial)
     }
 }

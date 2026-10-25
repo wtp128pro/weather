@@ -298,12 +298,13 @@ public enum WxWeights {
         return base * mults.combinedMultiplier(sourceID: sourceID, modelID: modelID)
     }
 
-    /// Computes the regional 4-band weight for a matched table row.
+    /// Computes the regional 4-band weight for a matched table row. Humidity takes the same band
+    /// weight as temperature, wind, cloud and amount (not the flat 1.0 of the US/world table), so
+    /// the blended relative humidity comes from the models that lead the blended temperature and
+    /// the two stay physically consistent (dewpoint <= temperature from the same air mass).
     private static func regionalRowWeight(row: Row, variable: WxVar, band: Int, region: WxRegion) -> Double {
         func pick(_ b: [Double], prob: Double = 1.0) -> Double {
             switch variable {
-            case .humidity:
-                return b[band] > 0 ? 1.0 : 0.0
             case .precipProb:
                 return b[band] > 0 ? prob : 0.0
             default:

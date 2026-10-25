@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Troubleshooting &amp; FAQ — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link active" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Troubleshooting &amp; FAQ</h1>
+
+<h2>The forecast says "Stale" or "Couldn't load the forecast"</h2>
+<p>The last refresh failed; hover over the <strong>Stale</strong> badge for the reason. The app retries automatically (every 10 minutes, and when the window comes back to the front). If only some services failed, the page says <em>Not available right now: …</em> and the forecast is blended from the others. <kbd>⌘R</kbd> retries now (not more often than every 10 seconds).</p>
+
+<h2>Refresh does nothing</h2>
+<p>Refresh is ignored while the place is loading, within 10 seconds of its last refresh, for 60 seconds after a service asked for fewer requests, and while offline. Forecasts are also not fetched while the window is hidden or minimised.</p>
+
+<h2>The footer shows no station, or only a distant one</h2>
+<p>No station within 95 km reported in the last 3 hours, or the nearest ones are far. In the UK, the Netherlands, Norway, France and Spain, a free key adds the national network (<a href="station-keys.html">Free Keys for More Stations</a>). Settings › Stations › Stations Near… shows which stations are known for the selected place and their state.</p>
+
+<h2>A station near me reads clearly wrong</h2>
+<p>Each station is tested against its neighbours at every refresh; one that is off by more than 1.5 °C loses weight, from 8 °C it is not used, and a stuck reading is set aside after 8 hours. A brand-new station starts at 60% weight. If you have reason to distrust a whole network, turn it off in Settings › Stations.</p>
+
+<h2>The key I entered "was refused"</h2>
+<ul>
+    <li>Paste it again: the whole key, without extra characters (spaces at the ends are removed automatically).</li>
+    <li>Check that the key is for the right product of the service; some services only activate a key after you confirm your e-mail address or subscribe it to the observations product.</li>
+    <li>Some keys expire (AEMET's after 3 months); create a new one on the service's site and use <strong>Replace…</strong>.</li>
+</ul>
+<p>Each service's specific causes are listed in <a href="station-keys.html#trouble">When a key does not work</a>.</p>
+
+<h2>"The service's limit for this key was reached"</h2>
+<p>The free plan's request limit was hit, usually the Met Office's 360 calls a day with many UK places. The app keeps the network's recent readings for up to 90 minutes and tries again at the next refresh; the Met Office count resets at 00:00 UTC.</p>
+
+<h2>The forecast changed after I added stations or a key</h2>
+<p>More or closer stations change the "now" values, and over a few days the learned local corrections. That is expected. To compare with the plain models, turn off <strong>Correct forecasts with what nearby stations measure</strong> in Settings › Stations.</p>
+
+<h2>Learned corrections look wrong</h2>
+<p>Corrections are capped at ±4 °C and need several readings per hour of day, but a place whose only close station is badly sited can teach the wrong lesson. Reset the place in Settings › Stations › Learned Local Corrections, and consider turning off that station's network.</p>
+
+<h2>Why does the temperature differ from my phone's weather app?</h2>
+<p>Most weather apps show a single model or a provider's own blend for a grid point. Neginato Mezora blends several models, grounds "now" in tested nearby stations, and corrects for the place's learned local bias, so it can differ by a few degrees, especially at night, in valleys and near water.</p>
+
+<h2>The air quality number seems off, or shows a dash</h2>
+<p>The small line on the card says where the number comes from. A <em>measured</em> value is the nearest AirNow monitor's latest hourly reading, as reported; the monitor can be up to 45 km away, in a different setting (for example next to a busy road), and AirNow's data are preliminary. A <em>CAMS model forecast</em> describes an area 11–45 km wide and can miss local sources such as traffic, wood smoke or nearby wildfire smoke. A dash means neither source has answered yet; offline the card needs the network. See <a href="forecast-page.html">Reading the Forecast</a>. For official alerts, follow your local air-quality agency.</p>
+
+<h2>I want to start over</h2>
+<p>Reset the learned corrections and forget the stations in Settings › Stations; reset weights in Settings › Weights. To erase everything, see <a href="privacy.html">Privacy, Data &amp; Storage</a>.</p>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

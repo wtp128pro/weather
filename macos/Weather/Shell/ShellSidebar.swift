@@ -80,7 +80,7 @@ struct ShellSidebar: View {
             .background(SidebarSplitViewConfigurator())
         }
         .task(id: sidebarLiveTaskKey) {
-            await liveStore.refreshAll(places: model.places)
+            await liveStore.refreshAll(model: model)
         }
     }
 
