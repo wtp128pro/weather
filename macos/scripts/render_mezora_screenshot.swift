@@ -352,7 +352,7 @@ struct RainCardShowcase: View {
                     .tracking(0.8)
                     .foregroundStyle(Color(red: 0.84, green: 0.89, blue: 0.96))
                 Spacer()
-                Text("HRRR 15-min Nowcast + 10-Model NWP Blend")
+                Text("15-min Nowcast + 13-Model Regional Ensemble")
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.75))
             }
@@ -522,7 +522,7 @@ struct MezoraWindowView: View {
                     HStack(spacing: 8) {
                         HStack(spacing: 5) {
                             Circle().fill(Color(red: 0.31, green: 0.88, blue: 0.65)).frame(width: 7, height: 7)
-                            Text("10 NWP + 16 METAR")
+                            Text("13 NWP + METAR/SYNOP")
                                 .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.white)
                         }
@@ -571,25 +571,25 @@ struct MezoraWindowView: View {
                             condition: "Light Rain · H:68° L:54°",
                             symbol: "cloud.rain.fill",
                             selected: true,
-                            badge: "LIVE METAR"
+                            badge: "NWS + HRRR"
                         )
                         SidebarPlaceItem(
-                            title: "Miami",
-                            subtitle: "Florida · United States",
-                            temp: "82°",
-                            condition: "Partly Cloudy · H:85° L:76°",
+                            title: "Amsterdam",
+                            subtitle: "North Holland · Netherlands",
+                            temp: "58°",
+                            condition: "Showers · H:60° L:49°",
+                            symbol: "cloud.sun.rain.fill",
+                            selected: false,
+                            badge: "KNMI 2km"
+                        )
+                        SidebarPlaceItem(
+                            title: "Munich",
+                            subtitle: "Bavaria · Germany",
+                            temp: "61°",
+                            condition: "Partly Cloudy · H:64° L:47°",
                             symbol: "cloud.sun.fill",
                             selected: false,
-                            badge: "HRRR"
-                        )
-                        SidebarPlaceItem(
-                            title: "Seattle",
-                            subtitle: "Washington · United States",
-                            temp: "57°",
-                            condition: "Mostly Clear · H:61° L:48°",
-                            symbol: "sun.max.fill",
-                            selected: false,
-                            badge: nil
+                            badge: "DWD MOSMIX"
                         )
                         SidebarPlaceItem(
                             title: "London",
@@ -598,16 +598,16 @@ struct MezoraWindowView: View {
                             condition: "Overcast · H:62° L:51°",
                             symbol: "cloud.fill",
                             selected: false,
-                            badge: nil
+                            badge: "UKV 2km"
                         )
                         SidebarPlaceItem(
-                            title: "Tokyo",
-                            subtitle: "Kanto · Japan",
-                            temp: "68°",
-                            condition: "Clear Night · H:71° L:58°",
-                            symbol: "moon.stars.fill",
+                            title: "Toronto",
+                            subtitle: "Ontario · Canada",
+                            temp: "55°",
+                            condition: "Mostly Clear · H:59° L:44°",
+                            symbol: "sun.max.fill",
                             selected: false,
-                            badge: nil
+                            badge: "ECCC HRDPS"
                         )
                         Spacer()
 
@@ -615,7 +615,7 @@ struct MezoraWindowView: View {
                             Image(systemName: "slider.horizontal.3")
                                 .font(.system(size: 11, weight: .semibold))
                                 .foregroundStyle(Color(red: 0.44, green: 0.88, blue: 1.00))
-                            Text("Open-Meteo · NOAA NWS · MET Norway")
+                            Text("Open-Meteo · NWS · MET No · DWD · ECCC")
                                 .font(.system(size: 10.5, weight: .medium))
                                 .foregroundStyle(Color.white.opacity(0.75))
                         }
@@ -759,7 +759,7 @@ struct MezoraWindowView: View {
                                         .foregroundStyle(Color.white.opacity(0.85))
                                 }
                                 HStack(spacing: 6) {
-                                    ForEach(["NWS Grid 1.0×", "HRRR 1.0×", "NBM 1.0×", "ECMWF IFS 1.0×", "GFS 1.0×", "MET Norway 1.0×"], id: \.self) { m in
+                                    ForEach(["NWS Grid", "HRRR 3km", "ECMWF IFS", "UKV 2km", "KNMI 2km", "DWD MOSMIX", "ECCC HRDPS"], id: \.self) { m in
                                         Text(m)
                                             .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(Color.white.opacity(0.92))
@@ -768,7 +768,7 @@ struct MezoraWindowView: View {
                                             .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     }
                                 }
-                                Text("IEEE-754 weighted median across 10 NWP models + 6h MOS station bias decay.")
+                                Text("IEEE-754 weighted median across 13 NWP models & 8 regional horizon profiles.")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Color.white.opacity(0.82))
                             }
@@ -843,7 +843,7 @@ struct RenderMain {
                 MezoraWindowView(),
                 width: 1308,
                 height: 902,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261024.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261025.png"
             )
             savePNG(
                 RainCardShowcase(showHoverBanner: true)
@@ -851,7 +851,7 @@ struct RenderMain {
                     .background(Color(red: 0.20, green: 0.26, blue: 0.35)),
                 width: 1308,
                 height: 312,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261024.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261025.png"
             )
         }
     }
