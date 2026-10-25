@@ -522,7 +522,7 @@ struct MezoraWindowView: View {
                     HStack(spacing: 8) {
                         HStack(spacing: 5) {
                             Circle().fill(Color(red: 0.31, green: 0.88, blue: 0.65)).frame(width: 7, height: 7)
-                            Text("13 NWP + METAR/SYNOP")
+                            Text("13 NWP + 15 STATION NETS")
                                 .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.white)
                         }
@@ -651,7 +651,7 @@ struct MezoraWindowView: View {
                                         ("thermometer.medium", "Feels like 62°F · Dew point 58°F"),
                                         ("arrow.up.and.down", "High 68° · Low 54°"),
                                         ("wind", "Wind 11 mph SSW (gusts 19 mph)"),
-                                        ("antenna.radiowaves.left.and.right", "KNYC + KLGA + KEWR assimilated")
+                                        ("antenna.radiowaves.left.and.right", "12 stations (METAR/ASOS/IEM) · −1.2°F learned bias")
                                     ], id: \.1) { (sym, label) in
                                         HStack(spacing: 5) {
                                             Image(systemName: sym)
@@ -699,7 +699,7 @@ struct MezoraWindowView: View {
                                     Image(systemName: "aqi.medium")
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundStyle(Color(red: 0.31, green: 0.88, blue: 0.65))
-                                    Text("AIR QUALITY · US EPA AIRNOW")
+                                    Text("AIR QUALITY · US EPA AIRNOW (PRELIMINARY)")
                                         .font(.system(size: 11, weight: .bold, design: .rounded))
                                         .tracking(0.7)
                                         .foregroundStyle(Color(red: 0.84, green: 0.89, blue: 0.96))
@@ -709,27 +709,28 @@ struct MezoraWindowView: View {
                                     Text("28 — Good")
                                         .font(.system(size: 20, weight: .bold, design: .rounded))
                                         .foregroundStyle(.white)
-                                    Text("Primary: PM2.5 (6.8 µg/m³) · 4 pts lower than yesterday")
+                                    Text("PM2.5 (6.8 µg/m³) · 4 pts lower than yesterday")
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(Color.white.opacity(0.85))
                                 }
                                 ZStack(alignment: .leading) {
-                                    Capsule()
-                                        .fill(LinearGradient(colors: [
-                                            Color(red: 0.19, green: 0.82, blue: 0.35),
-                                            Color(red: 1.00, green: 0.84, blue: 0.04),
-                                            Color(red: 1.00, green: 0.62, blue: 0.04),
-                                            Color(red: 1.00, green: 0.27, blue: 0.23),
-                                            Color(red: 0.75, green: 0.35, blue: 0.95)
-                                        ], startPoint: .leading, endPoint: .trailing))
-                                        .frame(height: 7)
+                                    HStack(spacing: 2) {
+                                        Rectangle().fill(Color(red: 0.19, green: 0.82, blue: 0.35))
+                                        Rectangle().fill(Color(red: 1.00, green: 0.84, blue: 0.04))
+                                        Rectangle().fill(Color(red: 1.00, green: 0.62, blue: 0.04))
+                                        Rectangle().fill(Color(red: 1.00, green: 0.27, blue: 0.23))
+                                        Rectangle().fill(Color(red: 0.75, green: 0.35, blue: 0.95))
+                                        Rectangle().fill(Color(red: 0.52, green: 0.14, blue: 0.24))
+                                    }
+                                    .frame(height: 7)
+                                    .clipShape(Capsule())
                                     Circle()
                                         .fill(Color.white)
                                         .frame(width: 11, height: 11)
                                         .overlay(Circle().stroke(Color.black.opacity(0.5), lineWidth: 1.5))
                                         .offset(x: 42)
                                 }
-                                Text("Air quality is satisfactory and poses little or no health risk.")
+                                Text("Nearest monitor within 45 km as reported · compared with same monitor 24h ago.")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Color.white.opacity(0.82))
                             }
@@ -768,7 +769,7 @@ struct MezoraWindowView: View {
                                             .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     }
                                 }
-                                Text("IEEE-754 weighted median across 13 NWP models & 8 regional horizon profiles.")
+                                Text("13 NWP models · 15 station networks · learned hourly local bias (±4°C).")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Color.white.opacity(0.82))
                             }
@@ -843,7 +844,7 @@ struct RenderMain {
                 MezoraWindowView(),
                 width: 1308,
                 height: 902,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261025.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261025b.png"
             )
             savePNG(
                 RainCardShowcase(showHoverBanner: true)
@@ -851,7 +852,7 @@ struct RenderMain {
                     .background(Color(red: 0.20, green: 0.26, blue: 0.35)),
                 width: 1308,
                 height: 312,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261025.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261025b.png"
             )
         }
     }
