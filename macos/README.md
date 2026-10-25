@@ -2,6 +2,10 @@
 
 **Neginato Mezora** is a native Swift 6 / SwiftUI meteorological workstation and precipitation nowcasting application for macOS. It blends up to **10 numerical weather prediction (NWP) models** across three free, unauthenticated upstream providers (`Open-Meteo`, `NOAA National Weather Service`, and `MET Norway`), fuses them with **real-time physical surface observations** (`NOAA/FAA AviationWeather METAR`, `Open-Meteo 90m DEM`, and `US EPA AirNow`), and presents high-contrast visual cards with sub-hourly precipitation charts.
 
+- **Download:** **[⬇ Download Neginato Mezora for macOS (`Neginato.Mezora.dmg`)](https://github.com/wtp128pro/weather/releases/latest/download/Neginato.Mezora.dmg)** (Signed & notarized · Requires macOS 27 or later)
+- **Website:** **[neginato.app/mezora](https://neginato.app/mezora)** (Suite home: **[neginato.app](https://neginato.app)**)
+- **License:** Open source under **GNU General Public License v3.0 or later (`GPL-3.0-or-later`)** — see [`../COPYING`](../COPYING).
+
 > **Apple ID & Bundle Identifier Continuity:**  
 > While the application display name is **Neginato Mezora**, the bundle identifier (`io.github.wtp128pro.Weather`) and Apple Development Team (`AQK9MG47BS`) remain unchanged so existing code-signing provisioning profiles, notarization pipelines, and sandboxed container directories (`~/Library/Containers/io.github.wtp128pro.Weather/`) work seamlessly.
 
