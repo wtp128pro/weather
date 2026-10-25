@@ -35,10 +35,13 @@
 <pre><code>w_tilde_i = ldexp(w_i, -max_exp)   // exact exponent shift, zero mantissa rounding</code></pre>
 <p>When cumulative weight lands strictly on the 50% midpoint, the two adjacent values are averaged using an overflow-safe sign-aware formula (<code>meanOfPair</code>).</p>
 
-<h2>2. Mass-Conserving 15-Minute HRRR Rescaling (<code>Nowcast.swift</code>)</h2>
-<p>For CONUS places, 15-minute NOAA HRRR precipitation quarters are summed into full UTC hours prior to blending. After multi-model blending produces the consensus hourly total <code>B_H</code>, the 3 smaller quarters scale by <code>B_H / raw_sum</code> and the first largest quarter absorbs the exact remainder <code>B_H - rest</code> so the 4 quarters sum identically to <code>B_H</code>.</p>
+<h2>2. Mass-Conserving 15-Minute Nowcast Rescaling (<code>Nowcast.swift</code>)</h2>
+<p>Across the US, Canada, UK, Netherlands, Germany, and Europe, 15-minute sub-hourly precipitation quarters (from <code>NOAA HRRR</code>, <code>UKMO 2 km</code>, <code>KNMI HARMONIE 2 km</code>, or <code>DWD ICON-D2 2 km</code>) are summed into full UTC hours prior to blending. After multi-model blending produces the consensus hourly total <code>B_H</code>, the 3 smaller quarters scale by <code>B_H / raw_sum</code> and the first largest quarter absorbs the exact remainder <code>B_H - rest</code> so the 4 quarters sum identically to <code>B_H</code>.</p>
 
-<h2>3. WMO Code 4677 &amp; Hydrometeor Classification (<code>ConditionRules.swift</code>)</h2>
+<h2>3. Multi-Model Precipitation Probability Consensus (<code>Blend.swift</code>)</h2>
+<p>When explicit precipitation probability models represent a minority of the active precipitation ensemble (for example, when regional NWP models report hourly rain rate <code>precipMm</code> without an explicit probability field), <code>WxBlend</code> combines the reported probability mean with the weighted fraction of ensemble members predicting measurable precipitation (<code>precipMm &ge; 0.1 mm/h</code>).</p>
+
+<h2>4. WMO Code 4677 &amp; Hydrometeor Classification (<code>ConditionRules.swift</code>)</h2>
 <ul>
     <li><strong>Thunderstorm Majority:</strong> &ge; 50% of WMO-reporting members in <code>{95, 96, 97, 99}</code>.</li>
     <li><strong>Snow Majority:</strong> &ge; 50% in <code>{71, 73, 75, 77, 85, 86}</code> and blended temperature <code>T &le; 2.0 °C</code>.</li>
@@ -46,15 +49,17 @@
     <li><strong>Wet Hour Criterion:</strong> <code>precipMm &ge; 0.1 mm/h</code> and <code>precipProb &ge; 30%</code> (classified as <code>.showers</code> when <code>cloudPct &lt; 87.5%</code> and <code>precipMm &lt; 7.6 mm/h</code>, else steady <code>.rain</code>).</li>
 </ul>
 
-<h2>4. Primary Academic &amp; Standard Citations</h2>
+<h2>5. Primary Academic &amp; Standard Citations</h2>
 <ul>
     <li><strong>Alduchov &amp; Eskridge (1996):</strong> <em>Improved Magnus Form Approximation of Saturation Vapor Pressure</em>, J. Appl. Meteor., 35, 601–609.</li>
+    <li><strong>Bengtsson et al. (2017):</strong> <em>The HARMONIE–AROME Model Configuration in the ALADIN–HIRLAM NWP System</em>, Mon. Wea. Rev., 145, 1919–1935.</li>
     <li><strong>Benjamin et al. (2016):</strong> <em>A North American Hourly Assimilation and Model Forecast Cycle: The Rapid Refresh (HRRR)</em>, Mon. Wea. Rev., 144, 1669–1694.</li>
     <li><strong>Edgeworth (1888):</strong> <em>On a New Method of Reducing Observations Relating to Several Quantities</em>, Phil. Mag., 25, 184–191.</li>
     <li><strong>Glahn &amp; Lowry (1972):</strong> <em>The Use of Model Output Statistics (MOS) in Objective Weather Forecasting</em>, J. Appl. Meteor., 11, 1203–1211.</li>
     <li><strong>Goldberg (1991):</strong> <em>What Every Computer Scientist Should Know About Floating-Point Arithmetic</em>, ACM Comput. Surv., 23, 5–48.</li>
     <li><strong>Hamill et al. (2017):</strong> <em>The U.S. National Blend of Models (NBM)</em>, BAMS, 98, 2599–2617.</li>
     <li><strong>Meeus (1998):</strong> <em>Astronomical Algorithms</em> (2nd ed.), Willmann-Bell (NOAA solar elevation &amp; equation of time).</li>
+    <li><strong>Milbrandt et al. (2016):</strong> <em>The Pan-Canadian High Resolution (2.5 km) Deterministic Prediction System (HRDPS)</em>, Weather and Forecasting, 31, 1791–1816.</li>
     <li><strong>Osczevski &amp; Bluestein (2005):</strong> <em>The New Wind Chill Equivalent Temperature Chart</em>, BAMS, 86, 1453–1458.</li>
     <li><strong>Rothfusz (1990):</strong> <em>The Heat Index Equation</em>, NWS Technical Attachment SR/SSD 90-23.</li>
     <li><strong>Rousseeuw &amp; Croux (1993):</strong> <em>Alternatives to the Median Absolute Deviation (MAD)</em>, JASA, 88, 1273–1283.</li>

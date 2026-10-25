@@ -42,7 +42,22 @@
 <p>Each source row includes a <strong>Source weight multiplier</strong> slider (<code>0.10×</code> to <code>3.00×</code>, default <code>1.00×</code>) that scales all models belonging to that provider.</p>
 
 <h2>Tab 2: Weights &amp; Model Matrix</h2>
-<p>The <strong>Weights</strong> tab lets you inspect the baseline heuristic weight table across all 6 variable groups (<code>Temperature</code>, <code>Wind</code>, <code>Cloud Cover</code>, <code>Humidity</code>, <code>Precipitation Amount</code>, <code>Precipitation Chance</code>) and adjust individual multipliers (<code>0.00×</code> to <code>3.00×</code>) for every NWP model.</p>
+<p>The <strong>Weights</strong> tab lets you choose a regional profile (<code>Inspect Regional Profile</code>) and variable group (<code>Temperature</code>, <code>Wind</code>, <code>Cloud Cover</code>, <code>Humidity</code>, <code>Precipitation Amount</code>, <code>Precipitation Chance</code>) to inspect the 4-band horizon weights (<code>H0: 0–3h</code>, <code>H1: 3–18h</code>, <code>H2: 18–72h</code>, <code>H3: 72h+</code>) and adjust individual multipliers (<code>0.00×</code> to <code>3.00×</code>) for every NWP model.</p>
+
+<h3>Regional 4-Band Horizon Profiles (<code>WxRegion</code>)</h3>
+<table>
+    <thead>
+        <tr><th>Region</th><th>Short-Range Leaders (H0/H1, 0–18h)</th><th>Extended Leaders (H2/H3, 18h+)</th><th>15-Min Nowcast</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>United States (<code>.us</code>)</strong></td><td><code>nws:nws</code> (4.0), <code>open-meteo:hrrr</code> (3.0–4.0), <code>nbm</code> (2.5–3.0)</td><td><code>nws:nws</code> (4.5–5.0), <code>nbm</code> (2.0–3.0), <code>ecmwf</code> (2.0–2.5)</td><td><code>ncep_hrrr_conus</code></td></tr>
+        <tr><td><strong>UK &amp; Ireland (<code>.ukIreland</code>)</strong></td><td><code>open-meteo:ukmo</code> (UKV 2 km, 4.5), <code>meteofrance</code> (2.5), <code>ecmwf</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>ukmo</code> (2.5), <code>icon</code> (2.2)</td><td>Best-match 15-min</td></tr>
+        <tr><td><strong>Netherlands &amp; Benelux (<code>.beneluxNorthSea</code>)</strong></td><td><code>open-meteo:knmi</code> (HARMONIE 2 km, 4.0), <code>icon</code> (3.5), <code>dwd-brightsky:mosmix</code> (3.0–3.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>dwd-brightsky:mosmix</code> (2.5), <code>icon</code> (2.5), <code>knmi</code> (0 at 72h+)</td><td><code>knmi_seamless</code></td></tr>
+        <tr><td><strong>Germany &amp; Central Europe (<code>.centralEurope</code>)</strong></td><td><code>open-meteo:icon</code> (ICON-D2 2 km, 4.0–4.5), <code>dwd-brightsky:mosmix</code> (3.5), <code>meteofrance</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>dwd-brightsky:mosmix</code> (2.5–3.0), <code>icon</code> (2.8–3.5)</td><td><code>icon_seamless</code></td></tr>
+        <tr><td><strong>Canada (<code>.canada</code>)</strong></td><td><code>eccc:hrdps</code> (4.0), <code>open-meteo:gem</code> (4.0), <code>hrrr</code> (3.0–4.0, &le;48h)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>gem</code> (2.8), <code>eccc:hrdps</code> (2.5)</td><td><code>ncep_hrrr_conus</code> / 15-min</td></tr>
+        <tr><td><strong>Nordic &amp; Baltic (<code>.nordic</code>)</strong></td><td><code>met-no:ecmwf</code> (MEPS 2.5 km, 4.0), <code>ecmwf</code> (3.0), <code>icon</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>met-no:ecmwf</code> (2.2), <code>icon</code> (2.2)</td><td>15-min radar/NWP</td></tr>
+    </tbody>
+</table>
 
 <h3>Baseline US Horizon Band Weights (H0: 0–3h, H1: 3–18h, H2: 18–72h, H3: 72h+)</h3>
 <table>
@@ -59,12 +74,15 @@
         <tr><td><code>open-meteo:gem</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
         <tr><td><code>open-meteo:ukmo</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
         <tr><td><code>open-meteo:meteofrance</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:knmi</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
         <tr><td><code>met-no:ecmwf</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
+        <tr><td><code>dwd-brightsky:mosmix</code></td><td>0.0 (US)</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr><td><code>eccc:hrdps</code></td><td>0.0 (US)</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
     </tbody>
 </table>
 
-<h3>Baseline World Weights (Outside US Region)</h3>
-<p>Outside the US region, US-only models (<code>nws</code>, <code>hrrr</code>, <code>nbm</code>) receive weight <code>0.0</code>. Global models use flat horizon weights for Temperature, Wind, Cloud, and Precip mm (with Humidity = <code>1.0</code> and Precip % = <code>1.0</code>): <code>open-meteo:ecmwf = 3.0</code>, <code>open-meteo:icon = 2.5</code>, <code>open-meteo:ukmo = 2.0</code>, <code>open-meteo:meteofrance = 2.0</code>, <code>open-meteo:gem = 1.5</code>, <code>open-meteo:gfs = 1.5</code>, and <code>met-no:ecmwf = 1.5</code>.</p>
+<h3>Baseline World Weights (Rest of World)</h3>
+<p>In <code>.world</code>, US-only models (<code>nws</code>, <code>hrrr</code>, <code>nbm</code>) receive weight <code>0.0</code>. Global and regional models use baseline weights: <code>open-meteo:ecmwf = 3.0</code>, <code>open-meteo:icon = 2.5</code>, <code>open-meteo:ukmo = 2.0</code>, <code>open-meteo:meteofrance = 2.0</code>, <code>open-meteo:knmi = 2.0</code>, <code>open-meteo:gem = 1.5</code>, <code>open-meteo:gfs = 1.5</code>, <code>met-no:ecmwf = 1.5</code>, <code>dwd-brightsky:mosmix = 3.0</code>, and <code>eccc:hrdps = 3.5</code>.</p>
         </main>
     </div>
     <script src="search-index.js"></script>

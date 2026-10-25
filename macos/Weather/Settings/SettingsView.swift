@@ -170,6 +170,10 @@ private struct SourcesSettingsTab: View {
                     Text("NOAA / FAA METAR, DWD / KNMI Bright Sky 10-min SYNOP & Open-Meteo 90m DEM")
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent("Sub-Hourly 15-Min Nowcasting") {
+                    Text("NOAA HRRR (US/CA), UKMO UKV 2 km (UK), KNMI HARMONIE 2 km (NL) & DWD ICON-D2 (DE)")
+                        .foregroundStyle(.secondary)
+                }
                 LabeledContent("Air Quality Network") {
                     Text("US EPA AirNow Real-Time Ozone & PM2.5 + Copernicus CAMS / EEA")
                         .foregroundStyle(.secondary)
@@ -388,6 +392,11 @@ private struct WeightsSettingsTab: View {
         }
         .formStyle(.grouped)
         .onAppear {
+            if let place = appModel?.selectedPlace?.place {
+                selectedRegion = WxGeo.region(for: place, hasNWS: WxGeo.inUSNWS(place: place))
+            }
+        }
+        .onChange(of: appModel?.selectedKey) { _, _ in
             if let place = appModel?.selectedPlace?.place {
                 selectedRegion = WxGeo.region(for: place, hasNWS: WxGeo.inUSNWS(place: place))
             }

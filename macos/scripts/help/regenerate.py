@@ -21,11 +21,11 @@ INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleSignature</key>
     <string>hbwr</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>HPDBookAccessPath</key>
     <string>index.html</string>
     <key>HPDBookTitle</key>
@@ -205,14 +205,14 @@ HELP_JS = """
 PAGE_BODIES: dict[str, str] = {
     "index": """
 <h1>Welcome to Neginato Mezora</h1>
-<p><strong>Neginato Mezora</strong> is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes up to <strong>10 numerical weather prediction (NWP) models</strong> from three free upstream providers (<code>Open-Meteo</code>, <code>NOAA National Weather Service</code>, and <code>MET Norway</code>) and fuses them with real-time physical airport METARs, 90m DEM surface analysis, and US EPA AirNow air quality monitors.</p>
+<p><strong>Neginato Mezora</strong> is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes up to <strong>13 numerical weather prediction (NWP) models</strong> from five free, key-less upstream providers (<code>Open-Meteo</code>, <code>NOAA National Weather Service</code>, <code>MET Norway</code>, <code>DWD Bright Sky</code>, and <code>Environment Canada</code>) and fuses them with real-time physical airport METARs, DWD/KNMI 10-minute SYNOP observations, 90m DEM surface analysis, and US EPA AirNow + Copernicus CAMS/EEA air quality monitors.</p>
 
 <div class="callout">
     <strong>Quick Navigation</strong>
     <ul>
         <li><a href="rain-chart.html" style="color:#38bdf8;">Rain Graph &amp; Bars Guide</a> — Understand what the cyan bars (Rain rate, left axis) and amber-rose curve (Rain chance %, right axis) represent.</li>
-        <li><a href="sources-weights.html" style="color:#38bdf8;">Settings: Data Sources &amp; Weights (⌘,)</a> — Configure enabled providers and adjust per-source and per-model blend weights.</li>
-        <li><a href="algorithms.html" style="color:#38bdf8;">Ensemble Blending &amp; Citations</a> — Full mathematical formulas, horizon weight tables, and academic references.</li>
+        <li><a href="sources-weights.html" style="color:#38bdf8;">Settings: Data Sources &amp; Weights (⌘,)</a> — Configure enabled providers, inspect regional horizon profiles, and adjust per-source and per-model blend weights.</li>
+        <li><a href="algorithms.html" style="color:#38bdf8;">Ensemble Blending &amp; Citations</a> — Full mathematical formulas, regional horizon weight tables, and academic references.</li>
         <li><a href="live-stations.html" style="color:#38bdf8;">Live Station 3D Assimilation</a> — How nearby physical weather stations and air quality sensors are fused in real time.</li>
     </ul>
 </div>
@@ -223,16 +223,16 @@ PAGE_BODIES: dict[str, str] = {
         <tr><th>Feature</th><th>Description</th></tr>
     </thead>
     <tbody>
-        <tr><td><strong>Labeled Dual-Series Rain Charts</strong></td><td>Side-by-side <em>Next 2 hours</em> (15-minute HRRR nowcast bars) and <em>Next 24 hours</em> (hourly bars + probability curve) with explicit series pills, left/right axis labels, peak callout badges, and interactive hover inspection.</td></tr>
-        <tr><td><strong>Configurable Ensemble Weights</strong></td><td>Open <strong>Settings (⌘,)</strong> to enable/disable providers and tune blend multipliers (<code>0.00×</code> to <code>3.00×</code>) per source and per NWP model.</td></tr>
-        <tr><td><strong>3D Live Station Assimilation</strong></td><td>Blends up to 16 NOAA/FAA AviationWeather METAR stations within 95 km using horizontal Cauchy-Gaussian and vertical Gaussian kernels, lapse-rate elevation correction, Shepard angular de-clustering, and MAD outlier QC.</td></tr>
+        <tr><td><strong>Labeled Dual-Series Rain Charts</strong></td><td>Side-by-side <em>Next 2 hours</em> (15-minute sub-hourly nowcast bars across US, Canada, UK, Netherlands, Germany, and Europe) and <em>Next 24 hours</em> (hourly bars + probability curve) with explicit series pills, left/right axis labels, peak callout badges, and interactive hover inspection.</td></tr>
+        <tr><td><strong>Regional 4-Band Ensemble Weights</strong></td><td>Automatic regional horizon profiles for the US, UK &amp; Ireland, Netherlands &amp; Benelux, Germany &amp; Central Europe, Canada, Nordic &amp; Baltic, Europe, and Worldwide. Open <strong>Settings (⌘,)</strong> to inspect regional profiles and tune blend multipliers (<code>0.00×</code> to <code>3.00×</code>).</td></tr>
+        <tr><td><strong>3D Live Station Assimilation</strong></td><td>Blends up to 16 NOAA/FAA AviationWeather METAR stations within 95 km plus NWS ASOS and DWD/KNMI Bright Sky 10-minute SYNOP observations using 3D anisotropic kernels, lapse-rate elevation correction, Shepard angular de-clustering, and MAD outlier QC.</td></tr>
         <tr><td><strong>Street-Address &amp; Pin Geocoding</strong></td><td>Search any street address, postal code, city, or raw <code>lat, lon</code> coordinates via 5 parallel geocoders or drop a pin on the interactive Apple Map.</td></tr>
     </tbody>
 </table>
 """,
     "rain-chart": """
 <h1>Rain Graph &amp; Bars Guide</h1>
-<p>The <strong>Rain</strong> card in the detail pane displays up to two charts side-by-side: <strong>Next 2 hours</strong> (15-minute intervals, shown for US locations with HRRR sub-hourly coverage) and <strong>Next 24 hours</strong> (hourly intervals). Each visual series is explicitly labeled in the header legend and on the axes.</p>
+<p>The <strong>Rain</strong> card in the detail pane displays up to two charts side-by-side: <strong>Next 2 hours</strong> (15-minute intervals, shown across the US, Canada, UK, Netherlands, Germany, and Europe when sub-hourly nowcast data is available) and <strong>Next 24 hours</strong> (hourly intervals). Each visual series is explicitly labeled in the header legend and on the axes.</p>
 
 <div class="callout">
     <strong>Bars = Rain Rate (Intensity, Left Axis)</strong><br>
@@ -271,14 +271,31 @@ PAGE_BODIES: dict[str, str] = {
 <h2>Tab 1: Sources</h2>
 <p>The <strong>Sources</strong> tab controls which upstream weather providers participate in forecast refreshes and sets each provider's overall blend weight multiplier:</p>
 <ul>
-    <li><strong>Open-Meteo (<code>open-meteo</code>):</strong> Supplies up to 8 NWP models (NOAA HRRR 3 km + 15-min Nowcast, NOAA NBM, ECMWF IFS, NOAA GFS, DWD ICON, ECCC GEM, UK Met Office, and Météo-France). Licensed under CC BY 4.0.</li>
+    <li><strong>Open-Meteo (<code>open-meteo</code>):</strong> Supplies up to 9 NWP models (NOAA HRRR 3 km + 15-min Nowcast, NOAA NBM, ECMWF IFS, NOAA GFS, DWD ICON, ECCC GEM, UK Met Office, Météo-France, and KNMI HARMONIE-AROME 2 km). Licensed under CC BY 4.0.</li>
     <li><strong>National Weather Service (<code>nws</code>):</strong> Official NOAA human-forecaster 2.5 km NDFD grid for the United States, Puerto Rico, US Virgin Islands, Guam, and American Samoa. US Government public domain work.</li>
     <li><strong>MET Norway (<code>met-no</code>):</strong> Norwegian Meteorological Institute Locationforecast 2.0 (1 km Nordic MEPS + global ECMWF IFS). Licensed under CC BY 4.0 / NLOD.</li>
+    <li><strong>DWD Bright Sky (<code>dwd-brightsky</code>):</strong> Deutscher Wetterdienst MOSMIX station-calibrated guidance + ICON-D2 / SYNOP observations for Germany, the Netherlands, Benelux, and Central Europe. Licensed under CC BY 4.0.</li>
+    <li><strong>Environment Canada (<code>eccc</code>):</strong> Meteorological Service of Canada GeoMet Official Citypage &amp; HRDPS 2.5 km guidance for Canada. Licensed under the Open Government Licence – Canada.</li>
 </ul>
 <p>Each source row includes a <strong>Source weight multiplier</strong> slider (<code>0.10×</code> to <code>3.00×</code>, default <code>1.00×</code>) that scales all models belonging to that provider.</p>
 
 <h2>Tab 2: Weights &amp; Model Matrix</h2>
-<p>The <strong>Weights</strong> tab lets you inspect the baseline heuristic weight table across all 6 variable groups (<code>Temperature</code>, <code>Wind</code>, <code>Cloud Cover</code>, <code>Humidity</code>, <code>Precipitation Amount</code>, <code>Precipitation Chance</code>) and adjust individual multipliers (<code>0.00×</code> to <code>3.00×</code>) for every NWP model.</p>
+<p>The <strong>Weights</strong> tab lets you choose a regional profile (<code>Inspect Regional Profile</code>) and variable group (<code>Temperature</code>, <code>Wind</code>, <code>Cloud Cover</code>, <code>Humidity</code>, <code>Precipitation Amount</code>, <code>Precipitation Chance</code>) to inspect the 4-band horizon weights (<code>H0: 0–3h</code>, <code>H1: 3–18h</code>, <code>H2: 18–72h</code>, <code>H3: 72h+</code>) and adjust individual multipliers (<code>0.00×</code> to <code>3.00×</code>) for every NWP model.</p>
+
+<h3>Regional 4-Band Horizon Profiles (<code>WxRegion</code>)</h3>
+<table>
+    <thead>
+        <tr><th>Region</th><th>Short-Range Leaders (H0/H1, 0–18h)</th><th>Extended Leaders (H2/H3, 18h+)</th><th>15-Min Nowcast</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>United States (<code>.us</code>)</strong></td><td><code>nws:nws</code> (4.0), <code>open-meteo:hrrr</code> (3.0–4.0), <code>nbm</code> (2.5–3.0)</td><td><code>nws:nws</code> (4.5–5.0), <code>nbm</code> (2.0–3.0), <code>ecmwf</code> (2.0–2.5)</td><td><code>ncep_hrrr_conus</code></td></tr>
+        <tr><td><strong>UK &amp; Ireland (<code>.ukIreland</code>)</strong></td><td><code>open-meteo:ukmo</code> (UKV 2 km, 4.5), <code>meteofrance</code> (2.5), <code>ecmwf</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>ukmo</code> (2.5), <code>icon</code> (2.2)</td><td>Best-match 15-min</td></tr>
+        <tr><td><strong>Netherlands &amp; Benelux (<code>.beneluxNorthSea</code>)</strong></td><td><code>open-meteo:knmi</code> (HARMONIE 2 km, 4.0), <code>icon</code> (3.5), <code>dwd-brightsky:mosmix</code> (3.0–3.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>dwd-brightsky:mosmix</code> (2.5), <code>icon</code> (2.5), <code>knmi</code> (0 at 72h+)</td><td><code>knmi_seamless</code></td></tr>
+        <tr><td><strong>Germany &amp; Central Europe (<code>.centralEurope</code>)</strong></td><td><code>open-meteo:icon</code> (ICON-D2 2 km, 4.0–4.5), <code>dwd-brightsky:mosmix</code> (3.5), <code>meteofrance</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>dwd-brightsky:mosmix</code> (2.5–3.0), <code>icon</code> (2.8–3.5)</td><td><code>icon_seamless</code></td></tr>
+        <tr><td><strong>Canada (<code>.canada</code>)</strong></td><td><code>eccc:hrdps</code> (4.0), <code>open-meteo:gem</code> (4.0), <code>hrrr</code> (3.0–4.0, &le;48h)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>gem</code> (2.8), <code>eccc:hrdps</code> (2.5)</td><td><code>ncep_hrrr_conus</code> / 15-min</td></tr>
+        <tr><td><strong>Nordic &amp; Baltic (<code>.nordic</code>)</strong></td><td><code>met-no:ecmwf</code> (MEPS 2.5 km, 4.0), <code>ecmwf</code> (3.0), <code>icon</code> (2.5)</td><td><code>open-meteo:ecmwf</code> (3.5), <code>met-no:ecmwf</code> (2.2), <code>icon</code> (2.2)</td><td>15-min radar/NWP</td></tr>
+    </tbody>
+</table>
 
 <h3>Baseline US Horizon Band Weights (H0: 0–3h, H1: 3–18h, H2: 18–72h, H3: 72h+)</h3>
 <table>
@@ -295,12 +312,15 @@ PAGE_BODIES: dict[str, str] = {
         <tr><td><code>open-meteo:gem</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
         <tr><td><code>open-meteo:ukmo</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
         <tr><td><code>open-meteo:meteofrance</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
+        <tr><td><code>open-meteo:knmi</code></td><td>2.0</td><td>2.0</td><td>2.0</td><td>1.0</td><td>2.0</td><td>1.0</td></tr>
         <tr><td><code>met-no:ecmwf</code></td><td>0.5</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td><td>1.0</td></tr>
+        <tr><td><code>dwd-brightsky:mosmix</code></td><td>0.0 (US)</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr><td><code>eccc:hrdps</code></td><td>0.0 (US)</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
     </tbody>
 </table>
 
-<h3>Baseline World Weights (Outside US Region)</h3>
-<p>Outside the US region, US-only models (<code>nws</code>, <code>hrrr</code>, <code>nbm</code>) receive weight <code>0.0</code>. Global models use flat horizon weights for Temperature, Wind, Cloud, and Precip mm (with Humidity = <code>1.0</code> and Precip % = <code>1.0</code>): <code>open-meteo:ecmwf = 3.0</code>, <code>open-meteo:icon = 2.5</code>, <code>open-meteo:ukmo = 2.0</code>, <code>open-meteo:meteofrance = 2.0</code>, <code>open-meteo:gem = 1.5</code>, <code>open-meteo:gfs = 1.5</code>, and <code>met-no:ecmwf = 1.5</code>.</p>
+<h3>Baseline World Weights (Rest of World)</h3>
+<p>In <code>.world</code>, US-only models (<code>nws</code>, <code>hrrr</code>, <code>nbm</code>) receive weight <code>0.0</code>. Global and regional models use baseline weights: <code>open-meteo:ecmwf = 3.0</code>, <code>open-meteo:icon = 2.5</code>, <code>open-meteo:ukmo = 2.0</code>, <code>open-meteo:meteofrance = 2.0</code>, <code>open-meteo:knmi = 2.0</code>, <code>open-meteo:gem = 1.5</code>, <code>open-meteo:gfs = 1.5</code>, <code>met-no:ecmwf = 1.5</code>, <code>dwd-brightsky:mosmix = 3.0</code>, and <code>eccc:hrdps = 3.5</code>.</p>
 """,
     "algorithms": """
 <h1>Ensemble Blending &amp; Meteorological Citations</h1>
@@ -311,10 +331,13 @@ PAGE_BODIES: dict[str, str] = {
 <pre><code>w_tilde_i = ldexp(w_i, -max_exp)   // exact exponent shift, zero mantissa rounding</code></pre>
 <p>When cumulative weight lands strictly on the 50% midpoint, the two adjacent values are averaged using an overflow-safe sign-aware formula (<code>meanOfPair</code>).</p>
 
-<h2>2. Mass-Conserving 15-Minute HRRR Rescaling (<code>Nowcast.swift</code>)</h2>
-<p>For CONUS places, 15-minute NOAA HRRR precipitation quarters are summed into full UTC hours prior to blending. After multi-model blending produces the consensus hourly total <code>B_H</code>, the 3 smaller quarters scale by <code>B_H / raw_sum</code> and the first largest quarter absorbs the exact remainder <code>B_H - rest</code> so the 4 quarters sum identically to <code>B_H</code>.</p>
+<h2>2. Mass-Conserving 15-Minute Nowcast Rescaling (<code>Nowcast.swift</code>)</h2>
+<p>Across the US, Canada, UK, Netherlands, Germany, and Europe, 15-minute sub-hourly precipitation quarters (from <code>NOAA HRRR</code>, <code>UKMO 2 km</code>, <code>KNMI HARMONIE 2 km</code>, or <code>DWD ICON-D2 2 km</code>) are summed into full UTC hours prior to blending. After multi-model blending produces the consensus hourly total <code>B_H</code>, the 3 smaller quarters scale by <code>B_H / raw_sum</code> and the first largest quarter absorbs the exact remainder <code>B_H - rest</code> so the 4 quarters sum identically to <code>B_H</code>.</p>
 
-<h2>3. WMO Code 4677 &amp; Hydrometeor Classification (<code>ConditionRules.swift</code>)</h2>
+<h2>3. Multi-Model Precipitation Probability Consensus (<code>Blend.swift</code>)</h2>
+<p>When explicit precipitation probability models represent a minority of the active precipitation ensemble (for example, when regional NWP models report hourly rain rate <code>precipMm</code> without an explicit probability field), <code>WxBlend</code> combines the reported probability mean with the weighted fraction of ensemble members predicting measurable precipitation (<code>precipMm &ge; 0.1 mm/h</code>).</p>
+
+<h2>4. WMO Code 4677 &amp; Hydrometeor Classification (<code>ConditionRules.swift</code>)</h2>
 <ul>
     <li><strong>Thunderstorm Majority:</strong> &ge; 50% of WMO-reporting members in <code>{95, 96, 97, 99}</code>.</li>
     <li><strong>Snow Majority:</strong> &ge; 50% in <code>{71, 73, 75, 77, 85, 86}</code> and blended temperature <code>T &le; 2.0 °C</code>.</li>
@@ -322,15 +345,17 @@ PAGE_BODIES: dict[str, str] = {
     <li><strong>Wet Hour Criterion:</strong> <code>precipMm &ge; 0.1 mm/h</code> and <code>precipProb &ge; 30%</code> (classified as <code>.showers</code> when <code>cloudPct &lt; 87.5%</code> and <code>precipMm &lt; 7.6 mm/h</code>, else steady <code>.rain</code>).</li>
 </ul>
 
-<h2>4. Primary Academic &amp; Standard Citations</h2>
+<h2>5. Primary Academic &amp; Standard Citations</h2>
 <ul>
     <li><strong>Alduchov &amp; Eskridge (1996):</strong> <em>Improved Magnus Form Approximation of Saturation Vapor Pressure</em>, J. Appl. Meteor., 35, 601–609.</li>
+    <li><strong>Bengtsson et al. (2017):</strong> <em>The HARMONIE–AROME Model Configuration in the ALADIN–HIRLAM NWP System</em>, Mon. Wea. Rev., 145, 1919–1935.</li>
     <li><strong>Benjamin et al. (2016):</strong> <em>A North American Hourly Assimilation and Model Forecast Cycle: The Rapid Refresh (HRRR)</em>, Mon. Wea. Rev., 144, 1669–1694.</li>
     <li><strong>Edgeworth (1888):</strong> <em>On a New Method of Reducing Observations Relating to Several Quantities</em>, Phil. Mag., 25, 184–191.</li>
     <li><strong>Glahn &amp; Lowry (1972):</strong> <em>The Use of Model Output Statistics (MOS) in Objective Weather Forecasting</em>, J. Appl. Meteor., 11, 1203–1211.</li>
     <li><strong>Goldberg (1991):</strong> <em>What Every Computer Scientist Should Know About Floating-Point Arithmetic</em>, ACM Comput. Surv., 23, 5–48.</li>
     <li><strong>Hamill et al. (2017):</strong> <em>The U.S. National Blend of Models (NBM)</em>, BAMS, 98, 2599–2617.</li>
     <li><strong>Meeus (1998):</strong> <em>Astronomical Algorithms</em> (2nd ed.), Willmann-Bell (NOAA solar elevation &amp; equation of time).</li>
+    <li><strong>Milbrandt et al. (2016):</strong> <em>The Pan-Canadian High Resolution (2.5 km) Deterministic Prediction System (HRDPS)</em>, Weather and Forecasting, 31, 1791–1816.</li>
     <li><strong>Osczevski &amp; Bluestein (2005):</strong> <em>The New Wind Chill Equivalent Temperature Chart</em>, BAMS, 86, 1453–1458.</li>
     <li><strong>Rothfusz (1990):</strong> <em>The Heat Index Equation</em>, NWS Technical Attachment SR/SSD 90-23.</li>
     <li><strong>Rousseeuw &amp; Croux (1993):</strong> <em>Alternatives to the Median Absolute Deviation (MAD)</em>, JASA, 88, 1273–1283.</li>
@@ -341,7 +366,7 @@ PAGE_BODIES: dict[str, str] = {
 """,
     "live-stations": """
 <h1>Live Station 3D Assimilation</h1>
-<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), <code>LiveStationFetcher.swift</code> assimilates live physical observations from nearby airport METAR stations, 90m DEM surface analysis, and US EPA AirNow monitors.</p>
+<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), <code>LiveStationFetcher.swift</code> assimilates live physical observations from nearby airport METAR stations, NWS ASOS stations, DWD/KNMI 10-minute SYNOP stations via Bright Sky, 90m DEM surface analysis, and US EPA AirNow + Copernicus CAMS/EEA air quality networks.</p>
 
 <h2>1. 3D Anisotropic Spatial Kernel</h2>
 <p>Each physical station at horizontal distance <code>d</code> (km) and elevation difference <code>Δz</code> (m) is weighted by:</p>
@@ -357,11 +382,18 @@ W_spatial  = W_horiz(d) * W_vert(Δz)</code></pre>
     <li><strong>Dewpoint Lapse Rate:</strong> <code>Γ_Td = -0.0019 °C/m</code></li>
 </ul>
 
-<h2>3. Shepard Directional Isolation &amp; MAD Buddy QC</h2>
+<h2>3. Sub-Hourly National Station Networks &amp; Air Quality</h2>
 <ul>
-    <li><strong>Angular De-Clustering (Shepard, 1968):</strong> Stations clustered along the same compass bearing from the target share angular shadow penalty <code>W_dir = 1 / (1 + 0.85 * shadow)</code>.</li>
+    <li><strong>US NWS ASOS &amp; Ceilometer Fusion:</strong> Queries <code>api.weather.gov/stations/{id}/observations/latest</code> for 5-minute ASOS updates and laser-ceilometer cloud layers.</li>
+    <li><strong>Germany &amp; Netherlands 10-Minute SYNOP:</strong> Queries <code>api.brightsky.dev/current_weather</code> for 10-minute DWD and KNMI surface observations across Central Europe and Benelux.</li>
+    <li><strong>Regional Air Quality (EPA AirNow + Copernicus CAMS/EEA):</strong> Uses inverse-square distance weighting across local EPA AirNow monitors in North America and Copernicus CAMS / European Environment Agency (<code>EAQI</code>, <code>PM2.5</code>, <code>NO₂</code>) in Europe.</li>
+</ul>
+
+<h2>4. Shepard Directional Isolation &amp; MAD Buddy QC</h2>
+<ul>
+    <li><strong>Angular De-Clustering (Shepard, 1968):</strong> Stations clustered along the same compass bearing from the target share angular shadow penalty <code>W_dir = 1 / (1 + shadow)</code>.</li>
     <li><strong>Variable-Specific Temporal Decay:</strong> Exponential decay time constants <code>τ_temp = 2700 s</code> (45 min), <code>τ_wind = 1200 s</code> (20 min), and <code>τ_wx = 900 s</code> (15 min).</li>
-    <li><strong>MAD Outlier Quality Control (Rousseeuw &amp; Croux, 1993):</strong> When &ge; 3 stations report, any sensor deviating by more than <code>3.2 × MAD</code> is penalized by a 4th-power Huber tail weight.</li>
+    <li><strong>MAD Outlier Quality Control (Rousseeuw &amp; Croux, 1993):</strong> When &ge; 3 stations report, any sensor deviating by more than <code>3.2 × MAD</code> is penalized by a quadratic Huber tail weight.</li>
     <li><strong>6-Hour MOS Bias Decay (Glahn &amp; Lowry, 1972):</strong> The observed temperature innovation <code>ΔT_0</code> decays across the first 6 forecast hours via <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
 </ul>
 """,

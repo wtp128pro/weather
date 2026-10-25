@@ -28,7 +28,7 @@
         </aside>
         <main class="help-main">
             <h1>Live Station 3D Assimilation</h1>
-<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), <code>LiveStationFetcher.swift</code> assimilates live physical observations from nearby airport METAR stations, 90m DEM surface analysis, and US EPA AirNow monitors.</p>
+<p>To capture local microclimates (sea breezes, valley cold pools, urban heat islands, and local gust fronts), <code>LiveStationFetcher.swift</code> assimilates live physical observations from nearby airport METAR stations, NWS ASOS stations, DWD/KNMI 10-minute SYNOP stations via Bright Sky, 90m DEM surface analysis, and US EPA AirNow + Copernicus CAMS/EEA air quality networks.</p>
 
 <h2>1. 3D Anisotropic Spatial Kernel</h2>
 <p>Each physical station at horizontal distance <code>d</code> (km) and elevation difference <code>Δz</code> (m) is weighted by:</p>
@@ -44,11 +44,18 @@ W_spatial  = W_horiz(d) * W_vert(Δz)</code></pre>
     <li><strong>Dewpoint Lapse Rate:</strong> <code>Γ_Td = -0.0019 °C/m</code></li>
 </ul>
 
-<h2>3. Shepard Directional Isolation &amp; MAD Buddy QC</h2>
+<h2>3. Sub-Hourly National Station Networks &amp; Air Quality</h2>
 <ul>
-    <li><strong>Angular De-Clustering (Shepard, 1968):</strong> Stations clustered along the same compass bearing from the target share angular shadow penalty <code>W_dir = 1 / (1 + 0.85 * shadow)</code>.</li>
+    <li><strong>US NWS ASOS &amp; Ceilometer Fusion:</strong> Queries <code>api.weather.gov/stations/{id}/observations/latest</code> for 5-minute ASOS updates and laser-ceilometer cloud layers.</li>
+    <li><strong>Germany &amp; Netherlands 10-Minute SYNOP:</strong> Queries <code>api.brightsky.dev/current_weather</code> for 10-minute DWD and KNMI surface observations across Central Europe and Benelux.</li>
+    <li><strong>Regional Air Quality (EPA AirNow + Copernicus CAMS/EEA):</strong> Uses inverse-square distance weighting across local EPA AirNow monitors in North America and Copernicus CAMS / European Environment Agency (<code>EAQI</code>, <code>PM2.5</code>, <code>NO₂</code>) in Europe.</li>
+</ul>
+
+<h2>4. Shepard Directional Isolation &amp; MAD Buddy QC</h2>
+<ul>
+    <li><strong>Angular De-Clustering (Shepard, 1968):</strong> Stations clustered along the same compass bearing from the target share angular shadow penalty <code>W_dir = 1 / (1 + shadow)</code>.</li>
     <li><strong>Variable-Specific Temporal Decay:</strong> Exponential decay time constants <code>τ_temp = 2700 s</code> (45 min), <code>τ_wind = 1200 s</code> (20 min), and <code>τ_wx = 900 s</code> (15 min).</li>
-    <li><strong>MAD Outlier Quality Control (Rousseeuw &amp; Croux, 1993):</strong> When &ge; 3 stations report, any sensor deviating by more than <code>3.2 × MAD</code> is penalized by a 4th-power Huber tail weight.</li>
+    <li><strong>MAD Outlier Quality Control (Rousseeuw &amp; Croux, 1993):</strong> When &ge; 3 stations report, any sensor deviating by more than <code>3.2 × MAD</code> is penalized by a quadratic Huber tail weight.</li>
     <li><strong>6-Hour MOS Bias Decay (Glahn &amp; Lowry, 1972):</strong> The observed temperature innovation <code>ΔT_0</code> decays across the first 6 forecast hours via <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
 </ul>
         </main>
