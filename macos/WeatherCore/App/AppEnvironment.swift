@@ -63,6 +63,8 @@ public enum AppEnvironment {
         add(registry, log) { () throws(WxError) in try NWSProvider() }
         add(registry, log) { () throws(WxError) in try OpenMeteoProvider() }
         add(registry, log) { () throws(WxError) in METNorwayProvider() }
+        add(registry, log) { () throws(WxError) in try BrightSkyProvider() }
+        add(registry, log) { () throws(WxError) in try ECCCProvider() }
         do {
             registry.geocoder = try OpenMeteoGeocoder()
         } catch {

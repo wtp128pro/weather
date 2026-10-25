@@ -166,11 +166,24 @@ Each cell lists the four horizon band weights `[H0, H1, H2, H3]` (or a single nu
 | `open-meteo:gem` (ECCC GEM) | Worldwide | `0.5` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` |
 | `open-meteo:ukmo` (UK Met Office) | Worldwide | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` |
 | `open-meteo:meteofrance` | Worldwide | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` |
+| `open-meteo:knmi` (KNMI HARMONIE) | Benelux / North Sea | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` |
 | `met-no:ecmwf` (MET Norway) | Worldwide | `0.5` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` |
+| `dwd-brightsky:mosmix` (DWD MOSMIX) | DE / NL / Central Europe | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) |
+| `eccc:hrdps` (ECCC GeoMet) | Canada | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) | `0.0` (US) |
 
-### 3.3 Complete Baseline World Weight Table (`usRegion == false`)
+### 3.3 Regional 4-Band Horizon Profiles (`WxRegion`) & World Weights
 
-Outside the US region, US-only models (`nws`, `open-meteo:hrrr`, `open-meteo:nbm`) receive weight `0.0`. Global models use flat horizon weights defined by the `WORLD_MAIN(w)` macro (`[w, w, w, 1.0, w, 1.0]`):
+Instead of a binary `US vs. Rest-of-World` split, [`Geo.swift`](WeatherCore/Core/Geo.swift) and [`Weights.swift`](WeatherCore/Blend/Weights.swift) classify every location into one of 8 meteorological domains (`WxRegion`) with 4-band lead-time horizon weights (`H0: 0–3h`, `H1: 3–18h`, `H2: 18–72h`, `H3: 72h+`) so that national convection-allowing models lead in short ranges (`0–48 h`) and gracefully hand off to `ECMWF IFS` and `DWD ICON` in medium/extended ranges (`72 h+`):
+
+| Region (`WxRegion`) | Primary Short-Range (H0/H1, 0–18h) | Medium/Extended Anchor (H2/H3, 18h+) | Sub-Hourly 15-min Nowcast Model |
+| :--- | :--- | :--- | :--- |
+| `.ukIreland` (UK & Ireland) | `open-meteo:ukmo` (UKV 2 km, weight `4.5`), `meteofrance` (`2.5`), `ecmwf` (`2.5`) | `open-meteo:ecmwf` (`3.5`), `ukmo` (`2.5`), `icon` (`2.2`) | `ukmo_seamless` |
+| `.beneluxNorthSea` (Netherlands & Benelux) | `open-meteo:knmi` (HARMONIE 2 km, `4.5`, $0\text{ at }72\text{h+}$), `dwd-brightsky:mosmix` (`3.2`), `icon` (`3.5`), `ukmo` (`2.8`) | `open-meteo:ecmwf` (`3.5`), `dwd-brightsky:mosmix` (`2.8`), `icon` (`2.5`) | `knmi_seamless` |
+| `.centralEurope` (Germany, CH, AT) | `open-meteo:icon` (ICON-D2 2 km, `4.5`), `dwd-brightsky:mosmix` (`3.8`), `meteofrance` (`2.5`), `ecmwf` (`2.5`) | `open-meteo:ecmwf` (`3.5`), `dwd-brightsky:mosmix` (`3.2`), `icon` (`3.0`) | `icon_seamless` |
+| `.canada` (Canada) | `eccc:hrdps` (MSC GeoMet, `4.2`), `open-meteo:gem` (HRDPS 2.5 km + RDPS, `4.0`), `hrrr` (`3.2`, $\le 48\text{h}$) | `open-meteo:ecmwf` (`3.2`), `gem` (`2.8`), `eccc:hrdps` (`2.8`), `gfs` (`2.0`) | `gem_seamless` |
+| `.nordic` (Nordic & Baltic) | `met-no:ecmwf` (MEPS 2.5 km, `4.2`), `ecmwf` (`3.0`), `icon` (`2.5`) | `open-meteo:ecmwf` (`3.5`), `met-no:ecmwf` (`2.5`), `icon` (`2.2`) | `icon_seamless` |
+
+In `.world` (Rest of World), US/regional-only models receive weight `0.0`, while global models use flat horizon weights defined by `WORLD_MAIN(w)` (`[w, w, w, 1.0, w, 1.0]`):
 
 | Source : Model | `.temp` | `.wind` | `.cloud` | `.humidity` | `.precipMm` | `.precipProb` | Rationale |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
@@ -178,9 +191,12 @@ Outside the US region, US-only models (`nws`, `open-meteo:hrrr`, `open-meteo:nbm
 | `open-meteo:icon` | `2.5` | `2.5` | `2.5` | `1.0` | `2.5` | `1.0` | High-resolution non-hydrostatic icosahedral solver (Zängl et al., 2015). |
 | `open-meteo:ukmo` | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` | Strong global synoptic and marine boundary-layer performance. |
 | `open-meteo:meteofrance` | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` | Stretched-grid global ARPEGE + high-res European AROME. |
-| `open-meteo:gem` | `1.5` | `1.5` | `1.5` | `1.0` | `1.5` | `1.0` | Canadian GDPS/RDPS global-regional seamless suite. |
+| `open-meteo:knmi` | `2.0` | `2.0` | `2.0` | `1.0` | `2.0` | `1.0` | KNMI HARMONIE-AROME Cy43 (2 km) nested into ECMWF IFS. |
+| `open-meteo:gem` | `1.5` | `1.5` | `1.5` | `1.0` | `1.5` | `1.0` | Canadian GDPS/RDPS/HRDPS global-regional seamless suite. |
 | `open-meteo:gfs` | `1.5` | `1.5` | `1.5` | `1.0` | `1.5` | `1.0` | FV3-based global spectral model. |
 | `met-no:ecmwf` | `1.5` | `1.5` | `1.5` | `1.0` | `1.5` | `1.0` | MET Norway downscaled ECMWF + MEPS Nordic blend; kept at `1.5` so ECMWF (via Open-Meteo + MET Norway combined $= 4.5$) does not single-handedly exceed half the total ensemble weight ($13.5$). |
+| `dwd-brightsky:mosmix` | `3.0` | `2.8` | `2.8` | `1.0` | `3.0` | `2.5` | DWD MOSMIX station-calibrated statistical post-processing + ICON-D2. |
+| `eccc:hrdps` | `3.5` | `3.0` | `3.0` | `1.0` | `3.5` | `3.5` | Environment and Climate Change Canada MSC GeoMet Official Citypage & HRDPS. |
 | Unknown `(src, model)` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` | `1.0` | `WxWeights.unknownWeight = 1.0`. |
 
 ### 3.4 User-Configurable Source & Model Multipliers (`WxWeightMultipliers`)

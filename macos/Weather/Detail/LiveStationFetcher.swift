@@ -208,7 +208,22 @@ struct LiveStationSnapshot: Sendable, Equatable {
         }()
 
         // Update Rain card if live station or 15-min radar reports active precipitation
-        // that the hourly model forecast missed.
+        // that the hourly model forecast missed, and ensure the 2-hour nowcast chart
+        // renders whenever sub-hourly 15-minute radar quarters are available.
+        let resolvedNowcast: RainChartData = {
+            if page.rain.nowcast.hasData || radarQuarters.isEmpty {
+                return page.rain.nowcast
+            }
+            return RainChartData(
+                hours: forecast?.hours ?? [],
+                quarters: radarQuarters,
+                units: units,
+                nowS: nowS,
+                view: .nowcast,
+                zone: placeZone
+            )
+        }()
+
         let updatedRain: DetailViewModel.RainCard = {
             let isLivePrecip = WxConditionSymbol.precipitationRank(resolvedCondition) > 0
                 || (livePrecipMmH.isFinite && livePrecipMmH >= 0.1)
@@ -227,7 +242,7 @@ struct LiveStationSnapshot: Sendable, Equatable {
                 return DetailViewModel.RainCard(
                     headline: "\(conditionLabel) reported now",
                     detail: detail,
-                    nowcast: page.rain.nowcast,
+                    nowcast: resolvedNowcast,
                     hourly: page.rain.hourly
                 )
             }
@@ -239,10 +254,18 @@ struct LiveStationSnapshot: Sendable, Equatable {
                     return DetailViewModel.RainCard(
                         headline: "Rain starting in \(minutes) minute\(minutes == 1 ? "" : "s")",
                         detail: "Detected by high-resolution 15-minute precipitation radar.",
-                        nowcast: page.rain.nowcast,
+                        nowcast: resolvedNowcast,
                         hourly: page.rain.hourly
                     )
                 }
+            }
+            if resolvedNowcast != page.rain.nowcast {
+                return DetailViewModel.RainCard(
+                    headline: page.rain.headline,
+                    detail: page.rain.detail,
+                    nowcast: resolvedNowcast,
+                    hourly: page.rain.hourly
+                )
             }
             return page.rain
         }()
@@ -892,8 +915,18 @@ enum LiveStationFetcher {
 
         // If the primary station is a US ICAO station (K..., P..., T...), also query NWS api.weather.gov
         // for 5-minute / 15-minute sub-hourly ASOS updates and official laser-ceilometer sky cover.
+        // For German/Dutch/Central European stations (ED..., ET..., EH..., EB..., LO..., LS...), query
+        // Bright Sky (DWD/KNMI 10-minute SYNOP observations).
+        var subHourlyObs: NWSLatestObs? = await fetchNWSLatestObservation(stationID: stationID)
+        if subHourlyObs == nil,
+           WxGeo.inCentralEurope(lat: lat, lon: lon) || WxGeo.inBenelux(lat: lat, lon: lon)
+               || stationID.hasPrefix("ED") || stationID.hasPrefix("ET") || stationID.hasPrefix("EH")
+        {
+            subHourlyObs = await fetchBrightSkyLatestObservation(lat: lat, lon: lon)
+        }
+
         var nwsCondition: WxCondition? = nil
-        if let nwsObs = await fetchNWSLatestObservation(stationID: stationID),
+        if let nwsObs = subHourlyObs,
            nwsObs.timestampS >= (nearest.obs.obsTime ?? 0)
         {
             bestAgeS = max(0, nowEpoch - nwsObs.timestampS)
@@ -1088,6 +1121,81 @@ enum LiveStationFetcher {
                 tempC: tempC,
                 dewpC: dewpC,
                 feelsC: feelsC,
+                humidityPct: rh,
+                windKmh: windKmh,
+                gustKmh: gustKmh,
+                cloudPct: cloudPct,
+                condition: cond
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    private struct BrightSkyCurrentResponse: Decodable {
+        struct Weather: Decodable {
+            let timestamp: String?
+            let temperature: Double?
+            let dew_point: Double?
+            let relative_humidity: Double?
+            let wind_speed_10: Double?
+            let wind_speed_30: Double?
+            let wind_gust_speed_10: Double?
+            let wind_gust_speed_30: Double?
+            let cloud_cover: Double?
+            let condition: String?
+            let icon: String?
+        }
+        struct Source: Decodable {
+            let height: Double?
+        }
+        let weather: Weather?
+        let sources: [Source]?
+    }
+
+    /// Queries DWD / KNMI 10-minute SYNOP observations via Bright Sky (`api.brightsky.dev/current_weather`)
+    /// for Germany, the Netherlands, Benelux, and Central Europe.
+    private static func fetchBrightSkyLatestObservation(lat: Double, lon: Double) async -> NWSLatestObs? {
+        let urlStr = String(
+            format: "https://api.brightsky.dev/current_weather?lat=%.4f&lon=%.4f",
+            lat, lon
+        )
+        guard let url = URL(string: urlStr) else { return nil }
+        var req = URLRequest(url: url)
+        req.setValue("WeatherApp/1.0 (macOS; local-station-observer)", forHTTPHeaderField: "User-Agent")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 4.0
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+            let decoded = try JSONDecoder().decode(BrightSkyCurrentResponse.self, from: data)
+            guard let wx = decoded.weather,
+                  let tempC = wx.temperature, tempC.isFinite
+            else {
+                return nil
+            }
+            let iso = ISO8601DateFormatter()
+            let ts = wx.timestamp.flatMap { iso.date(from: $0)?.timeIntervalSince1970 }.map(Int64.init) ?? 0
+            let dewpC = wx.dew_point.flatMap { $0.isFinite ? $0 : nil }
+            let rh = wx.relative_humidity.flatMap { $0.isFinite ? $0 : nil }
+            let windKmh = (wx.wind_speed_10 ?? wx.wind_speed_30).flatMap { $0.isFinite ? $0 : nil }
+            let gustKmh = (wx.wind_gust_speed_10 ?? wx.wind_gust_speed_30).flatMap { $0.isFinite ? $0 : nil }
+            var cloudPct = wx.cloud_cover.flatMap { $0.isFinite ? max(0.0, min(100.0, $0)) : nil }
+            let elevM = decoded.sources?.first?.height.flatMap { $0.isFinite ? $0 : nil }
+
+            let wetBulbC = computeWetBulbC(tempC: tempC, humidityPct: rh ?? 55.0)
+            let cond = parseNWSTextDescription(
+                wx.condition ?? wx.icon,
+                tempC: tempC,
+                wetBulbC: wetBulbC,
+                cloudPct: &cloudPct
+            )
+            return NWSLatestObs(
+                timestampS: ts,
+                elevM: elevM,
+                tempC: tempC,
+                dewpC: dewpC,
+                feelsC: nil,
                 humidityPct: rh,
                 windKmh: windKmh,
                 gustKmh: gustKmh,
@@ -1598,12 +1706,25 @@ enum LiveStationFetcher {
     private struct OpenMeteoAQIResponse: Decodable {
         struct Current: Decodable {
             let us_aqi: Int?
+            let european_aqi: Int?
+            let pm2_5: Double?
+            let nitrogen_dioxide: Double?
+            let ozone: Double?
         }
         struct Hourly: Decodable {
             let us_aqi: [Int?]?
         }
         let current: Current?
         let hourly: Hourly?
+    }
+
+    private struct OpenMeteoAQISnapshot {
+        let currentAQI: Int
+        let yesterdayAQI: Int?
+        let europeanAQI: Int?
+        let pm25: Double?
+        let no2: Double?
+        let ozone: Double?
     }
 
     private static func fetchAirQuality(
@@ -1666,14 +1787,28 @@ enum LiveStationFetcher {
 
         if let omAQI {
             let clamped = max(0, min(500, omAQI.currentAQI))
+            let baseSummary = DetailViewModel.AirQualityCard.summarySentence(
+                aqi: clamped,
+                referenceAQI: omAQI.yesterdayAQI
+            )
+            var details: [String] = []
+            if WxGeo.inEurope(lat: lat, lon: lon), let eu = omAQI.europeanAQI {
+                details.append("EAQI \(eu)")
+            }
+            if let pm25 = omAQI.pm25, pm25.isFinite {
+                details.append(String(format: "PM2.5 %.0f \u{00B5}g/m\u{00B3}", pm25))
+            }
+            if let no2 = omAQI.no2, no2.isFinite {
+                details.append(String(format: "NO\u{2082} %.0f \u{00B5}g/m\u{00B3}", no2))
+            }
+            let summary = details.isEmpty
+                ? baseSummary
+                : "\(baseSummary) \u{00B7} \(details.joined(separator: ", "))"
             return DetailViewModel.AirQualityCard(
                 index: clamped,
                 valueText: "\(clamped)",
                 category: DetailViewModel.AirQualityCard.categoryLabel(for: clamped),
-                summary: DetailViewModel.AirQualityCard.summarySentence(
-                    aqi: clamped,
-                    referenceAQI: omAQI.yesterdayAQI
-                )
+                summary: summary
             )
         }
 
@@ -1684,6 +1819,7 @@ enum LiveStationFetcher {
         lat: Double,
         lon: Double
     ) async -> [(name: String, aqi: Int, distKm: Double)] {
+        guard !WxGeo.inEurope(lat: lat, lon: lon) else { return [] }
         let urlStr = String(
             format: "https://services.arcgis.com/cJ9YHowT8TU7DUyn/arcgis/rest/services/Air_Now_Current_Monitors_Ozone_and_PM/FeatureServer/0/query?where=OZONEPM_AQI%%20IS%%20NOT%%20NULL&geometry=%.4f,%.4f&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance=45000&units=esriSRUnit_Meter&outFields=SiteName,OZONEPM_AQI&outSR=4326&f=json",
             lon, lat
@@ -1715,6 +1851,7 @@ enum LiveStationFetcher {
         lat: Double,
         lon: Double
     ) async -> (recent: [(name: String, aqi: Int, distKm: Double)], referenceAQI: Int?) {
+        guard !WxGeo.inEurope(lat: lat, lon: lon) else { return ([], nil) }
         let urlStr = String(
             format: "https://services.arcgis.com/cJ9YHowT8TU7DUyn/arcgis/rest/services/Air_Now_Monitor_Data_Public/FeatureServer/0/query?where=OZONEPM_AQI%%20IS%%20NOT%%20NULL&geometry=%.4f,%.4f&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&distance=35000&units=esriSRUnit_Meter&outFields=SiteName,OZONEPM_AQI,Latitude,Longitude,ValidTime&orderByFields=ValidTime%%20DESC&resultRecordCount=30&outSR=4326&f=json",
             lon, lat
@@ -1754,9 +1891,9 @@ enum LiveStationFetcher {
     private static func fetchOpenMeteoAQI(
         lat: Double,
         lon: Double
-    ) async -> (currentAQI: Int, yesterdayAQI: Int?)? {
+    ) async -> OpenMeteoAQISnapshot? {
         let urlStr = String(
-            format: "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=%.4f&longitude=%.4f&current=us_aqi&hourly=us_aqi&past_days=1&forecast_days=1",
+            format: "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=%.4f&longitude=%.4f&current=us_aqi,european_aqi,pm2_5,nitrogen_dioxide,ozone&hourly=us_aqi&past_days=1&forecast_days=1",
             lat, lon
         )
         guard let url = URL(string: urlStr) else { return nil }
@@ -1767,7 +1904,14 @@ enum LiveStationFetcher {
             guard let aqi = decoded.current?.us_aqi else { return nil }
             let pastValues = decoded.hourly?.us_aqi?.compactMap { $0 } ?? []
             let yesterdayAQI = pastValues.count >= 24 ? pastValues[pastValues.count - 24] : nil
-            return (currentAQI: aqi, yesterdayAQI: yesterdayAQI)
+            return OpenMeteoAQISnapshot(
+                currentAQI: aqi,
+                yesterdayAQI: yesterdayAQI,
+                europeanAQI: decoded.current?.european_aqi,
+                pm25: decoded.current?.pm2_5,
+                no2: decoded.current?.nitrogen_dioxide,
+                ozone: decoded.current?.ozone
+            )
         } catch {
             return nil
         }

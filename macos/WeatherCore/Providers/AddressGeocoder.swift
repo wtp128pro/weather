@@ -793,6 +793,22 @@ public enum WxAddressGeocoder {
         countryCode: String,
         admin1: String
     ) -> String {
+        if countryCode == "CA" || (countryCode != "US" && WxGeo.inCanada(lat: lat, lon: lon, countryCode: countryCode)) {
+            let u = admin1.uppercased()
+            if u == "NL" || u.contains("NEWFOUNDLAND") || lon >= -57.0 {
+                return "America/St_Johns"
+            }
+            if u == "NS" || u == "NB" || u == "PE" || u.contains("NOVA SCOTIA") || u.contains("NEW BRUNSWICK") || lon >= -67.0 {
+                return "America/Halifax"
+            }
+            if u == "SK" || u.contains("SASKATCHEWAN") {
+                return "America/Regina"
+            }
+            if lon >= -90.0 { return "America/Toronto" }
+            if lon >= -102.0 { return "America/Winnipeg" }
+            if lon >= -115.0 { return "America/Edmonton" }
+            return "America/Vancouver"
+        }
         if countryCode == "US" || WxGeo.inUSNWS(lat: lat, lon: lon) {
             if lat >= 51.0 && lon <= -130.0 { return "America/Anchorage" }
             if lat <= 23.0 && lon <= -154.0 { return "Pacific/Honolulu" }
@@ -808,12 +824,15 @@ public enum WxAddressGeocoder {
         }
         switch countryCode {
         case "GB": return "Europe/London"
+        case "IE": return "Europe/Dublin"
         case "FR": return "Europe/Paris"
         case "DE": return "Europe/Berlin"
+        case "AT": return "Europe/Vienna"
         case "ES": return "Europe/Madrid"
         case "IT": return "Europe/Rome"
         case "CH": return "Europe/Zurich"
         case "NL": return "Europe/Amsterdam"
+        case "BE": return "Europe/Brussels"
         case "NO": return "Europe/Oslo"
         case "SE": return "Europe/Stockholm"
         case "IS": return "Atlantic/Reykjavik"

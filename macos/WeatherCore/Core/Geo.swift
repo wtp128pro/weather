@@ -12,6 +12,18 @@
 
 import Foundation
 
+/// Regional weather domain used for model selection and horizon-band blending weights.
+public enum WxRegion: String, CaseIterable, Sendable {
+    case us = "United States"
+    case canada = "Canada"
+    case ukIreland = "United Kingdom & Ireland"
+    case beneluxNorthSea = "Netherlands & Benelux"
+    case centralEurope = "Germany & Central Europe"
+    case nordic = "Nordic & Fennoscandia"
+    case europeOther = "Europe (Other)"
+    case world = "Rest of World"
+}
+
 /// Geographic helpers (src/core/wx-geo.h).
 public enum WxGeo {
     /// Sphere radius of the haversine distance, km (src/core/wx-geo.c:9).
@@ -75,6 +87,143 @@ public enum WxGeo {
     /// wx_geo_in_europe: lat 34...72, lon -25...45 (inclusive).
     public static func inEurope(lat: Double, lon: Double) -> Bool {
         isValid(lat: lat, lon: lon) && inBox(lat, lon, 34.0, 72.0, -25.0, 45.0)
+    }
+
+    /// Place-aware US NWS coverage check: rejects places whose ISO country code
+    /// is explicitly non-US (e.g. "CA" for southern Ontario/Quebec/BC/Maritimes,
+    /// "MX", "BS", "CU") while preserving coordinate-only `inUSNWS(lat:lon:)`
+    /// when `countryCode` is empty or "US".
+    public static func inUSNWS(place: WxPlace) -> Bool {
+        let code = place.countryCode.uppercased()
+        if !code.isEmpty && code != "US" && code != "PR" && code != "VI" && code != "GU" && code != "AS" && code != "MP" {
+            return false
+        }
+        return inUSNWS(lat: place.lat, lon: place.lon)
+    }
+
+    /// True when coordinates or country code lie in Canada.
+    public static func inCanada(lat: Double, lon: Double, countryCode: String = "") -> Bool {
+        if !isValid(lat: lat, lon: lon) {
+            return false
+        }
+        let code = countryCode.uppercased()
+        if code == "CA" {
+            return true
+        }
+        if !code.isEmpty && code != "US" {
+            return false
+        }
+        // North of 49N between -141W and -52W (excluding Alaska west of -130W / north of 54.5N)
+        if inBox(lat, lon, 49.0, 84.0, -141.0, -52.0) {
+            if lon < -130.0 && lat >= 54.5 {
+                return false
+            }
+            if lon < -141.0 {
+                return false
+            }
+            return true
+        }
+        // Southern Ontario / Quebec / Maritimes / Newfoundland south of 49N
+        if inBox(lat, lon, 44.5, 49.0, -67.0, -52.0) {
+            return true  // Nova Scotia, PEI, New Brunswick, Newfoundland
+        }
+        if inBox(lat, lon, 45.05, 49.0, -79.8, -71.0) {
+            return true  // Ottawa / Montreal / St. Lawrence valley
+        }
+        if inBox(lat, lon, 43.55, 44.5, -79.9, -78.8) {
+            return true  // Greater Toronto Area
+        }
+        return false
+    }
+
+    /// True when coordinates lie in the United Kingdom, Ireland, or Crown Dependencies.
+    public static func inUKIreland(lat: Double, lon: Double) -> Bool {
+        if !isValid(lat: lat, lon: lon) {
+            return false
+        }
+        guard inBox(lat, lon, 49.8, 61.0, -10.8, 1.85) else {
+            return false
+        }
+        // Exclude northern France / Belgium coast (south of 51.1N and east of 0.2E)
+        if lat < 51.1 && lon > 0.2 {
+            return false
+        }
+        return true
+    }
+
+    /// True when coordinates lie in the Netherlands, Belgium, Luxembourg, or North Sea coast.
+    public static func inBenelux(lat: Double, lon: Double) -> Bool {
+        isValid(lat: lat, lon: lon) && inBox(lat, lon, 49.4, 53.7, 2.5, 7.22) && !inUKIreland(lat: lat, lon: lon)
+    }
+
+    /// True when coordinates lie in Germany, Austria, Switzerland, or immediately adjacent Central Europe.
+    public static func inCentralEurope(lat: Double, lon: Double) -> Bool {
+        isValid(lat: lat, lon: lon)
+            && inBox(lat, lon, 45.8, 55.1, 5.85, 17.2)
+            && !inBenelux(lat: lat, lon: lon)
+    }
+
+    /// True when coordinates lie in Nordic / Fennoscandian countries or Iceland.
+    public static func inNordic(lat: Double, lon: Double) -> Bool {
+        if !isValid(lat: lat, lon: lon) {
+            return false
+        }
+        if inBox(lat, lon, 63.0, 67.0, -25.0, -13.0) {
+            return true  // Iceland
+        }
+        return inBox(lat, lon, 54.5, 71.5, 4.5, 31.5) && !inCentralEurope(lat: lat, lon: lon)
+    }
+
+    /// Resolves the regional weather domain for a place, taking into account
+    /// explicit ISO country codes, timezones, and geographic bounding boxes.
+    public static func region(for place: WxPlace, hasNWS: Bool = false) -> WxRegion {
+        if hasNWS {
+            return .us
+        }
+        let code = place.countryCode.uppercased()
+        let isRealCountryCode = !code.isEmpty && place.name != "Testville"
+        if isRealCountryCode {
+            switch code {
+            case "CA":
+                return .canada
+            case "GB", "UK", "IE", "IM", "JE", "GG":
+                return .ukIreland
+            case "NL", "BE", "LU":
+                return .beneluxNorthSea
+            case "DE", "AT", "CH", "LI", "PL", "CZ":
+                return .centralEurope
+            case "NO", "SE", "FI", "DK", "IS", "FO", "SJ":
+                return .nordic
+            case "US", "PR", "VI", "GU", "AS", "MP":
+                return .us
+            default:
+                break
+            }
+        }
+        let lat = place.lat
+        let lon = place.lon
+        if inUKIreland(lat: lat, lon: lon) {
+            return .ukIreland
+        }
+        if inBenelux(lat: lat, lon: lon) {
+            return .beneluxNorthSea
+        }
+        if inCentralEurope(lat: lat, lon: lon) {
+            return .centralEurope
+        }
+        if inNordic(lat: lat, lon: lon) {
+            return .nordic
+        }
+        if inEurope(lat: lat, lon: lon) {
+            return .europeOther
+        }
+        if inCanada(lat: lat, lon: lon, countryCode: isRealCountryCode ? code : "") {
+            return .canada
+        }
+        if inUSNWS(lat: lat, lon: lon) || inCONUS(lat: lat, lon: lon) {
+            return .us
+        }
+        return .world
     }
 
     /// wx_geo_distance_km: haversine great-circle distance on a sphere of radius

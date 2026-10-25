@@ -167,11 +167,11 @@ private struct SourcesSettingsTab: View {
 
             Section("Live Physical Observation Assimilation") {
                 LabeledContent("Aviation & Surface Networks") {
-                    Text("NOAA / FAA AviationWeather METAR & Open-Meteo 90m DEM")
+                    Text("NOAA / FAA METAR, DWD / KNMI Bright Sky 10-min SYNOP & Open-Meteo 90m DEM")
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Air Quality Network") {
-                    Text("US EPA AirNow Real-Time Ozone & PM2.5 + CAMS/GEOS-CF")
+                    Text("US EPA AirNow Real-Time Ozone & PM2.5 + Copernicus CAMS / EEA")
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Spatial Fusion Kernel") {
@@ -319,6 +319,7 @@ private struct SettingsTextLineView: View {
 private struct WeightsSettingsTab: View {
     let appModel: AppModel?
     @State private var selectedVariable: WxVar = .temp
+    @State private var selectedRegion: WxRegion = .us
 
     private var descriptors: [WxModelWeightDescriptor] { WxWeights.modelDescriptors }
 
@@ -343,6 +344,18 @@ private struct WeightsSettingsTab: View {
             }
 
             Section {
+                Picker("Inspect Regional Profile", selection: $selectedRegion) {
+                    Text("United States (HRRR + NWS + GFS)").tag(WxRegion.us)
+                    Text("UK & Ireland (UKMO 2 km + ECMWF + ICON)").tag(WxRegion.ukIreland)
+                    Text("Netherlands & Benelux (KNMI 2 km + DWD + UKMO)").tag(WxRegion.beneluxNorthSea)
+                    Text("Germany & Central Europe (DWD ICON-D2 + MOSMIX + ECMWF)").tag(WxRegion.centralEurope)
+                    Text("Canada (ECCC HRDPS + GEM + HRRR)").tag(WxRegion.canada)
+                    Text("Nordic & Baltic (MET Norway + ECMWF + ICON)").tag(WxRegion.nordic)
+                    Text("Rest of Europe (ARPEGE + ICON-EU + ECMWF)").tag(WxRegion.europeOther)
+                    Text("Rest of World (ECMWF + ICON + GFS)").tag(WxRegion.world)
+                }
+                .pickerStyle(.menu)
+
                 Picker("Inspect Baseline Variable Group", selection: $selectedVariable) {
                     Text("Temperature & Feels Like").tag(WxVar.temp)
                     Text("Wind & Gusts").tag(WxVar.wind)
@@ -356,6 +369,7 @@ private struct WeightsSettingsTab: View {
                 ForEach(descriptors) { desc in
                     ModelWeightRow(
                         descriptor: desc,
+                        selectedRegion: selectedRegion,
                         selectedVariable: selectedVariable,
                         sourceMultiplier: appModel?.sourceWeight(for: desc.sourceID) ?? 1.0,
                         modelMultiplier: appModel?.modelWeight(sourceID: desc.sourceID, modelID: desc.modelID) ?? 1.0,
@@ -367,17 +381,23 @@ private struct WeightsSettingsTab: View {
             } header: {
                 Text("Per-Model Multipliers & Baseline Horizon Weights")
             } footer: {
-                Text("Horizon bands (US region): H0 = 0–3h, H1 = 3–18h, H2 = 18–72h, H3 = 72h+. Effective weight = Base Table Weight × Source Multiplier × Model Multiplier.")
+                Text("Horizon bands: H0 = 0–3h, H1 = 3–18h, H2 = 18–72h, H3 = 72h+. Effective weight = Regional Horizon Weight × Source Multiplier × Model Multiplier.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            if let place = appModel?.selectedPlace?.place {
+                selectedRegion = WxGeo.region(for: place, hasNWS: WxGeo.inUSNWS(place: place))
+            }
+        }
     }
 }
 
 private struct ModelWeightRow: View {
     let descriptor: WxModelWeightDescriptor
+    let selectedRegion: WxRegion
     let selectedVariable: WxVar
     let sourceMultiplier: Double
     let modelMultiplier: Double
@@ -387,8 +407,17 @@ private struct ModelWeightRow: View {
         sourceMultiplier * modelMultiplier
     }
 
-    private var usBands: [Double] {
-        descriptor.usWeights[selectedVariable.rawValue]
+    private var regionBands: [Double] {
+        let repHours: [Double] = [1.0, 6.0, 36.0, 96.0]
+        return repHours.map { h in
+            WxWeights.baseWeight(
+                sourceID: descriptor.sourceID,
+                modelID: descriptor.modelID,
+                variable: selectedVariable,
+                horizonH: h,
+                region: selectedRegion
+            )
+        }
     }
 
     private var worldBase: Double {
@@ -442,11 +471,12 @@ private struct ModelWeightRow: View {
                 .disabled(abs(modelMultiplier - 1.0) < 0.01)
             }
 
-            // Horizon weight badges for the selected variable
+            // Horizon weight badges for the selected region and variable
             HStack(spacing: 6) {
+                let bands = regionBands
                 ForEach(0..<4, id: \.self) { band in
                     let labels = ["H0 (0–3h)", "H1 (3–18h)", "H2 (18–72h)", "H3 (72h+)"]
-                    let base = usBands[band]
+                    let base = bands[band]
                     let eff = base * combinedMultiplier
                     WeightBandBadge(
                         title: labels[band],

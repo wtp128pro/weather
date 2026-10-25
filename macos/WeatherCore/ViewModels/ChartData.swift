@@ -149,8 +149,8 @@ public struct RainChartData: Sendable, Equatable {
 
     /// The window over hand-built arrays (any order, any values: the range checks of
     /// build_window are applied here as in C).
-    init(hours: [WxBlendHour], quarters: [WxQuarter], units: WxUnits, nowS: Int64, view: View,
-         zone: WxFormat.Zone) {
+    public init(hours: [WxBlendHour], quarters: [WxQuarter], units: WxUnits, nowS: Int64, view: View,
+                zone: WxFormat.Zone) {
         self.init(window: Self.buildWindow(hours: hours, quarters: quarters, nowS: nowS, view: view),
                   view: view, units: units, zone: zone)
     }

@@ -250,7 +250,7 @@ struct OpenMeteoProviderTests {
         ]  // test-openmeteo.c:2586-2608
         let allow = [
             "ncep_hrrr_conus", "ncep_nbm_conus", "gfs_seamless", "ecmwf_ifs025", "icon_seamless", "gem_seamless",
-            "ukmo_seamless", "meteofrance_seamless",
+            "ukmo_seamless", "meteofrance_seamless", "knmi_seamless",
         ]  // test-openmeteo.c:2609-2610
         for (name, lat, lon, latText, lonText, models, nowcast) in cases {
             let fake = try Fake.Server(try Fake.Script.ok())

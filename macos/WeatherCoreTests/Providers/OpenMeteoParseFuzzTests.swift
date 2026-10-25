@@ -299,7 +299,7 @@ extension OpenMeteoParseTests {
         let table: [(String, String)] = [
             ("ncep_hrrr_conus", "hrrr"), ("ncep_nbm_conus", "nbm"), ("gfs_seamless", "gfs"), ("ecmwf_ifs025", "ecmwf"),
             ("icon_seamless", "icon"), ("gem_seamless", "gem"), ("ukmo_seamless", "ukmo"),
-            ("meteofrance_seamless", "meteofrance"),
+            ("meteofrance_seamless", "meteofrance"), ("knmi_seamless", "knmi"),
         ]
         #expect(OpenMeteoModel.allCases.map(\.apiName) == table.map(\.0))
         #expect(OpenMeteoModel.allCases.map(\.memberID) == table.map(\.1))
@@ -374,5 +374,104 @@ extension OpenMeteoParseTests {
             #expect(OpenMeteoShared.searchPath(escaping: text) == "/v1/search?name=" + escaped + "&count=10&language=en&format=json",
                     "\(text)")
         }
+    }
+
+    @Test func regionalModelSelectionAndProviders() throws {
+        let london = try WxPlace(name: "London", admin1: "England", country: "United Kingdom", countryCode: "GB",
+                                 lat: 51.5072, lon: -0.1276, timezone: "Europe/London")
+        let amsterdam = try WxPlace(name: "Amsterdam", admin1: "North Holland", country: "Netherlands", countryCode: "NL",
+                                    lat: 52.3676, lon: 4.9041, timezone: "Europe/Amsterdam")
+        let berlin = try WxPlace(name: "Berlin", admin1: "Berlin", country: "Germany", countryCode: "DE",
+                                 lat: 52.5200, lon: 13.4050, timezone: "Europe/Berlin")
+        let calgary = try WxPlace(name: "Calgary", admin1: "Alberta", country: "Canada", countryCode: "CA",
+                                  lat: 51.0447, lon: -114.0719, timezone: "America/Edmonton")
+
+        let ukSel = OpenMeteoShared.models(for: london)
+        #expect(ukSel.models.contains(.ukmoSeamless))
+        #expect(ukSel.nowcastPath?.contains("models=ukmo_seamless") == true)
+
+        let nlSel = OpenMeteoShared.models(for: amsterdam)
+        #expect(nlSel.models.contains(.knmiSeamless))
+        #expect(nlSel.nowcastPath?.contains("models=knmi_seamless") == true)
+
+        let deSel = OpenMeteoShared.models(for: berlin)
+        #expect(deSel.models.contains(.iconSeamless))
+        #expect(deSel.nowcastPath?.contains("models=icon_seamless") == true)
+
+        let caSel = OpenMeteoShared.models(for: calgary)
+        #expect(caSel.models.contains(.gemSeamless))
+        #expect(caSel.models.contains(.ncepHrrrConus))
+        #expect(caSel.nowcastPath?.contains("models=gem_seamless") == true)
+
+        // NWS must reject Canadian places even when near the US border
+        let toronto = try WxPlace(name: "Toronto", admin1: "Ontario", country: "Canada", countryCode: "CA",
+                                  lat: 43.6532, lon: -79.3832, timezone: "America/Toronto")
+        #expect(!WxGeo.inUSNWS(place: toronto))
+
+        // BrightSkyProvider parser test
+        let bsJSON = """
+        {
+          "weather": [
+            {
+              "timestamp": "2026-04-20T12:00:00+00:00",
+              "temperature": 16.5,
+              "dew_point": 8.0,
+              "relative_humidity": 58,
+              "precipitation": 0.2,
+              "precipitation_probability": 35,
+              "cloud_cover": 45,
+              "wind_speed": 18.0,
+              "wind_gust_speed": 28.0,
+              "condition": "dry",
+              "icon": "partly-cloudy-day"
+            }
+          ]
+        }
+        """
+        let bsResult = try BrightSkyProvider.parseForecast(Array(bsJSON.utf8), fetchedS: 1_776_686_400)
+        #expect(bsResult.members.count == 1)
+        #expect(bsResult.members[0].modelID == "mosmix")
+        #expect(bsResult.members[0].hours.count == 1)
+        #expect(bsResult.members[0].hours[0].tempC == 16.5)
+        #expect(bsResult.members[0].hours[0].precipProb == 35.0)
+
+        // ECCCProvider parser test
+        let ecccJSON = """
+        {
+          "features": [
+            {
+              "geometry": { "coordinates": [-79.3832, 43.6532] },
+              "properties": {
+                "hourlyForecastGroup": {
+                  "hourlyForecasts": [
+                    {
+                      "timestamp": "2026-04-20T12:00:00Z",
+                      "condition": { "en": "Partly cloudy" },
+                      "temperature": { "value": { "en": 14.0 } },
+                      "lop": { "value": { "en": 20.0 } },
+                      "relativeHumidity": { "value": { "en": 62.0 } },
+                      "wind": {
+                        "speed": { "value": { "en": 15.0 } },
+                        "gust": { "value": { "en": 24.0 } }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+        """
+        let ecccResult = try ECCCProvider.parseForecast(
+            Array(ecccJSON.utf8),
+            placeLat: toronto.lat,
+            placeLon: toronto.lon,
+            fetchedS: 1_776_686_400
+        )
+        #expect(ecccResult.members.count == 1)
+        #expect(ecccResult.members[0].modelID == "hrdps")
+        #expect(ecccResult.members[0].hours.count == 1)
+        #expect(ecccResult.members[0].hours[0].tempC == 14.0)
+        #expect(ecccResult.members[0].hours[0].precipProb == 20.0)
     }
 }

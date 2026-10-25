@@ -33,9 +33,11 @@
 <h2>Tab 1: Sources</h2>
 <p>The <strong>Sources</strong> tab controls which upstream weather providers participate in forecast refreshes and sets each provider's overall blend weight multiplier:</p>
 <ul>
-    <li><strong>Open-Meteo (<code>open-meteo</code>):</strong> Supplies up to 8 NWP models (NOAA HRRR 3 km + 15-min Nowcast, NOAA NBM, ECMWF IFS, NOAA GFS, DWD ICON, ECCC GEM, UK Met Office, and Météo-France). Licensed under CC BY 4.0.</li>
+    <li><strong>Open-Meteo (<code>open-meteo</code>):</strong> Supplies up to 9 NWP models (NOAA HRRR 3 km + 15-min Nowcast, NOAA NBM, ECMWF IFS, NOAA GFS, DWD ICON, ECCC GEM, UK Met Office, Météo-France, and KNMI HARMONIE-AROME 2 km). Licensed under CC BY 4.0.</li>
     <li><strong>National Weather Service (<code>nws</code>):</strong> Official NOAA human-forecaster 2.5 km NDFD grid for the United States, Puerto Rico, US Virgin Islands, Guam, and American Samoa. US Government public domain work.</li>
     <li><strong>MET Norway (<code>met-no</code>):</strong> Norwegian Meteorological Institute Locationforecast 2.0 (1 km Nordic MEPS + global ECMWF IFS). Licensed under CC BY 4.0 / NLOD.</li>
+    <li><strong>DWD Bright Sky (<code>dwd-brightsky</code>):</strong> Deutscher Wetterdienst MOSMIX station-calibrated guidance + ICON-D2 / SYNOP observations for Germany, the Netherlands, Benelux, and Central Europe. Licensed under CC BY 4.0.</li>
+    <li><strong>Environment Canada (<code>eccc</code>):</strong> Meteorological Service of Canada GeoMet Official Citypage &amp; HRDPS 2.5 km guidance for Canada. Licensed under the Open Government Licence – Canada.</li>
 </ul>
 <p>Each source row includes a <strong>Source weight multiplier</strong> slider (<code>0.10×</code> to <code>3.00×</code>, default <code>1.00×</code>) that scales all models belonging to that provider.</p>
 

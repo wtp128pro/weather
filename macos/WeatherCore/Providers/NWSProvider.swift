@@ -178,7 +178,7 @@ public final class NWSProvider: WxProvider {
 
     /// nws_covers: the coarse US pre-filter, no I/O (wx-nws.c:646-650).
     public func covers(_ place: WxPlace) -> Bool {
-        WxGeo.inUSNWS(lat: place.lat, lon: place.lon)
+        WxGeo.inUSNWS(place: place)
     }
 
     /// nws_fetch_async + nws_fetch_finish: consults the coverage box, the
@@ -217,7 +217,7 @@ public final class NWSProvider: WxProvider {
     /// start_gridpoints (:736-746) and on_grid_done (:810-842) in sequence.
     private func run(_ place: WxPlace) async throws -> WxSourceResult {
         // WxPlace is valid by construction: the C "invalid place" path (:896-897) does not exist.
-        guard WxGeo.inUSNWS(lat: place.lat, lon: place.lon) else {
+        guard WxGeo.inUSNWS(place: place) else {
             throw WxError(.unsupported, Message.outsideCoverage)
         }
         let key = Self.pointKey(place)

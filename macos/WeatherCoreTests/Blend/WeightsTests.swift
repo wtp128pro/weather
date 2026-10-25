@@ -250,6 +250,59 @@ import Testing
         mults.setSourceMultiplier(1.0, for: "nws")
         mults.setModelMultiplier(1.0, sourceID: "open-meteo", modelID: "hrrr")
         #expect(mults.isDefault)
-        #expect(WxWeights.modelDescriptors.count == 10)
+        #expect(WxWeights.modelDescriptors.count == 13)
+    }
+
+    @Test("/blend/weights/regional-profiles-uk-nl-de-ca") func regionalProfilesUKNLDECA() throws {
+        // UK & Ireland: UKMO leads short-range (0-18h) and hands off to ECMWF at 72h+
+        let ukShortUKMO = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "ukmo", variable: .temp, horizonH: 2.0, region: .ukIreland)
+        let ukShortECMWF = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "ecmwf", variable: .temp, horizonH: 2.0, region: .ukIreland)
+        let ukLongUKMO = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "ukmo", variable: .temp, horizonH: 96.0, region: .ukIreland)
+        let ukLongECMWF = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "ecmwf", variable: .temp, horizonH: 96.0, region: .ukIreland)
+        #expect(ukShortUKMO > ukShortECMWF)
+        #expect(ukLongECMWF > ukLongUKMO)
+
+        // Netherlands / Benelux: KNMI HARMONIE leads short-range (0-18h) and drops to 0 at 72h+
+        let nlShortKNMI = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "knmi", variable: .precipMm, horizonH: 2.0, region: .beneluxNorthSea)
+        let nlLongKNMI = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "knmi", variable: .precipMm, horizonH: 96.0, region: .beneluxNorthSea)
+        let nlBrightSky = WxWeights.baseWeight(sourceID: "dwd-brightsky", modelID: "mosmix", variable: .temp, horizonH: 6.0, region: .beneluxNorthSea)
+        #expect(nlShortKNMI == 4.0)
+        #expect(nlLongKNMI == 0.0)
+        #expect(nlBrightSky > 2.5)
+
+        // Germany / Central Europe: DWD ICON + BrightSky MOSMIX lead short-range
+        let deShortICON = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "icon", variable: .temp, horizonH: 2.0, region: .centralEurope)
+        let deShortMOSMIX = WxWeights.baseWeight(sourceID: "dwd-brightsky", modelID: "mosmix", variable: .temp, horizonH: 2.0, region: .centralEurope)
+        #expect(deShortICON == 4.0)
+        #expect(deShortMOSMIX == 3.5)
+
+        // Canada: ECCC GeoMet HRDPS + Open-Meteo GEM lead short-range; HRRR contributes up to 48h
+        let caShortECCC = WxWeights.baseWeight(sourceID: "eccc", modelID: "hrdps", variable: .temp, horizonH: 2.0, region: .canada)
+        let caShortGEM = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "gem", variable: .temp, horizonH: 2.0, region: .canada)
+        let caShortHRRR = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "hrrr", variable: .precipMm, horizonH: 2.0, region: .canada)
+        let caPost48HRRR = WxWeights.baseWeight(sourceID: "open-meteo", modelID: "hrrr", variable: .precipMm, horizonH: 50.0, region: .canada)
+        #expect(caShortECCC == 4.0)
+        #expect(caShortGEM == 4.0)
+        #expect(caShortHRRR == 4.0)
+        #expect(caPost48HRRR == 0.0)
+
+        let london = try WxPlace(name: "London", admin1: "England", country: "United Kingdom", countryCode: "GB",
+                                 lat: 51.5072, lon: -0.1276, timezone: "Europe/London")
+        let amsterdam = try WxPlace(name: "Amsterdam", admin1: "North Holland", country: "Netherlands", countryCode: "NL",
+                                    lat: 52.3676, lon: 4.9041, timezone: "Europe/Amsterdam")
+        let berlin = try WxPlace(name: "Berlin", admin1: "Berlin", country: "Germany", countryCode: "DE",
+                                 lat: 52.5200, lon: 13.4050, timezone: "Europe/Berlin")
+        let calgary = try WxPlace(name: "Calgary", admin1: "Alberta", country: "Canada", countryCode: "CA",
+                                  lat: 51.0447, lon: -114.0719, timezone: "America/Edmonton")
+        let toronto = try WxPlace(name: "Toronto", admin1: "Ontario", country: "Canada", countryCode: "CA",
+                                  lat: 43.6532, lon: -79.3832, timezone: "America/Toronto")
+
+        #expect(OpenMeteoShared.models(for: london).nowcastPath?.contains("minutely_15=precipitation") == true)
+        #expect(OpenMeteoShared.models(for: amsterdam).models.contains(.knmiSeamless))
+        #expect(OpenMeteoShared.models(for: amsterdam).nowcastPath?.contains("models=knmi_seamless") == true)
+        #expect(OpenMeteoShared.models(for: berlin).nowcastPath?.contains("models=icon_seamless") == true)
+        #expect(OpenMeteoShared.models(for: calgary).models.contains(.ncepHrrrConus))
+        #expect(OpenMeteoShared.models(for: calgary).nowcastPath?.contains("models=ncep_hrrr_conus") == true)
+        #expect(!WxGeo.inUSNWS(place: toronto))
     }
 }

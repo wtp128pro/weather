@@ -292,6 +292,18 @@ public final class SourcesViewModel {
             TextLine(
                 before: "NOAA/National Weather Service data is US government work, credited as a courtesy",
                 link: nil, after: "")
+        case "dwd-brightsky":
+            TextLine(
+                before: "Deutscher Wetterdienst (DWD) OpenData is licensed ",
+                link: Link(text: "CC BY 4.0", urlString: "https://www.dwd.de/EN/service/copyright/copyright_node.html"),
+                after: "")
+        case "eccc":
+            TextLine(
+                before: "Environment and Climate Change Canada data: ",
+                link: Link(
+                    text: "Open Government Licence – Canada",
+                    urlString: "https://open.canada.ca/en/open-government-licence-canada"),
+                after: "")
         default:
             nil
         }

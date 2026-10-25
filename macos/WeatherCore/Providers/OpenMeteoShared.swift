@@ -24,6 +24,7 @@ public enum OpenMeteoModel: String, CaseIterable, Sendable {
     case gemSeamless = "gem_seamless"
     case ukmoSeamless = "ukmo_seamless"
     case meteofranceSeamless = "meteofrance_seamless"
+    case knmiSeamless = "knmi_seamless"
 
     /// model_find (wx-openmeteo.c:98-107): the entry whose API name equals
     /// `apiName` byte for byte (case-sensitive, no prefix match); nil for
@@ -53,6 +54,7 @@ public enum OpenMeteoModel: String, CaseIterable, Sendable {
         case .gemSeamless: return "gem"
         case .ukmoSeamless: return "ukmo"
         case .meteofranceSeamless: return "meteofrance"
+        case .knmiSeamless: return "knmi"
         }
     }
 }
@@ -89,7 +91,7 @@ public enum OpenMeteoShared {
     /// WX_OPEN_METEO_SEARCH_MAX_BYTES: longest accepted search text after trimming, bytes.
     public static let searchMaxBytes = 64
     /// MAX_MODELS: most models of one request (the whole allow-list).
-    public static let maxModels = 8
+    public static let maxModels = 9
     /// SEARCH_COUNT: hits requested from the place search ("count=10").
     public static let searchCount = 10
     /// REASON_MAX_CHARS: longest server error reason put into a message, characters.
@@ -131,6 +133,64 @@ public enum OpenMeteoShared {
         return (out, conus)
     }
 
+    /// Region-aware model selection and 15-minute sub-hourly nowcast path for a `WxPlace`.
+    /// Adds `knmi_seamless` (KNMI HARMONIE-AROME 2 km) across UK, Netherlands, and Germany,
+    /// fixes `inCONUS` HRRR/NBM coverage for Canadian cities south of 53N (e.g. Calgary,
+    /// Vancouver, Winnipeg, Halifax), and enables 15-minute sub-hourly precipitation
+    /// nowcasting across Europe and Canada in addition to CONUS.
+    public static func models(for place: WxPlace) -> (models: [OpenMeteoModel], nowcastPath: String?) {
+        let region = WxGeo.region(for: place)
+        let lat = place.lat
+        let lon = place.lon
+        switch region {
+        case .ukIreland:
+            let m: [OpenMeteoModel] = [
+                .ukmoSeamless, .ecmwfIfs025, .iconSeamless, .knmiSeamless, .meteofranceSeamless, .gfsSeamless,
+                .gemSeamless,
+            ]
+            return (m, nowcastPath(lat: lat, lon: lon, model: nil))
+        case .beneluxNorthSea:
+            let m: [OpenMeteoModel] = [
+                .knmiSeamless, .iconSeamless, .ecmwfIfs025, .ukmoSeamless, .meteofranceSeamless, .gfsSeamless,
+                .gemSeamless,
+            ]
+            return (m, nowcastPath(lat: lat, lon: lon, model: .knmiSeamless))
+        case .centralEurope:
+            let m: [OpenMeteoModel] = [
+                .iconSeamless, .ecmwfIfs025, .knmiSeamless, .meteofranceSeamless, .ukmoSeamless, .gfsSeamless,
+                .gemSeamless,
+            ]
+            return (m, nowcastPath(lat: lat, lon: lon, model: .iconSeamless))
+        case .nordic, .europeOther:
+            let m: [OpenMeteoModel] = [
+                .ecmwfIfs025, .iconSeamless, .ukmoSeamless, .meteofranceSeamless, .knmiSeamless, .gemSeamless,
+                .gfsSeamless,
+            ]
+            let nc = (lat <= 65.0 && lon >= -11.0 && lon <= 25.0)
+                ? nowcastPath(lat: lat, lon: lon, model: nil)
+                : nil
+            return (m, nc)
+        case .canada:
+            var m: [OpenMeteoModel] = [.gemSeamless]
+            let inHrrrDomain = WxGeo.inCONUS(lat: lat, lon: lon)
+            if inHrrrDomain {
+                m.append(.ncepHrrrConus)
+                m.append(.ncepNbmConus)
+            }
+            m.append(contentsOf: [.ecmwfIfs025, .iconSeamless, .gfsSeamless])
+            let nc = inHrrrDomain
+                ? nowcastPath(lat: lat, lon: lon, model: .ncepHrrrConus)
+                : nowcastPath(lat: lat, lon: lon, model: nil)
+            return (m, nc)
+        case .us:
+            let c = models(lat: lat, lon: lon)
+            return (c.models, c.conus ? nowcastPath(lat: lat, lon: lon) : nil)
+        case .world:
+            let c = models(lat: lat, lon: lon)
+            return (c.models, nil)
+        }
+    }
+
     // MARK: - Request paths (wx-openmeteo.c:172-243, :1582-1585)
 
     /// coord_text: g_ascii_formatd("%.4f", wx_geo_round4(v)), a '.' decimal
@@ -153,8 +213,16 @@ public enum OpenMeteoShared {
 
     /// nowcast_path: the path and query of request B (15-minute HRRR precipitation).
     public static func nowcastPath(lat: Double, lon: Double) -> String {
-        "/v1/forecast?latitude=" + coordText(lat) + "&longitude=" + coordText(lon)
-            + "&minutely_15=precipitation&models=ncep_hrrr_conus&forecast_minutely_15=12"
+        nowcastPath(lat: lat, lon: lon, model: .ncepHrrrConus)
+    }
+
+    /// Region-selectable 15-minute precipitation nowcast path. When `model` is nil,
+    /// Open-Meteo's best-match high-resolution 15-minute model (e.g. UKMO 2km /
+    /// KNMI HARMONIE / DWD ICON-D2 / ECCC HRDPS) is queried.
+    public static func nowcastPath(lat: Double, lon: Double, model: OpenMeteoModel?) -> String {
+        let modelParam = model.map { "&models=" + $0.apiName } ?? ""
+        return "/v1/forecast?latitude=" + coordText(lat) + "&longitude=" + coordText(lon)
+            + "&minutely_15=precipitation" + modelParam + "&forecast_minutely_15=12"
             + "&timeformat=unixtime&timezone=GMT&precipitation_unit=mm"
     }
 

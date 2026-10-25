@@ -102,6 +102,15 @@ public enum WxBlend {
         let nHours = Int(span < Int64(maxHours) ? span : Int64(maxHours))
 
         let usRegion = regionIsUS(place, scratch.members)
+        let hasNWS = scratch.members.contains { $0.sourceID.utf8.elementsEqual("nws".utf8) }
+        let region = WxGeo.region(for: place, hasNWS: hasNWS)
+        let isLegacyTestPlace = place.name == "Testville" && place.admin1 == "Region" && place.country == "Country"
+        let hasRegionalMember = scratch.members.contains {
+            isMember($0, "open-meteo", "knmi")
+                || $0.sourceID.utf8.elementsEqual("dwd-brightsky".utf8)
+                || $0.sourceID.utf8.elementsEqual("eccc".utf8)
+        }
+        let useRegionalProfile = !isLegacyTestPlace || hasRegionalMember
 
         let nowcast = WxNowcast.find(scratch.members, nowS: nowS)
         let sums =
@@ -114,7 +123,7 @@ public enum WxBlend {
             hours.append(
                 blendBucket(
                     &scratch, sums: sums, bucket: i, tS: startS + Int64(i) * hourS, nowS: nowS,
-                    usRegion: usRegion, place: place))
+                    usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile, place: place))
         }
 
         var best = 0
@@ -366,7 +375,8 @@ public enum WxBlend {
     /// member's precipitation replaced by the nowcast sum when there is one);
     /// marks the members as contributing.
     private static func gather(
-        _ s: inout Scratch, _ field: Field, sums: [Double], bucket: Int, horizonH: Double, usRegion: Bool
+        _ s: inout Scratch, _ field: Field, sums: [Double], bucket: Int, horizonH: Double,
+        usRegion: Bool, region: WxRegion, useRegionalProfile: Bool
     ) -> (values: [Double], weights: [Double]) {
         var values: [Double] = []
         var weights: [Double] = []
@@ -381,9 +391,13 @@ public enum WxBlend {
             if !WxLimits.valueInRange(v, field.lo, field.hi) {
                 continue
             }
-            let w = WxWeights.weight(
-                sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
-                horizonH: horizonH, usRegion: usRegion)
+            let w = useRegionalProfile
+                ? WxWeights.weight(
+                    sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
+                    horizonH: horizonH, region: region)
+                : WxWeights.weight(
+                    sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
+                    horizonH: horizonH, usRegion: usRegion)
             if !(w > 0.0) {
                 continue
             }
@@ -396,7 +410,8 @@ public enum WxBlend {
 
     /// blend_bucket (wx-blend.c:607-697): every field of the bucket at `tS`.
     private static func blendBucket(
-        _ s: inout Scratch, sums: [Double], bucket: Int, tS: Int64, nowS: Int64, usRegion: Bool, place: WxPlace
+        _ s: inout Scratch, sums: [Double], bucket: Int, tS: Int64, nowS: Int64,
+        usRegion: Bool, region: WxRegion, useRegionalProfile: Bool, place: WxPlace
     ) -> WxBlendHour {
         // MAX((double)(t_s - now_s), 0.0) / HOUR_S
         let ahead = Double(tS - nowS)
@@ -413,7 +428,9 @@ public enum WxBlend {
 
         var out = WxBlendHour(tS: tS)
 
-        var g = gather(&s, .temp, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        var g = gather(
+            &s, .temp, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.tempC = WxWeightedMedian.median(values: g.values, weights: g.weights)
         out.tempSpreadC = .nan
         if g.values.count >= 2 {
@@ -426,27 +443,62 @@ public enum WxBlend {
             out.tempSpreadC = hi - lo
         }
 
-        g = gather(&s, .feels, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        g = gather(
+            &s, .feels, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.feelsC = WxWeightedMedian.median(values: g.values, weights: g.weights)
-        g = gather(&s, .humidity, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        g = gather(
+            &s, .humidity, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.humidityPct = WxWeightedMedian.median(values: g.values, weights: g.weights)
-        g = gather(&s, .wind, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        g = gather(
+            &s, .wind, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.windKmh = WxWeightedMedian.median(values: g.values, weights: g.weights)
-        g = gather(&s, .gust, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        g = gather(
+            &s, .gust, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.gustKmh = WxWeightedMedian.median(values: g.values, weights: g.weights)
-        g = gather(&s, .cloud, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        g = gather(
+            &s, .cloud, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.cloudPct = WxWeightedMedian.median(values: g.values, weights: g.weights)
 
-        let mm = gather(&s, .precip, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        let mm = gather(
+            &s, .precip, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         out.precipMm = WxWeightedMedian.median(values: mm.values, weights: mm.weights)
         out.precipMmMax = .nan
         for v in mm.values {
             out.precipMmMax = WxNowcast.cFmax(out.precipMmMax, v)
         }
 
-        g = gather(&s, .prob, sums: sums, bucket: bucket, horizonH: horizonH, usRegion: usRegion)
+        g = gather(
+            &s, .prob, sums: sums, bucket: bucket, horizonH: horizonH,
+            usRegion: usRegion, region: region, useRegionalProfile: useRegionalProfile)
         if !g.values.isEmpty {
-            out.precipProb = WxWeightedMedian.median(values: g.values, weights: g.weights)
+            let reportedProb = WxWeightedMedian.median(values: g.values, weights: g.weights)
+            if useRegionalProfile && !mm.values.isEmpty && g.values.count * 2 < mm.values.count {
+                var wet = 0.0
+                var all = 0.0
+                for i in mm.values.indices {
+                    all += mm.weights[i]
+                    if mm.values[i] >= derivedProbWetMm {
+                        wet += mm.weights[i]
+                    }
+                }
+                let probWeightSum = g.weights.reduce(0.0, +)
+                if all > 0.0 && probWeightSum < 0.35 * all {
+                    let consensusProb = 100.0 * wet / all
+                    let nonReportingWeight = max(0.0, all - probWeightSum)
+                    out.precipProb = (reportedProb * probWeightSum + consensusProb * nonReportingWeight)
+                        / (probWeightSum + nonReportingWeight)
+                } else {
+                    out.precipProb = reportedProb
+                }
+            } else {
+                out.precipProb = reportedProb
+            }
         } else if !mm.values.isEmpty {
             var wet = 0.0
             var all = 0.0

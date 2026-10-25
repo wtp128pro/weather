@@ -124,10 +124,19 @@ public final class OpenMeteoProvider: WxProvider {
     public func fetch(_ place: WxPlace) async throws -> WxSourceResult {
         // C: wx_place_copy() cannot fail for a WxPlace; then g_task_return_error_if_cancelled.
         try Task.checkCancellation()
-        let choice = OpenMeteoShared.models(lat: place.lat, lon: place.lon)
-        let pathA = OpenMeteoShared.forecastPath(lat: place.lat, lon: place.lon, models: choice.models)
-        let pathB = choice.conus ? OpenMeteoShared.nowcastPath(lat: place.lat, lon: place.lon) : nil
-        let outcome = await run(pathA: pathA, pathB: pathB, models: choice.models)
+        let models: [OpenMeteoModel]
+        let pathB: String?
+        if !place.countryCode.isEmpty || !place.timezone.isEmpty {
+            let regional = OpenMeteoShared.models(for: place)
+            models = regional.models
+            pathB = regional.nowcastPath
+        } else {
+            let choice = OpenMeteoShared.models(lat: place.lat, lon: place.lon)
+            models = choice.models
+            pathB = choice.conus ? OpenMeteoShared.nowcastPath(lat: place.lat, lon: place.lon) : nil
+        }
+        let pathA = OpenMeteoShared.forecastPath(lat: place.lat, lon: place.lon, models: models)
+        let outcome = await run(pathA: pathA, pathB: pathB, models: models)
         // The caller's cancellation wins over every outcome (wx-provider.h:32-35).
         try Task.checkCancellation()
         return try outcome.get()

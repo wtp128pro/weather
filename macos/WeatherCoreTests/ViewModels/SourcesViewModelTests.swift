@@ -649,6 +649,8 @@ import Testing
             ("open-meteo", "Open-Meteo", "Weather data by Open-Meteo.com", "https://open-meteo.com/"),  // wx-openmeteo.c:14-16
             ("nws", "National Weather Service", "Source: NOAA/National Weather Service", "https://www.weather.gov/"),  // wx-nws.c:19-21
             ("met-no", "MET Norway", "Data from MET Norway", "https://api.met.no/"),  // wx-metno.h:13-14
+            ("dwd-brightsky", "DWD Bright Sky", "Source: Deutscher Wetterdienst (DWD) via Bright Sky", "https://brightsky.dev/"),
+            ("eccc", "Environment Canada", "Source: Environment and Climate Change Canada", "https://weather.gc.ca/"),
         ]
         #expect(vm.rows.count == expected.count)
         for (id, name, text, url) in expected {

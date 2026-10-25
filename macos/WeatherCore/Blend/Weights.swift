@@ -67,6 +67,12 @@ public struct WxWeightMultipliers: Sendable, Equatable, Codable {
         if src == "nws" {
             return "nws:nws"
         }
+        if src == "dwd-brightsky" {
+            return "dwd-brightsky:mosmix"
+        }
+        if src == "eccc" {
+            return "eccc:hrdps"
+        }
         if src == "open-meteo" && mdl == "hrrr15" {
             return "open-meteo:hrrr"
         }
@@ -244,6 +250,193 @@ public enum WxWeights {
         return base * mults.combinedMultiplier(sourceID: sourceID, modelID: modelID)
     }
 
+    /// Region-aware baseline heuristic weight across all 8 `WxRegion` profiles and 4 horizon bands.
+    public static func baseWeight(
+        sourceID: String, modelID: String, variable: WxVar, horizonH: Double, region: WxRegion
+    ) -> Double {
+        if horizonH.isNaN {
+            return 0.0
+        }
+        switch region {
+        case .us:
+            if cStringEquals(sourceID, "dwd-brightsky") || cStringEquals(sourceID, "eccc")
+                || (cStringEquals(sourceID, "open-meteo") && cStringEquals(modelID, "knmi"))
+            {
+                return 0.0
+            }
+            return baseWeight(sourceID: sourceID, modelID: modelID, variable: variable, horizonH: horizonH, usRegion: true)
+        case .world:
+            if cStringEquals(sourceID, "dwd-brightsky") || cStringEquals(sourceID, "eccc")
+                || (cStringEquals(sourceID, "open-meteo") && cStringEquals(modelID, "knmi"))
+            {
+                return 0.0
+            }
+            return baseWeight(sourceID: sourceID, modelID: modelID, variable: variable, horizonH: horizonH, usRegion: false)
+        default:
+            break
+        }
+        guard let row = findRow(sourceID: sourceID, modelID: modelID) else {
+            return unknownWeight
+        }
+        if row.limitedTo48h && horizonH > hrrrMaxHorizonH {
+            return 0.0
+        }
+        let band = bandOf(horizonH)
+        return regionalRowWeight(row: row, variable: variable, band: band, region: region)
+    }
+
+    /// Region-aware weight scaled by `activeMultipliers` when customized.
+    public static func weight(
+        sourceID: String, modelID: String, variable: WxVar, horizonH: Double, region: WxRegion
+    ) -> Double {
+        let base = baseWeight(sourceID: sourceID, modelID: modelID, variable: variable, horizonH: horizonH, region: region)
+        guard base > 0 else { return 0.0 }
+        let mults = activeMultipliers
+        if mults.isDefault {
+            return base
+        }
+        return base * mults.combinedMultiplier(sourceID: sourceID, modelID: modelID)
+    }
+
+    /// Computes the regional 4-band weight for a matched table row.
+    private static func regionalRowWeight(row: Row, variable: WxVar, band: Int, region: WxRegion) -> Double {
+        func pick(_ b: [Double], prob: Double = 1.0) -> Double {
+            switch variable {
+            case .humidity:
+                return b[band] > 0 ? 1.0 : 0.0
+            case .precipProb:
+                return b[band] > 0 ? prob : 0.0
+            default:
+                return b[band]
+            }
+        }
+        let key = "\(row.sourceID):\(row.modelID ?? "*")"
+        switch region {
+        case .canada:
+            switch key {
+            case "eccc:*":
+                return pick([4.0, 4.0, 3.5, 3.5], prob: 3.5)
+            case "open-meteo:gem":
+                return pick([4.0, 4.0, 3.5, 3.0], prob: 2.0)
+            case "open-meteo:hrrr":
+                return row.us[variable.rawValue][band]
+            case "open-meteo:nbm":
+                return pick([2.5, 2.5, 2.5, 2.0], prob: 2.0)
+            case "open-meteo:ecmwf":
+                return pick([2.0, 2.5, 3.5, 3.5], prob: 1.5)
+            case "open-meteo:icon":
+                return pick([2.0, 2.0, 2.0, 2.0], prob: 1.0)
+            case "open-meteo:gfs":
+                return pick([1.5, 1.5, 1.5, 1.5], prob: 1.0)
+            case "met-no:ecmwf":
+                return pick([1.5, 1.5, 1.5, 1.5], prob: 1.0)
+            default:
+                return 0.0
+            }
+        case .ukIreland:
+            switch key {
+            case "open-meteo:ukmo":
+                return pick([4.0, 4.0, 3.0, 2.5], prob: 2.0)
+            case "open-meteo:ecmwf":
+                return pick([3.0, 3.0, 3.5, 3.5], prob: 1.5)
+            case "open-meteo:icon":
+                return pick([2.5, 2.5, 2.5, 2.0], prob: 1.5)
+            case "open-meteo:knmi":
+                return pick([2.5, 2.5, 2.0, 0.0], prob: 1.5)
+            case "met-no:ecmwf":
+                return pick([2.5, 2.5, 2.0, 2.0], prob: 1.0)
+            case "open-meteo:meteofrance":
+                return pick([2.0, 2.0, 2.0, 1.5], prob: 1.0)
+            case "open-meteo:gfs", "open-meteo:gem":
+                return pick([1.5, 1.5, 1.5, 1.5], prob: 1.0)
+            default:
+                return 0.0
+            }
+        case .beneluxNorthSea:
+            switch key {
+            case "open-meteo:knmi":
+                return pick([4.0, 4.0, 2.0, 0.0], prob: 2.0)
+            case "open-meteo:icon":
+                return pick([3.5, 3.5, 3.0, 2.5], prob: 1.5)
+            case "dwd-brightsky:*":
+                return pick([3.0, 3.0, 2.5, 2.0], prob: 3.0)
+            case "open-meteo:ukmo":
+                return pick([2.5, 2.5, 2.0, 2.0], prob: 1.5)
+            case "open-meteo:meteofrance":
+                return pick([2.5, 2.5, 2.0, 1.5], prob: 1.5)
+            case "open-meteo:ecmwf":
+                return pick([2.5, 2.5, 3.5, 3.5], prob: 1.5)
+            case "met-no:ecmwf":
+                return pick([2.0, 2.0, 2.0, 2.0], prob: 1.0)
+            case "open-meteo:gfs", "open-meteo:gem":
+                return pick([1.0, 1.0, 1.0, 1.0], prob: 1.0)
+            default:
+                return 0.0
+            }
+        case .centralEurope:
+            switch key {
+            case "open-meteo:icon":
+                return pick([4.0, 4.0, 3.5, 2.5], prob: 2.0)
+            case "dwd-brightsky:*":
+                return pick([3.5, 3.5, 3.0, 2.5], prob: 3.5)
+            case "open-meteo:knmi":
+                return pick([2.5, 2.5, 2.0, 0.0], prob: 1.5)
+            case "open-meteo:meteofrance":
+                return pick([2.5, 2.5, 2.0, 1.5], prob: 1.5)
+            case "open-meteo:ecmwf":
+                return pick([2.5, 2.5, 3.5, 3.5], prob: 1.5)
+            case "open-meteo:ukmo":
+                return pick([2.0, 2.0, 2.0, 1.5], prob: 1.0)
+            case "met-no:ecmwf":
+                return pick([2.0, 2.0, 2.0, 2.0], prob: 1.0)
+            case "open-meteo:gfs", "open-meteo:gem":
+                return pick([1.0, 1.0, 1.0, 1.0], prob: 1.0)
+            default:
+                return 0.0
+            }
+        case .nordic:
+            switch key {
+            case "met-no:ecmwf":
+                return pick([4.0, 4.0, 3.0, 2.5], prob: 2.0)
+            case "open-meteo:ecmwf":
+                return pick([3.0, 3.0, 3.5, 3.5], prob: 1.5)
+            case "open-meteo:icon":
+                return pick([2.5, 2.5, 2.5, 2.0], prob: 1.5)
+            case "open-meteo:ukmo":
+                return pick([2.0, 2.0, 2.0, 2.0], prob: 1.0)
+            case "open-meteo:knmi":
+                return pick([1.5, 1.5, 1.0, 0.0], prob: 1.0)
+            case "open-meteo:meteofrance", "open-meteo:gfs", "open-meteo:gem":
+                return pick([1.5, 1.5, 1.5, 1.5], prob: 1.0)
+            default:
+                return 0.0
+            }
+        case .europeOther:
+            switch key {
+            case "open-meteo:ecmwf":
+                return pick([3.0, 3.0, 3.5, 3.5], prob: 1.5)
+            case "open-meteo:icon":
+                return pick([3.0, 3.0, 2.5, 2.5], prob: 1.5)
+            case "open-meteo:meteofrance":
+                return pick([3.0, 3.0, 2.5, 2.0], prob: 1.5)
+            case "open-meteo:ukmo":
+                return pick([2.5, 2.5, 2.0, 2.0], prob: 1.0)
+            case "met-no:ecmwf":
+                return pick([2.0, 2.0, 2.0, 2.0], prob: 1.0)
+            case "open-meteo:knmi":
+                return pick([2.0, 2.0, 1.5, 0.0], prob: 1.0)
+            case "dwd-brightsky:*":
+                return pick([2.5, 2.5, 2.0, 1.5], prob: 2.5)
+            case "open-meteo:gfs", "open-meteo:gem":
+                return pick([1.5, 1.5, 1.5, 1.5], prob: 1.0)
+            default:
+                return 0.0
+            }
+        case .us, .world:
+            return 0.0
+        }
+    }
+
     /// Descriptive metadata for all 10 table rows so the Settings UI can inspect and tune them.
     public static var modelDescriptors: [WxModelWeightDescriptor] {
         [
@@ -326,6 +519,30 @@ public enum WxWeights {
                 coverageSummary: "Worldwide",
                 usOnly: false, limitedTo48h: false,
                 usWeights: rows[9].us, worldWeights: rows[9].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "open-meteo", sourceName: "Open-Meteo", modelID: "knmi",
+                displayName: "KNMI HARMONIE-AROME (Seamless)",
+                resolutionSummary: "2 km convection-allowing non-hydrostatic",
+                coverageSummary: "Netherlands, Benelux, UK & Germany (0–60 h)",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[10].us, worldWeights: rows[10].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "dwd-brightsky", sourceName: "DWD Bright Sky", modelID: "mosmix",
+                displayName: "DWD MOSMIX & ICON-D2 (Bright Sky)",
+                resolutionSummary: "2 km ICON-D2 + statistically calibrated MOSMIX",
+                coverageSummary: "Germany, Netherlands & Central Europe",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[11].us, worldWeights: rows[11].world
+            ),
+            WxModelWeightDescriptor(
+                sourceID: "eccc", sourceName: "Environment Canada", modelID: "hrdps",
+                displayName: "ECCC MSC GeoMet (HRDPS / RDPS / Citypage)",
+                resolutionSummary: "2.5 km HRDPS continental + official ECCC guidance",
+                coverageSummary: "Canada & northern US border",
+                usOnly: false, limitedTo48h: false,
+                usWeights: rows[12].us, worldWeights: rows[12].world
             ),
         ]
     }
@@ -417,6 +634,18 @@ public enum WxWeights {
         Row(sourceID: "met-no", modelID: "ecmwf", usOnly: false, limitedTo48h: false,
             us: [flat(0.5), flat(1), flat(1), flat(1), flat(1), flat(1)],
             world: worldMain(1.5)),
+        // KNMI HARMONIE-AROME 2 km seamless nest (Netherlands, Benelux, UK, Germany).
+        Row(sourceID: "open-meteo", modelID: "knmi", usOnly: false, limitedTo48h: false,
+            us: [flat(0), flat(0), flat(0), flat(0), flat(0), flat(0)],
+            world: worldMain(2.5)),
+        // DWD Bright Sky (MOSMIX + ICON-D2 + SYNOP, Germany & Central Europe).
+        Row(sourceID: "dwd-brightsky", modelID: nil, usOnly: false, limitedTo48h: false,
+            us: [flat(0), flat(0), flat(0), flat(0), flat(0), flat(0)],
+            world: [3.5, 3.5, 3.5, 1.0, 3.5, 3.5]),
+        // Environment and Climate Change Canada (MSC GeoMet HRDPS / Citypage, Canada).
+        Row(sourceID: "eccc", modelID: nil, usOnly: false, limitedTo48h: false,
+            us: [flat(0), flat(0), flat(0), flat(0), flat(0), flat(0)],
+            world: [4.0, 4.0, 4.0, 1.0, 4.0, 3.5]),
     ]
 
     // MARK: - Lookup helpers

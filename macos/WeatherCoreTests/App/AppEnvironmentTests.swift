@@ -13,9 +13,10 @@ import Testing
 @MainActor
 @Suite(.serialized, .timeLimit(.minutes(1)))
 struct AppEnvironmentTests {
-    /// The four hosts the app may contact (DoD non-goal; wx-nws.c, wx-openmeteo.c, wx-metno.c).
+    /// The hosts the app may contact (wx-nws.c, wx-openmeteo.c, wx-metno.c, BrightSky, ECCC GeoMet).
     private static let allowedHosts: Set<String> = [
         "api.open-meteo.com", "geocoding-api.open-meteo.com", "api.weather.gov", "api.met.no",
+        "api.brightsky.dev", "api.weather.gc.ca",
     ]
 
     /// The origin of a production provider's HTTP client (the fixed constant it was built from).
@@ -27,6 +28,12 @@ struct AppEnvironmentTests {
             return p.http.policy.origin
         }
         if let p = provider as? METNorwayProvider {
+            return p.http.policy.origin
+        }
+        if let p = provider as? BrightSkyProvider {
+            return p.http.policy.origin
+        }
+        if let p = provider as? ECCCProvider {
             return p.http.policy.origin
         }
         return nil
@@ -50,6 +57,10 @@ struct AppEnvironmentTests {
                 n += p.http.outstandingCount
             } else if let p = p as? METNorwayProvider {
                 n += p.http.outstandingCount
+            } else if let p = p as? BrightSkyProvider {
+                n += p.http.outstandingCount
+            } else if let p = p as? ECCCProvider {
+                n += p.http.outstandingCount
             }
         }
         if let g = registry.geocoder as? OpenMeteoGeocoder {
@@ -63,19 +74,27 @@ struct AppEnvironmentTests {
     @Test func defaultWiringRegistersTheProductionSetInCOrder() throws {
         let registry = AppEnvironment.makeRegistry()
         let providers = registry.listProviders()
-        #expect(providers.count == 3)  // test-window.c:1152
-        #expect(providers.map(\.id) == ["nws", "open-meteo", "met-no"])  // test-window.c:1153-1155
+        #expect(providers.count == 5)
+        #expect(providers.map(\.id) == ["nws", "open-meteo", "met-no", "dwd-brightsky", "eccc"])
         for p in providers {
             #expect(registry.isEnabled(id: p.id))  // test-window.c:1156-1157
         }
         #expect(providers[0] is NWSProvider)
         #expect(providers[1] is OpenMeteoProvider)
         #expect(providers[2] is METNorwayProvider)
+        #expect(providers[3] is BrightSkyProvider)
+        #expect(providers[4] is ECCCProvider)
         let geocoder = try #require(registry.geocoder)  // test-window.c:1158
         #expect(geocoder is OpenMeteoGeocoder)
-        // Every production origin is https on one of the four hosts.
+        // Every production origin is https on one of the allowed hosts.
         let origins = providers.map { Self.origin(of: $0) }
-        #expect(origins == ["https://api.weather.gov", "https://api.open-meteo.com", "https://api.met.no"])
+        #expect(origins == [
+            "https://api.weather.gov",
+            "https://api.open-meteo.com",
+            "https://api.met.no",
+            "https://api.brightsky.dev",
+            "https://api.weather.gc.ca",
+        ])
         for o in origins {
             #expect(Self.isAllowedHTTPSOrigin(o), "\(o ?? "nil")")
         }
@@ -92,7 +111,7 @@ struct AppEnvironmentTests {
         let storage = AppEnvironment.StorageRoot(home: dir.url)
         let m = await AppEnvironment.make(storageRoot: storage)
         #expect(AppModel.appID == "io.github.wtp128pro.Weather")  // WX_APP_ID, test-window.c:1148
-        #expect(m.registry.listProviders().map(\.id) == ["nws", "open-meteo", "met-no"])
+        #expect(m.registry.listProviders().map(\.id) == ["nws", "open-meteo", "met-no", "dwd-brightsky", "eccc"])
         #expect(m.registry.geocoder != nil)
         #expect(m.places.isEmpty)  // test-window.c:1160
         #expect(!m.isOffline)  // test-window.c:1161
@@ -154,7 +173,7 @@ struct AppEnvironmentTests {
         #expect(m.units == .metric)
         #expect(!m.registry.isEnabled(id: "open-meteo"))
         #expect(m.registry.isEnabled(id: "nws") && m.registry.isEnabled(id: "met-no"))
-        #expect(m.sources.map(\.enabled) == [true, false, true])
+        #expect(m.sources.map(\.enabled) == [true, false, true, true, true])
         #expect(m.selectedKey == orlando.key)
         let item = try #require(m.place(forKey: miami.key))
         #expect(item.forecast?.generatedS == now)
