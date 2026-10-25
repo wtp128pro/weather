@@ -62,6 +62,13 @@ python3 scripts/help/validate.py
 ```
 After changing `WeatherCore/Blend/Weights.swift`, rebuild the help's weight tables from the code first (`HelpBookTests` fails until you do): build once, then `python3 scripts/help/weight_tables.py ../build-macos/Build/Products/Debug`.
 
+### Checking & Fixing Math in the Markdown Docs
+```bash
+python3 scripts/github_math.py check
+python3 scripts/github_math.py fix
+```
+GitHub mangles some valid LaTeX: it strips backslash escapes such as `\!` and `\%` from `$…$` and `$$…$$`, shows a ```` ```math ```` block inside a list as plain code, and rejects `\operatorname`. `check` reports each formula that will not render as written, with its line number; `fix` rewrites them into forms GitHub passes on verbatim (`` $`…`$ `` inline, ```` ```math ```` at the top level, `` $`\displaystyle …`$ `` inside a list). With no file arguments both process every tracked `.md` file, confirming each formula through GitHub's Markdown API; add `--offline` to skip that round trip. Run `check` after editing `ALGORITHMS_AND_ARCHITECTURE.md` or `FEATURES.md`.
+
 ### Signed Release Archive & Notarized DMG
 1. Copy `Local.xcconfig.example` to `Local.xcconfig` (`BB_DEVELOPMENT_TEAM = AQK9MG47BS`).
 2. Copy `scripts/signing_credentials.sh.example` to `scripts/signing_credentials.sh`.

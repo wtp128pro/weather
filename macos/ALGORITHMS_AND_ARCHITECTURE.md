@@ -65,9 +65,9 @@ The system is split into two strict layers:
 
 ### 2.1 Why Weighted Median Instead of Weighted Mean?
 
-In multi-model NWP ensembles, individual models frequently exhibit phase or amplitude errors (e.g., one model stalls a frontal boundary 30 km too far west, predicting $18\text{ mm/h}$ of rain while six other models predict $0\text{ mm/h}$). Under an arithmetic weighted mean, a single wet outlier produces artificial drizzle across dry hours ("ensemble drizzle bias"). The **weighted median** (Edgeworth, 1888) has a breakdown point of $50\%$—any minority of outlier models with less than half the total weight cannot pull the blended estimate away from the consensus regime.
+In multi-model NWP ensembles, individual models frequently exhibit phase or amplitude errors (e.g., one model stalls a frontal boundary 30 km too far west, predicting $18\text{ mm/h}$ of rain while six other models predict $0\text{ mm/h}$). Under an arithmetic weighted mean, a single wet outlier produces artificial drizzle across dry hours ("ensemble drizzle bias"). The **weighted median** (Edgeworth, 1888) has a breakdown point of $`50\%`$—any minority of outlier models with less than half the total weight cannot pull the blended estimate away from the consensus regime.
 
-Precipitation probability (`precipProb`), by contrast, is already a calibrated probability in $[0, 100]\%$ and is combined via a **weighted arithmetic mean** so every model's wet/dry signal contributes proportionally to the final risk percentage.
+Precipitation probability (`precipProb`), by contrast, is already a calibrated probability in $`[0, 100]\%`$ and is combined via a **weighted arithmetic mean** so every model's wet/dry signal contributes proportionally to the final risk percentage.
 
 ### 2.2 Numerical Stability via IEEE-754 `frexp`/`ldexp` Weight Scaling
 
@@ -77,22 +77,29 @@ Given $n \in [1, 64]$ candidate pairs $(x_i, w_i)$ filtered to finite $x_i$ and 
 
 1. **Power-of-Two Exponent Normalization:**  
    Directly summing arbitrary positive IEEE-754 `Double` weights can overflow to $+\infty$ (when $w_i \sim 10^{308}$) or underflow to $0$ (when $w_i \sim 10^{-320}$). To guarantee exactness without altering the binary significands (mantissas) of the weights, we find:
-   $$w_{\max} = \max_{1 \le i \le k} w_i, \qquad (m, e_{\max}) = \operatorname{frexp}(w_{\max})$$
-   where $m \in [0.5, 1.0)$ and $w_{\max} = m \cdot 2^{e_{\max}}$. Every weight is rescaled by an exact power of two via $\operatorname{ldexp}$:
-   $$\tilde{w}_i = \operatorname{ldexp}(w_i, -e_{\max}) = w_i \cdot 2^{-e_{\max}} \in [0, 1)$$
-   Because $\operatorname{ldexp}$ only adjusts the 11-bit IEEE-754 exponent field, **zero rounding error** is introduced into the mantissas, and the total weight satisfies:
-   $$0.5 \le \sum_{i=1}^k \tilde{w}_i < k \le 64$$
+
+   $`\displaystyle w_{\max} = \max_{1 \le i \le k} w_i, \qquad (m, e_{\max}) = \mathrm{frexp}(w_{\max})`$
+
+   where $m \in [0.5, 1.0)$ and $w_{\max} = m \cdot 2^{e_{\max}}$. Every weight is rescaled by an exact power of two via $\mathrm{ldexp}$:
+
+   $`\displaystyle \tilde{w}_i = \mathrm{ldexp}(w_i, -e_{\max}) = w_i \cdot 2^{-e_{\max}} \in [0, 1)`$
+
+   Because $\mathrm{ldexp}$ only adjusts the 11-bit IEEE-754 exponent field, **zero rounding error** is introduced into the mantissas, and the total weight satisfies:
+
+   $`\displaystyle 0.5 \le \sum_{i=1}^k \tilde{w}_i < k \le 64`$
+
    which is guaranteed never to overflow or underflow (Goldberg, 1991).
 
 2. **Stable Insertion Sort:**  
    The surviving pairs $(x_i, \tilde{w}_i)$ are sorted in ascending order of $x_i$ using a deterministic insertion sort (`j > 0 && xs[j - 1] > x`). Because $k \le 64$, insertion sort is cache-optimal and preserves member registration order for equal values.
 
 3. **50% Cumulative Weight Threshold & Exact Tie-Breaking:**  
-   Let $H = \frac{1}{2} \sum_{i=1}^k \tilde{w}_i$ be the half-weight threshold, and let $C_i = \sum_{m=0}^{i} \tilde{w}_m$ be the running cumulative weight:
+   Let $`H = \frac{1}{2} \sum_{i=1}^k \tilde{w}_i`$ be the half-weight threshold, and let $`C_i = \sum_{m=0}^{i} \tilde{w}_m`$ be the running cumulative weight:
    - The walk stops at the first index $i$ where $C_i \ge H$.
    - **Strict Exceedance ($C_i > H$):** The weighted median is $x_i$.
    - **Exact Split ($C_i == H$):** When the cumulative weight lands exactly on $H$, any zero-weight padding entries are skipped to find the next positive-weight element $x_j$ ($j > i$), and the tie is broken by their overflow-safe midpoint (`meanOfPair`):
-     $$\operatorname{meanOfPair}(a, b) = \begin{cases} \dfrac{a + b}{2} & \text{if } (a < 0) \neq (b < 0) \quad \text{(opposite signs: } a+b \text{ cannot overflow)} \\[6pt] a + \dfrac{b - a}{2} & \text{if } \operatorname{sgn}(a) = \operatorname{sgn}(b) \quad \text{(same sign: } b-a \text{ cannot overflow)} \end{cases}$$
+
+     $`\displaystyle \mathrm{meanOfPair}(a, b) = \begin{cases} \dfrac{a + b}{2} & \text{if } (a < 0) \neq (b < 0) \quad \text{(opposite signs: } a+b \text{ cannot overflow)} \\[6pt] a + \dfrac{b - a}{2} & \text{if } \mathrm{sgn}(a) = \mathrm{sgn}(b) \quad \text{(same sign: } b-a \text{ cannot overflow)} \end{cases}`$
 
 ### 2.3 Per-Hour Ensemble Synthesis Rules
 
@@ -106,8 +113,8 @@ For each valid UTC hour $t_S$ in the union of all member timelines (capped at `W
 | `feelsC` | Weighted Median | `.temp` | Uses member-reported apparent temperature. |
 | `windKmh` | Weighted Median | `.wind` | Clamped $\ge 0$. |
 | `gustKmh` | Weighted Median | `.wind` | Enforces physical invariant `gustKmh = max(gustKmh, windKmh)` when both are finite. |
-| `cloudPct` | Weighted Median | `.cloud` | Clamped to $[0, 100]\%$. |
-| `humidityPct` | Weighted Median | `.humidity` | Clamped to $[0, 100]\%$. |
+| `cloudPct` | Weighted Median | `.cloud` | Clamped to $`[0, 100]\%`$. |
+| `humidityPct` | Weighted Median | `.humidity` | Clamped to $`[0, 100]\%`$. |
 | `precipMm` | Weighted Median | `.precipMm` | Also records `precipMmMax = max_i(precipMm_i)` across all members with positive `.precipMm` weight. |
 | `precipProb` | Weighted Mean (or Derived Fallback) | `.precipProb` | See **§2.4** below. |
 
@@ -116,13 +123,17 @@ For each valid UTC hour $t_S$ in the union of all member timelines (capped at `W
 **Implementation:** [`Blend.swift:208-237`](WeatherCore/Blend/Blend.swift#L208-L237)
 
 1. **Primary (Weighted Mean of Reported Probabilities):**  
-   If at least one member supplies a finite `precipProb` with weight $w_i = \operatorname{weight}(\text{src}_i, \text{model}_i, \text{.precipProb}, h, \text{us}) > 0$:
-   $$P_{\text{precip}} = \operatorname{clamp}_{[0, 100]}\!\left(\frac{\sum_i \tilde{w}_i \, P_i}{\sum_i \tilde{w}_i}\right)$$
-   where $\tilde{w}_i = \operatorname{ldexp}(w_i, -e_{\max})$.
+   If at least one member supplies a finite `precipProb` with weight $w_i = \mathrm{weight}(\text{src}_i, \text{model}_i, \text{.precipProb}, h, \text{us}) > 0$:
+
+   $`\displaystyle P_{\text{precip}} = \mathrm{clamp}_{[0, 100]}\!\left(\frac{\sum_i \tilde{w}_i \, P_i}{\sum_i \tilde{w}_i}\right)`$
+
+   where $`\tilde{w}_i = \mathrm{ldexp}(w_i, -e_{\max})`$.
 
 2. **Secondary Fallback (Derived from Wet-Member Fraction):**  
    Some global models (such as `MET Norway` and certain regional NWP feeds) report hourly precipitation amount (`precipMm`) without an explicit probability field. If no member reports `precipProb` at hour $t_S$, the probability is derived from the weighted fraction of members predicting measurable rain (`precipMm >= 0.1 mm/h`, `derivedWetMm = 0.1`):
-   $$P_{\text{derived}} = 100 \cdot \frac{\sum_{i \,:\, R_i \ge 0.1} \tilde{w}_{i,\text{mm}}}{\sum_{i \,:\, R_i \text{ finite}} \tilde{w}_{i,\text{mm}}}$$
+
+   $`\displaystyle P_{\text{derived}} = 100 \cdot \frac{\sum_{i \,:\, R_i \ge 0.1} \tilde{w}_{i,\text{mm}}}{\sum_{i \,:\, R_i \text{ finite}} \tilde{w}_{i,\text{mm}}}`$
+
    using the `.precipMm` weights $w_{i,\text{mm}}$.
 
 ### 2.5 Sub-Hourly Linear Interpolation for "Now"
@@ -130,7 +141,9 @@ For each valid UTC hour $t_S$ in the union of all member timelines (capped at `W
 **Implementation:** [`Blend.swift:326-389`](WeatherCore/Blend/Blend.swift#L326-L389) (`WxBlend.interpolateAt`)
 
 When displaying current conditions at wall-clock time $t_{\text{now}}$ between two consecutive hourly slots $h_0$ ($t_0 \le t_{\text{now}} < t_0 + 3600$) and $h_1$ ($t_1 = t_0 + 3600$), continuous fields are linearly interpolated with fraction $\alpha = (t_{\text{now}} - t_0) / 3600 \in [0, 1)$:
-$$\operatorname{lerpKnown}(a, b, \alpha) = \begin{cases} a + \alpha (b - a) & \text{if } a, b \text{ finite} \\ a & \text{if only } a \text{ finite} \\ b & \text{if only } b \text{ finite} \\ \text{NaN} & \text{otherwise} \end{cases}$$
+```math
+\mathrm{lerpKnown}(a, b, \alpha) = \begin{cases} a + \alpha (b - a) & \text{if } a, b \text{ finite} \\ a & \text{if only } a \text{ finite} \\ b & \text{if only } b \text{ finite} \\ \text{NaN} & \text{otherwise} \end{cases}
+```
 Discrete fields (`condition`, `isDay`, `nMembers`, `tS`) are taken from the enclosing hour $h_0$.
 
 ---
@@ -142,7 +155,9 @@ Discrete fields (`condition`, `isDay`, `nMembers`, `tS`) are taken from the encl
 ### 3.1 Forecast Horizon Bands (`bandOf`)
 
 Forecast lead time (horizon) in hours is defined as:
-$$h = \frac{t_{\text{valid}} - t_{\text{now}}}{3600}$$
+```math
+h = \frac{t_{\text{valid}} - t_{\text{now}}}{3600}
+```
 In the US region (`usRegion == true`), weights vary across 4 lead-time horizon bands (`bandOf`, [`Weights.swift:311-324`](WeatherCore/Blend/Weights.swift#L311-L324)):
 
 | Band Index | Symbol | Horizon Interval $h$ (Hours) | Physical & Operational Regime |
@@ -214,7 +229,9 @@ In **Settings (`⌘,`)**, users can adjust:
 - **Per-Model Multiplier** $M_{\text{model}}(\text{sourceID}, \text{modelID}) \in [0.00, 3.00]$ (default $1.00$)
 
 The effective weight used by `WxWeights.weight(...)` is:
-$$w_{\text{eff}}(s, m, v, h, \text{us}) = w_{\text{base}}(s, m, v, h, \text{us}) \times M_{\text{src}}(s) \times M_{\text{model}}(s, m)$$
+```math
+w_{\text{eff}}(s, m, v, h, \text{us}) = w_{\text{base}}(s, m, v, h, \text{us}) \times M_{\text{src}}(s) \times M_{\text{model}}(s, m)
+```
 Custom multipliers are persisted atomically to `<configDirectory>/weather/weights.json` (keeping `settings.json` strictly compatible with the C schema) and immediately trigger `engine.sourcesChanged()` so active places re-blend.
 
 ---
@@ -238,7 +255,9 @@ From the `hrrr15` member's quarter-hour slots (each $900\text{ s} = 15\text{ min
 ### 4.3 Hourly Sum Substitution (`substituteHrrrHours`)
 
 When the `hrrr15` run contains all 4 quarter-hours $[H, H+900, H+1800, H+2700]$ of an aligned UTC hour $H$, their sum:
-$$R_{\text{HRRR}, H} = \sum_{j=0}^{3} q_{H + 900j}$$
+```math
+R_{\text{HRRR}, H} = \sum_{j=0}^{3} q_{H + 900j}
+```
 replaces the hourly `open-meteo:hrrr` member's `precipMm` at hour $H$ **before** multi-model ensemble blending.
 
 ### 4.4 Mass-Conserving Quarter Rescaling (`rescaleQuarters`)
@@ -248,10 +267,14 @@ After multi-model blending produces the consensus hourly precipitation $B_H$ at 
 Let $S = q_0 + q_1 + q_2 + q_3$ be the raw quarter sum:
 1. **Dry / Near-Zero Raw Sum ($S \le 10^{-9}\text{ mm}$, `rawZeroMm = 1e-9`):**  
    The blended hourly total is distributed equally across all 4 quarters:
-   $$q'_j = \frac{B_H}{4}, \qquad j \in \{0, 1, 2, 3\}$$
+
+   $`\displaystyle q'_j = \frac{B_H}{4}, \qquad j \in \{0, 1, 2, 3\}`$
+
 2. **Wet Raw Sum ($S > 10^{-9}\text{ mm}$):**  
-   Let $j^* = \arg\max_{j \in \{0,1,2,3\}} q_j$ be the **first largest quarter**. The other three quarters are scaled proportionally, and the largest quarter absorbs the exact floating-point remainder:
-   $$q'_j = q_j \cdot \frac{B_H}{S} \quad (j \neq j^*), \qquad q'_{j^*} = \max\!\left(0,\; B_H - \sum_{j \neq j^*} q'_j\right)$$
+   Let $`j^* = \arg\max_{j \in \{0,1,2,3\}} q_j`$ be the **first largest quarter**. The other three quarters are scaled proportionally, and the largest quarter absorbs the exact floating-point remainder:
+
+   $`\displaystyle q'_j = q_j \cdot \frac{B_H}{S} \quad (j \neq j^*), \qquad q'_{j^*} = \max\!\left(0,\; B_H - \sum_{j \neq j^*} q'_j\right)`$
+
    This guarantees $\sum_{j=0}^3 q'_j = B_H$ without rounding drift.
 
 ---
@@ -272,7 +295,9 @@ Each hourly slot's `WxCondition` is derived by combining WMO Code Table 4677 wea
    If at least half of WMO-reporting members report freezing drizzle or freezing rain, the condition is `.sleet`.
 4. **Wet-Hour Threshold (`isWetHour`):**  
    An hour is classified as **wet** if and only if:
-   $$\text{precipMm} \ge 0.1\text{ mm/h} \quad \land \quad \left(\text{precipProb} \ge 30.0\% \;\lor\; \text{precipProb is NaN}\right)$$
+
+   $`\displaystyle \text{precipMm} \ge 0.1\text{ mm/h} \quad \land \quad \left(\text{precipProb} \ge 30.0\% \;\lor\; \text{precipProb is NaN}\right)`$
+
    When an hour is wet and no WMO majority selected thunderstorm/snow/sleet:
    - If $T < 0.0^\circ\text{C}$ (`freezeTempC = 0.0`): `.snow`
    - If $0.0^\circ\text{C} \le T < 1.5^\circ\text{C}$ (`sleetMaxTempC = 1.5`): `.sleet`
@@ -352,11 +377,17 @@ Reports closer than $1.5\text{ km}$ are one site (an airport METAR and its ASOS/
 
 Station $i$ at great-circle distance $d_i$ (km) and elevation difference $\Delta z_i = z_{\text{target}} - z_i$ (m, clamped to $\pm 1800$) receives
 
-$$W_{\text{horiz}}(d_i) = \exp\!\left(-\frac{d_i^2}{2 L_h^2}\right) \cdot \frac{1}{1 + (d_i / d_0)^2}, \qquad L_h = 22.0\text{ km},\quad d_0 = 8.0\text{ km}$$
+```math
+W_{\text{horiz}}(d_i) = \exp\!\left(-\frac{d_i^2}{2 L_h^2}\right) \cdot \frac{1}{1 + (d_i / d_0)^2}, \qquad L_h = 22.0\text{ km},\quad d_0 = 8.0\text{ km}
+```
 
-$$W_{\text{vert}}(\Delta z_i) = \exp\!\left(-\frac{\Delta z_i^2}{2 L_z^2}\right), \qquad L_z = 350.0\text{ m}$$
+```math
+W_{\text{vert}}(\Delta z_i) = \exp\!\left(-\frac{\Delta z_i^2}{2 L_z^2}\right), \qquad L_z = 350.0\text{ m}
+```
 
-$$W_{\text{prior},i} = W_{\text{horiz}}(d_i) \cdot W_{\text{vert}}(\Delta z_i) \cdot \text{trust}_i \cdot \text{health}_i$$
+```math
+W_{\text{prior},i} = W_{\text{horiz}}(d_i) \cdot W_{\text{vert}}(\Delta z_i) \cdot \text{trust}_i \cdot \text{health}_i
+```
 
 where `trust` is the network-class prior of the table above and `health` the station's measured track record (§6.7). Candidates must lie within $95\text{ km}$ and be at most $3\text{ h}$ old. **The pool** is the $12$ sites of largest $W_{\text{prior}}$ within $60\text{ km}$ (not merely the nearest, so a crowd of low-trust gauges cannot push out a first-class station a little farther away); if none is that close, the nearest usable site alone.
 
@@ -367,17 +398,23 @@ where `trust` is the network-class prior of the table above and `health` the sta
 
 Temperatures and dewpoints are reduced to the target elevation before blending:
 
-$$T_{\text{reduced},i} = T_i + \Gamma_T \cdot \Delta z_i, \qquad \Gamma_T = \begin{cases} -0.0068\text{ }^\circ\text{C/m} & \text{sun up (mixed boundary layer)} \\ -0.0042\text{ }^\circ\text{C/m} & \text{night (stable boundary layer)} \end{cases}$$
+```math
+T_{\text{reduced},i} = T_i + \Gamma_T \cdot \Delta z_i, \qquad \Gamma_T = \begin{cases} -0.0068\text{ }^\circ\text{C/m} & \text{sun up (mixed boundary layer)} \\ -0.0042\text{ }^\circ\text{C/m} & \text{night (stable boundary layer)} \end{cases}
+```
 
-$$T_{d,\text{reduced},i} = \min\!\big(T_{\text{reduced},i},\; T_{d,i} - 0.0019 \cdot \Delta z_i\big)$$
+```math
+T_{d,\text{reduced},i} = \min\!\big(T_{\text{reduced},i},\; T_{d,i} - 0.0019 \cdot \Delta z_i\big)
+```
 
-A station $300\text{ m}$ above the target ($\Delta z = -300$) is warmed by $2.0\,^\circ\text{C}$ by day and $1.3\,^\circ\text{C}$ at night. A dewpoint missing from a report is derived from its relative humidity (Magnus, §7.1).
+A station $300\text{ m}$ above the target ($\Delta z = -300$) is warmed by $`2.0\,^\circ\text{C}`$ by day and $`1.3\,^\circ\text{C}`$ at night. A dewpoint missing from a report is derived from its relative humidity (Magnus, §7.1).
 
 ### 6.3 Shepard (1968) Directional De-Clustering
 
 A tight cluster of sites on one bearing must not outvote an isolated site on the other side. With $\theta_i$ the bearing from the target to site $i$:
 
-$$S_i = \sum_{j \neq i} \min\!\left(3,\; \sqrt{\frac{W_{\text{prior},j}}{W_{\text{prior},i}}}\right) \cdot \left(\frac{1 + \cos(\theta_i - \theta_j)}{2}\right)^{4}, \qquad W_{\text{dir},i} = \frac{1}{1 + S_i}$$
+```math
+S_i = \sum_{j \neq i} \min\!\left(3,\; \sqrt{\frac{W_{\text{prior},j}}{W_{\text{prior},i}}}\right) \cdot \left(\frac{1 + \cos(\theta_i - \theta_j)}{2}\right)^{4}, \qquad W_{\text{dir},i} = \frac{1}{1 + S_i}
+```
 
 A site shadowed by a stronger one on the same bearing loses weight; a site alone in its direction keeps $W_{\text{dir}} = 1$.
 
@@ -385,29 +422,39 @@ A site shadowed by a stronger one on the same bearing loses weight; a site alone
 
 For observation age $\Delta t_i$ (a report without a time counts as $20\text{ min}$ old):
 
-$$W_{\text{time},i}^{(\text{var})} = \exp\!\left(-\frac{\Delta t_i}{\tau_{\text{var}}}\right), \qquad \tau_{\text{temp}} = 2700\text{ s},\quad \tau_{\text{wind}} = 1200\text{ s},\quad \tau_{\text{sky/precip}} = 900\text{ s}$$
+```math
+W_{\text{time},i}^{(\text{var})} = \exp\!\left(-\frac{\Delta t_i}{\tau_{\text{var}}}\right), \qquad \tau_{\text{temp}} = 2700\text{ s},\quad \tau_{\text{wind}} = 1200\text{ s},\quad \tau_{\text{sky/precip}} = 900\text{ s}
+```
 
-Wind is further weighted by $\text{windTrust}_i / \text{trust}_i$ (many road-weather and hydrological sites measure wind well below 10 m). The gust is the mean wind plus the weighted RMS gust excess, reported only when that excess is at least $3.5\text{ km/h}$. Present weather comes from the nearest site that codes weather, within $38\text{ km}$ and $90\text{ min}$ (its "no weather" counts; sites that never code weather are skipped). An automated station's ceilometer sees only low cloud: its "mostly clear" report ($< 25\%$) under substantial model cloud aloft ($> 30\%$) is combined with that cloud by random overlap (§8.1).
+Wind is further weighted by $\text{windTrust}_i / \text{trust}_i$ (many road-weather and hydrological sites measure wind well below 10 m). The gust is the mean wind plus the weighted RMS gust excess, reported only when that excess is at least $3.5\text{ km/h}$. Present weather comes from the nearest site that codes weather, within $38\text{ km}$ and $90\text{ min}$ (its "no weather" counts; sites that never code weather are skipped). An automated station's ceilometer sees only low cloud: its "mostly clear" report ($`< 25\%`$) under substantial model cloud aloft ($`> 30\%`$) is combined with that cloud by random overlap (§8.1).
 
 ### 6.5 Robust Buddy Check (Median Absolute Deviation)
 
 With $N \ge 3$ sites in the pool, from the elevation-reduced temperatures:
 
-$$M = \operatorname{median}_i\, T_{\text{reduced},i}, \qquad \sigma = \max\!\big(1.5\,^\circ\text{C},\; 1.4826 \cdot \operatorname{median}_i |T_{\text{reduced},i} - M|\big), \qquad r_i = |T_{\text{reduced},i} - M|$$
+```math
+M = \mathrm{median}_i\, T_{\text{reduced},i}, \qquad \sigma = \max\!\big(1.5\,^\circ\text{C},\; 1.4826 \cdot \mathrm{median}_i |T_{\text{reduced},i} - M|\big), \qquad r_i = |T_{\text{reduced},i} - M|
+```
 
-$$W_{\text{QC},i} = \begin{cases} 1 & r_i \le 3\sigma \\[4pt] \left(\dfrac{3\sigma}{r_i}\right)^{2} & r_i > 3\sigma \end{cases}$$
+```math
+W_{\text{QC},i} = \begin{cases} 1 & r_i \le 3\sigma \\[4pt] \left(\dfrac{3\sigma}{r_i}\right)^{2} & r_i > 3\sigma \end{cases}
+```
 
-The floor keeps real mesoscale contrasts of up to $4.5\,^\circ\text{C}$ (sea breeze, urban heat island, cold-air pool) unpenalized; the penalty only catches gross errors (a sun-baked, indoor or failed sensor). Persistent smaller errors are the job of the health record (§6.7). Each site's weight is $W_i = W_{\text{prior},i} \cdot W_{\text{dir},i} \cdot W_{\text{QC},i} \cdot W_{\text{time},i}^{(\text{var})}$.
+The floor keeps real mesoscale contrasts of up to $`4.5\,^\circ\text{C}`$ (sea breeze, urban heat island, cold-air pool) unpenalized; the penalty only catches gross errors (a sun-baked, indoor or failed sensor). Persistent smaller errors are the job of the health record (§6.7). Each site's weight is $W_i = W_{\text{prior},i} \cdot W_{\text{dir},i} \cdot W_{\text{QC},i} \cdot W_{\text{time},i}^{(\text{var})}$.
 
 ### 6.6 Observation-to-Model Fusion and Short-Range Bias Decay
 
 The pool's kernel-weighted **effective distance** $\bar d$ and **effective age** $\bar t$ (weighted means over the temperature weights) set the confidence in the stations against Open-Meteo's 90 m DEM downscaled analysis:
 
-$$\alpha_{\text{obs}} = \operatorname{clamp}_{[0.35,\, 0.95]}\!\left(0.35 + 0.60 \cdot \exp\!\left(-\left(\frac{\bar d}{38\text{ km}}\right)^{2}\right) \cdot \exp\!\left(-\frac{\bar t}{3600\text{ s}}\right)\right), \qquad X_{\text{fused}} = \alpha_{\text{obs}} X_{\text{obs}} + (1 - \alpha_{\text{obs}}) X_{\text{model}}$$
+```math
+\alpha_{\text{obs}} = \mathrm{clamp}_{[0.35,\, 0.95]}\!\left(0.35 + 0.60 \cdot \exp\!\left(-\left(\frac{\bar d}{38\text{ km}}\right)^{2}\right) \cdot \exp\!\left(-\frac{\bar t}{3600\text{ s}}\right)\right), \qquad X_{\text{fused}} = \alpha_{\text{obs}} X_{\text{obs}} + (1 - \alpha_{\text{obs}}) X_{\text{model}}
+```
 
-for temperature, humidity and wind ($\alpha \approx 0.95$ at $0\text{ km}$, $0.74$ at $25\text{ km}$, $0.40$ at $60\text{ km}$ for fresh reports). Following **Model Output Statistics** nowcast practice (Glahn & Lowry, 1972), the remaining innovation $\Delta T_0 = T_{\text{fused}} - T_{\text{forecast}}(t_{\text{now}})$ (clamped to $\pm 8\,^\circ\text{C}$) is carried into the next 6 hours of the strip with
+for temperature, humidity and wind ($\alpha \approx 0.95$ at $0\text{ km}$, $0.74$ at $25\text{ km}$, $0.40$ at $60\text{ km}$ for fresh reports). Following **Model Output Statistics** nowcast practice (Glahn & Lowry, 1972), the remaining innovation $\Delta T_0 = T_{\text{fused}} - T_{\text{forecast}}(t_{\text{now}})$ (clamped to $`\pm 8\,^\circ\text{C}`$) is carried into the next 6 hours of the strip with
 
-$$T(t_k) = T_{\text{forecast}}(t_k) + \Delta T_0 \cdot \exp\!\left(-\frac{t_k - t_{\text{now}}}{3.5\text{ h}}\right)$$
+```math
+T(t_k) = T_{\text{forecast}}(t_k) + \Delta T_0 \cdot \exp\!\left(-\frac{t_k - t_{\text{now}}}{3.5\text{ h}}\right)
+```
 
 where $T_{\text{forecast}}$ already includes the learned local bias (§6.9), so the two never double-count.
 
@@ -416,10 +463,12 @@ where $T_{\text{forecast}}$ already includes the learned local bias (§6.9), so 
 Every station ever retrieved is kept in `<config>/weather/stations.json` (at most 6000 records) with its metadata, DEM elevation, last report and track record.
 
 - **Reachability.** Each fetch records which stations it was expected to return (its box, its forecast-office area, or its requested ids). An expected station that did not report accumulates silence by the time since the previous check, **at most 1 h per check**, so time with the app closed never counts; after $72\text{ h}$ of silence while the app was checking, the station is dropped. A new report resets the clock; a returning station starts again on probation.
-- **Leave-one-out testing (`WxStationFusion.crossValidate`).** On every refresh, each site with at least two usable neighbours within $40\text{ km}$ (reports at most $90\text{ min}$ old) is predicted from its neighbours with the same kernel, trust, health, Shepard and buddy check; the residual $e = T_{\text{reduced}} - \hat T$ (clipped to $\pm 15\,^\circ\text{C}$) updates the station's record (at most once per $9\text{ min}$) as exponentially weighted moving averages ($\alpha = \max(0.08,\, 1/(n+1))$) of the bias, kept **separately by day and by night** (a sun-exposed sensor is only wrong by day), and of the squared error.
+- **Leave-one-out testing (`WxStationFusion.crossValidate`).** On every refresh, each site with at least two usable neighbours within $40\text{ km}$ (reports at most $90\text{ min}$ old) is predicted from its neighbours with the same kernel, trust, health, Shepard and buddy check; the residual $e = T_{\text{reduced}} - \hat T$ (clipped to $`\pm 15\,^\circ\text{C}`$) updates the station's record (at most once per $9\text{ min}$) as exponentially weighted moving averages ($`\alpha = \max(0.08,\, 1/(n+1))`$) of the bias, kept **separately by day and by night** (a sun-exposed sensor is only wrong by day), and of the squared error.
 - **Health.** After 3 tests, with $E = \sqrt{\text{bias}^2 + \text{scatter}^2}$ (the bias of the current day/night half once it has 3 tests, else the overall mean bias; the scatter from the mean squared error):
 
-$$\text{health} = \underbrace{\min\!\left(1,\; 0.6 + 0.4\,\frac{n_{\text{tests}}}{6}\right)}_{\text{probation}} \cdot \begin{cases} 1 & E \le 1.5\,^\circ\text{C} \\[2pt] \dfrac{1}{1 + \left(\frac{E - 1.5}{1.5}\right)^{2}} & 1.5 < E < 8 \\[6pt] 0 & E \ge 8\,^\circ\text{C} \end{cases} \cdot \underbrace{[\text{not stuck}]}_{\text{non-METAR, unchanged} \ge 8\text{ h} \Rightarrow 0}$$
+```math
+\text{health} = \underbrace{\min\!\left(1,\; 0.6 + 0.4\,\frac{n_{\text{tests}}}{6}\right)}_{\text{probation}} \cdot \begin{cases} 1 & E \le 1.5\,^\circ\text{C} \\[2pt] \dfrac{1}{1 + \left(\frac{E - 1.5}{1.5}\right)^{2}} & 1.5 < E < 8 \\[6pt] 0 & E \ge 8\,^\circ\text{C} \end{cases} \cdot \underbrace{[\text{not stuck}]}_{\text{non-METAR, unchanged} \ge 8\text{ h} \Rightarrow 0}
+```
 
 METARs (whole degrees, often steady overnight) are exempt from the stuck test. Health multiplies the prior weight (§6.1) in both the blend and the cross-validation.
 
@@ -429,10 +478,10 @@ The forecast page credits every network whose reports could enter the blend ([`S
 
 ### 6.9 Learned Local Forecast Bias (`WxLocalBias`)
 
-Models carry systematic local errors that one grid point cannot see (a valley that runs $3\,^\circ\text{C}$ colder at dawn, a coast that stays warmer at night). When the station pool is close and fresh ($\bar d \le 25\text{ km}$, $\bar t \le 45\text{ min}$), the fused station temperature is compared with the **uncorrected** model blend at that moment, and the error $e = T_{\text{obs}} - T_{\text{model}}$ is learned per place in **24 mean-solar-hour bins**:
+Models carry systematic local errors that one grid point cannot see (a valley that runs $`3\,^\circ\text{C}`$ colder at dawn, a coast that stays warmer at night). When the station pool is close and fresh ($\bar d \le 25\text{ km}$, $\bar t \le 45\text{ min}$), the fused station temperature is compared with the **uncorrected** model blend at that moment, and the error $e = T_{\text{obs}} - T_{\text{model}}$ is learned per place in **24 mean-solar-hour bins**:
 
-- **Sampling:** at most one sample per bin every $20\text{ min}$; $|e| > 10\,^\circ\text{C}$ is rejected as implausible; $b_h \leftarrow b_h + \alpha (e - b_h)$ with $\alpha = \max(0.07,\, 1/(n_h+1))$ (a plain mean for the first samples, then a ~2-week memory).
-- **Applying:** the correction at solar hour $h$ is the $[1, 2, 1]$-smoothed bias of bins $h-1, h, h+1$, with an effective sample count $n_{\text{eff}} = n_h + \tfrac12(n_{h-1} + n_{h+1})$; nothing is applied below $n_{\text{eff}} = 3$, confidence $\min(1, n_{\text{eff}}/6)$ above; the correction is capped at $\pm 4\,^\circ\text{C}$.
+- **Sampling:** at most one sample per bin every $20\text{ min}$; $`|e| > 10\,^\circ\text{C}`$ is rejected as implausible; $b_h \leftarrow b_h + \alpha (e - b_h)$ with $`\alpha = \max(0.07,\, 1/(n_h+1))`$ (a plain mean for the first samples, then a ~2-week memory).
+- **Applying:** the correction at solar hour $h$ is the $[1, 2, 1]$-smoothed bias of bins $h-1, h, h+1$, with an effective sample count $n_{\text{eff}} = n_h + \tfrac12(n_{h-1} + n_{h+1})$; nothing is applied below $n_{\text{eff}} = 3$, confidence $\min(1, n_{\text{eff}}/6)$ above; the correction is capped at $`\pm 4\,^\circ\text{C}`$.
 - **Staleness:** a place not updated for more than 30 days (the season has changed) fades with an e-folding time of 30 days until new samples arrive.
 - **Effect:** every forecast hour's temperature and feels-like are shifted by the correction of its solar hour, and the days (highs/lows) are rebuilt from the shifted hours (`WxDaily.build`). `AppModel.Place.modelForecast` keeps the raw blend; `Place.forecast` (what every view shows) is the corrected one. The record is saved in `<config>/weather/local-bias.json`, survives restarts, and is deleted with its place. Learning happens on each Mac while the app runs.
 
@@ -462,22 +511,28 @@ Models carry systematic local errors that one grid point cannot see (a valley th
 
 ### 7.1 Magnus-Tetens Saturation Vapor Pressure (Alduchov & Eskridge, 1996)
 
-Given dry-bulb temperature $T$ ($^\circ\text{C}$) and dewpoint temperature $T_d$ ($^\circ\text{C}$), relative humidity $\text{RH} \in [0, 100]\%$ is computed via the improved **Alduchov & Eskridge (1996)** Magnus coefficients ($a = 17.625$, $b = 243.04^\circ\text{C}$):
+Given dry-bulb temperature $T$ ($^\circ\text{C}$) and dewpoint temperature $T_d$ ($^\circ\text{C}$), relative humidity $`\text{RH} \in [0, 100]\%`$ is computed via the improved **Alduchov & Eskridge (1996)** Magnus coefficients ($a = 17.625$, $b = 243.04^\circ\text{C}$):
 
-$$\text{RH}(T, T_d) = 100 \cdot \exp\!\left(\frac{17.625 \, T_d}{243.04 + T_d} - \frac{17.625 \, T}{243.04 + T}\right)$$
+```math
+\text{RH}(T, T_d) = 100 \cdot \exp\!\left(\frac{17.625 \, T_d}{243.04 + T_d} - \frac{17.625 \, T}{243.04 + T}\right)
+```
 
 Conversely, when inverting $(T, \text{RH})$ to obtain dewpoint $T_d$:
 
-$$\gamma(T, \text{RH}) = \ln\!\left(\frac{\text{RH}}{100}\right) + \frac{17.625 \, T}{243.04 + T}, \qquad T_d = \frac{243.04 \, \gamma(T, \text{RH})}{17.625 - \gamma(T, \text{RH})}$$
+```math
+\gamma(T, \text{RH}) = \ln\!\left(\frac{\text{RH}}{100}\right) + \frac{17.625 \, T}{243.04 + T}, \qquad T_d = \frac{243.04 \, \gamma(T, \text{RH})}{17.625 - \gamma(T, \text{RH})}
+```
 
 ### 7.2 Psychrometric Wet-Bulb Temperature (Stull, 2011)
 
-Displayed on the Humidity card alongside the dewpoint, the thermodynamic wet-bulb temperature $T_w$ ($^\circ\text{C}$) is evaluated using **Stull's (2011)** empirical inverse psychrometric formula (accurate to $\pm 0.3^\circ\text{C}$ across $\text{RH} \in [5\%, 99\%]$ and $T \in [-20^\circ\text{C}, 50^\circ\text{C}]$):
+Displayed on the Humidity card alongside the dewpoint, the thermodynamic wet-bulb temperature $T_w$ ($^\circ\text{C}$) is evaluated using **Stull's (2011)** empirical inverse psychrometric formula (accurate to $\pm 0.3^\circ\text{C}$ across $`\text{RH} \in [5\%, 99\%]`$ and $T \in [-20^\circ\text{C}, 50^\circ\text{C}]$):
 
-$$\begin{aligned}
-T_w &= T \arctan\!\Big(0.151977 \sqrt{\text{RH} + 8.313659}\Big) + \arctan(T + \text{RH}) - \arctan(\text{RH} - 1.676331) \\
-&\quad + 0.00391838 \, \text{RH}^{3/2} \arctan(0.023101 \, \text{RH}) - 4.686035
-\end{aligned}$$
+```math
+\begin{aligned}
+T_w &= T \arctan\!\Big(0.151977 \sqrt{\text{RH} + 8.313659}\Big) + \arctan(T + \text{RH}) - \arctan(\text{RH} - 1.676331)
+\\ &\quad + 0.00391838 \, \text{RH}^{3/2} \arctan(0.023101 \, \text{RH}) - 4.686035
+\end{aligned}
+```
 
 ### 7.3 NWS Heat Index (Rothfusz, 1990) & Wind Chill (Osczevski & Bluestein, 2005)
 
@@ -485,18 +540,23 @@ To compute apparent ("Feels Like") temperature from assimilated surface observat
 
 1. **Cold Regime ($T \le 10.0^\circ\text{C}$ and $V > 4.8\text{ km/h}$):**  
    Uses the North American **NWS / Environment Canada Wind Chill Index** (Osczevski & Bluestein, 2005):
-   $$T_{\text{wc}} = 13.12 + 0.6215 \, T - 11.37 \, V^{0.16} + 0.3965 \, T \, V^{0.16} \quad (^\circ\text{C})$$
-2. **Warm Regime ($T \ge 26.7^\circ\text{C} = 80^\circ\text{F}$ and $\text{RH} \ge 40\%$):**  
+
+   $`\displaystyle T_{\text{wc}} = 13.12 + 0.6215 \, T - 11.37 \, V^{0.16} + 0.3965 \, T \, V^{0.16} \quad (^\circ\text{C})`$
+
+2. **Warm Regime ($T \ge 26.7^\circ\text{C} = 80^\circ\text{F}$ and $`\text{RH} \ge 40\%`$):**  
    Converts $T$ to Fahrenheit $T_F = 1.8 T + 32$ and evaluates the **NWS Rothfusz (1990)** Steadman multiple regression polynomial:
-   $$\begin{aligned}
-   \text{HI}_F &= -42.379 + 2.04901523 \, T_F + 10.14333127 \, R - 0.22475541 \, T_F R \\
-   &\quad - 0.00683783 \, T_F^2 - 0.05481717 \, R^2 + 0.00122874 \, T_F^2 R \\
-   &\quad + 0.00085282 \, T_F R^2 - 0.00000199 \, T_F^2 R^2
-   \end{aligned}$$
-   with standard NWS low-humidity ($R < 13\%, T_F \in [80, 112]^\circ\text{F}$) and high-humidity ($R > 85\%, T_F \in [80, 87]^\circ\text{F}$) adjustments.
+
+   $`\displaystyle \begin{aligned}
+   \text{HI}_F &= -42.379 + 2.04901523 \, T_F + 10.14333127 \, R - 0.22475541 \, T_F R
+   \\ &\quad - 0.00683783 \, T_F^2 - 0.05481717 \, R^2 + 0.00122874 \, T_F^2 R
+   \\ &\quad + 0.00085282 \, T_F R^2 - 0.00000199 \, T_F^2 R^2
+   \end{aligned}`$
+
+   with standard NWS low-humidity ($`R < 13\%, T_F \in [80, 112]^\circ\text{F}`$) and high-humidity ($`R > 85\%, T_F \in [80, 87]^\circ\text{F}`$) adjustments.
 3. **Turbulent Gust Excess Blending:**  
    Station wind speed and gusts are blended separately: sustained wind $V$ is blended linearly across stations, while turbulent gust excess $\Delta G_i = \max(0, G_i - V_i)$ is combined via **root-mean-square (RMS)** turbulent kinetic energy scaling:
-   $$G_{\text{blended}} = V_{\text{blended}} + \sqrt{\frac{\sum_i w_i (\Delta G_i)^2}{\sum_i w_i}}$$
+
+   $`\displaystyle G_{\text{blended}} = V_{\text{blended}} + \sqrt{\frac{\sum_i w_i (\Delta G_i)^2}{\sum_i w_i}}`$
 
 ---
 
@@ -506,9 +566,11 @@ To compute apparent ("Feels Like") temperature from assimilated surface observat
 
 ### 8.1 Multi-Layer Random-Overlap Radiative Cloud Cover
 
-Aviation METAR reports provide up to 4 cloud decks (`FEW` $= 1\text{–}2$ oktas $\approx 18\%$, `SCT` $= 3\text{–}4$ oktas $\approx 44\%$, `BKN` $= 5\text{–}7$ oktas $\approx 75\%$, `OVC` $= 8$ oktas $= 100\%$, `CLR`/`SKC`/`CAVOK` $= 0\%$) with cloud base height in feet AGL. High thin cirrus (`> 18,000 ft`) has much higher shortwave solar transmittance than low stratus (`< 6,500 ft`). We model the effective radiative cloud fraction $C_{\text{eff}}$ via **random-overlap radiative transmittance**:
+Aviation METAR reports provide up to 4 cloud decks (`FEW` $= 1\text{–}2$ oktas $`\approx 18\%`$, `SCT` $= 3\text{–}4$ oktas $`\approx 44\%`$, `BKN` $= 5\text{–}7$ oktas $`\approx 75\%`$, `OVC` $= 8$ oktas $`= 100\%`$, `CLR`/`SKC`/`CAVOK` $`= 0\%`$) with cloud base height in feet AGL. High thin cirrus (`> 18,000 ft`) has much higher shortwave solar transmittance than low stratus (`< 6,500 ft`). We model the effective radiative cloud fraction $C_{\text{eff}}$ via **random-overlap radiative transmittance**:
 
-$$C_{\text{eff}} = 100 \cdot \left(1 - \prod_{k=1}^{K} \big(1 - \alpha_k \, c_k\big)\right)$$
+```math
+C_{\text{eff}} = 100 \cdot \left(1 - \prod_{k=1}^{K} \big(1 - \alpha_k \, c_k\big)\right)
+```
 
 where $c_k \in [0, 1]$ is layer $k$'s geometric sky fraction and $\alpha_k$ is its altitude-dependent optical opacity weight:
 - Low deck ($z_{\text{base}} < 6{,}500\text{ ft}$): $\alpha_k = 1.00$
@@ -519,7 +581,7 @@ where $c_k \in [0, 1]$ is layer $k$'s geometric sky fraction and $\alpha_k$ is i
 
 The card shows a real reading or nothing; it never estimates air quality from the weather (an earlier version did, and showed the estimate like a measurement).
 
-1. **Nearest monitor (outside Europe).** AirNow's public ArcGIS layers are queried within $45\text{ km}$: the current layer (`Air_Now_Current_Monitors_Ozone_and_PM`) for the latest reading of every monitor, and in parallel the hourly layer (`Air_Now_Monitor_Data_Public`, which keeps about 27 h) for the hours $[t_h - 27\text{ h},\, t_h - 23\text{ h}]$. The card shows `OZONEPM_AQI` (the higher of the ozone and particle NowCast indices) of the **nearest** monitor whose newest reading is at most $3\text{ h}$ old, as reported; when the current layer has none, the hourly layer's last 3 hours are used. Readings are not interpolated between monitors: AirNow's Data Exchange Guidelines ask that observed values be disseminated as received, marked preliminary, and credited to the reporting agency and the EPA AirNow program (the card's credit: *"Air quality: South Coast AQMD via U.S. EPA AirNow (preliminary data)"*).
+1. **Nearest monitor (outside Europe).** AirNow's public ArcGIS layers are queried within $45\text{ km}$: the current layer (`Air_Now_Current_Monitors_Ozone_and_PM`) for the latest reading of every monitor, and in parallel the hourly layer (`Air_Now_Monitor_Data_Public`, which keeps about 27 h) for the hours $`[t_h - 27\text{ h},\, t_h - 23\text{ h}]`$. The card shows `OZONEPM_AQI` (the higher of the ozone and particle NowCast indices) of the **nearest** monitor whose newest reading is at most $3\text{ h}$ old, as reported; when the current layer has none, the hourly layer's last 3 hours are used. Readings are not interpolated between monitors: AirNow's Data Exchange Guidelines ask that observed values be disseminated as received, marked preliminary, and credited to the reporting agency and the EPA AirNow program (the card's credit: *"Air quality: South Coast AQMD via U.S. EPA AirNow (preliminary data)"*).
 2. **CAMS forecast (elsewhere, or no monitor).** Open-Meteo's air-quality API (`current=us_aqi,european_aqi,pm2_5,nitrogen_dioxide&hourly=us_aqi&past_days=1&timeformat=unixtime`): CAMS European (0.1°) or global (0.4°). The card says it is a model forecast, adds PM2.5 and NO₂, and the European AQI in Europe; credit *"Air quality: Copernicus Atmosphere Monitoring Service (CAMS) via Open-Meteo"*, as Open-Meteo's terms require.
 3. **Yesterday.** The comparison uses the **same source 24 hours earlier**: the same monitor (by AQS site id) within ±30 min of $t - 24\text{ h}$, or the CAMS hourly value whose time is the current hour minus 24 h. Within ±8 the sentence says *similar*, otherwise *better* or *worse*, with yesterday's value. (Before: the monitor path took the oldest of the 30 newest records of all monitors — a few hours earlier, at another monitor — and the CAMS path the 24th value from the end after dropping gaps, i.e. 00:00 UTC today.)
 4. **No reading.** The card shows the dash; a later refresh in which neither source answers keeps the previous reading while it is less than 3 h old.
@@ -542,7 +604,9 @@ The scale has six equal bands in the EPA category colours (TAD 2018: green, yell
 
 Using the IUGG mean spherical Earth radius $R_\oplus = 6371.0088\text{ km}$ (Moritz, 2000):
 
-$$a = \operatorname{clamp}_{[0, 1]}\!\left(\sin^2\!\left(\frac{\Delta \phi}{2}\right) + \cos \phi_1 \cos \phi_2 \sin^2\!\left(\frac{\Delta \lambda}{2}\right)\right), \qquad d = 2 R_\oplus \arcsin(\sqrt{a})$$
+```math
+a = \mathrm{clamp}_{[0, 1]}\!\left(\sin^2\!\left(\frac{\Delta \phi}{2}\right) + \cos \phi_1 \cos \phi_2 \sin^2\!\left(\frac{\Delta \lambda}{2}\right)\right), \qquad d = 2 R_\oplus \arcsin(\sqrt{a})
+```
 
 Antipodal rounding noise where $a$ slightly exceeds $1.0$ in IEEE-754 arithmetic is clamped to $1.0$ so $\sqrt{a}$ and $\arcsin(\sqrt{a})$ never produce `NaN`.
 
@@ -551,20 +615,35 @@ Antipodal rounding noise where $a$ slightly exceeds $1.0$ in IEEE-754 arithmetic
 To determine whether an hourly timestamp $t_S$ is in daylight (`isDay`) at $(\phi, \lambda)$ without requiring external ephemeris tables, [`Geo.swift:120-210`](WeatherCore/Core/Geo.swift#L120-L210) implements the **NOAA Global Monitoring Laboratory / Meeus (1998)** astronomical algorithm:
 
 1. **Julian Century from J2000.0 ($2000\text{-}01\text{-}01\text{ }12\text{:}00\text{ UTC} = 946728000\text{ s}$):**
-   $$T = \frac{(t_S - 946728000) / 86400.0}{36525.0}$$
+
+   $`\displaystyle T = \frac{(t_S - 946728000) / 86400.0}{36525.0}`$
+
 2. **Geometric Mean Longitude $L_0$, Mean Anomaly $M$, and Eccentricity $e$:**
-   $$L_0 = (280.46646 + 36000.76983 \, T + 0.0003032 \, T^2) \bmod 360^\circ$$
-   $$M = 357.52911 + 35999.05029 \, T - 0.0001537 \, T^2$$
-   $$e = 0.016708634 - 0.000042037 \, T - 0.0000001267 \, T^2$$
+
+   $`\displaystyle L_0 = (280.46646 + 36000.76983 \, T + 0.0003032 \, T^2) \bmod 360^\circ`$
+
+   $`\displaystyle M = 357.52911 + 35999.05029 \, T - 0.0001537 \, T^2`$
+
+   $`\displaystyle e = 0.016708634 - 0.000042037 \, T - 0.0000001267 \, T^2`$
+
 3. **Equation of Center $C$, Apparent Solar Longitude $\lambda_\odot$, and Obliquity $\varepsilon$:**
-   $$C = (1.914602 - 0.004817 \, T - 0.000014 \, T^2)\sin M + (0.019993 - 0.000101 \, T)\sin(2M) + 0.000289\sin(3M)$$
-   $$\Omega = 125.04 - 1934.136 \, T, \qquad \lambda_\odot = L_0 + C - 0.00569 - 0.00478 \sin \Omega$$
-   $$\varepsilon_0 = 23.439291 - 0.0130042 \, T - 1.639\times 10^{-7} T^2 + 5.036\times 10^{-7} T^3, \qquad \varepsilon = \varepsilon_0 + 0.00256 \cos \Omega$$
+
+   $`\displaystyle C = (1.914602 - 0.004817 \, T - 0.000014 \, T^2)\sin M + (0.019993 - 0.000101 \, T)\sin(2M) + 0.000289\sin(3M)`$
+
+   $`\displaystyle \Omega = 125.04 - 1934.136 \, T, \qquad \lambda_\odot = L_0 + C - 0.00569 - 0.00478 \sin \Omega`$
+
+   $`\displaystyle \varepsilon_0 = 23.439291 - 0.0130042 \, T - 1.639\times 10^{-7} T^2 + 5.036\times 10^{-7} T^3, \qquad \varepsilon = \varepsilon_0 + 0.00256 \cos \Omega`$
+
 4. **Solar Declination $\delta$, Equation of Time $\text{EoT}$ (minutes), and Solar Elevation $\alpha_\odot$:**
-   $$\sin \delta = \sin \varepsilon \sin \lambda_\odot$$
-   $$y = \tan^2(\varepsilon / 2), \qquad \text{EoT} = 4 \cdot \frac{180}{\pi}\Big(y \sin(2L_0) - 2e \sin M + 4e y \sin M \cos(2L_0) - \tfrac{1}{2} y^2 \sin(4L_0) - \tfrac{5}{4} e^2 \sin(2M)\Big)$$
-   $$\text{TST} = \left(\frac{t_S \bmod 86400}{60.0} + \text{EoT} + 4 \lambda\right) \bmod 1440, \qquad H = \frac{\text{TST}}{4} - 180^\circ$$
-   $$\sin \alpha_\odot = \sin \phi \sin \delta + \cos \phi \cos \delta \cos H$$
+
+   $`\displaystyle \sin \delta = \sin \varepsilon \sin \lambda_\odot`$
+
+   $`\displaystyle y = \tan^2(\varepsilon / 2), \qquad \text{EoT} = 4 \cdot \frac{180}{\pi}\Big(y \sin(2L_0) - 2e \sin M + 4e y \sin M \cos(2L_0) - \tfrac{1}{2} y^2 \sin(4L_0) - \tfrac{5}{4} e^2 \sin(2M)\Big)`$
+
+   $`\displaystyle \text{TST} = \left(\frac{t_S \bmod 86400}{60.0} + \text{EoT} + 4 \lambda\right) \bmod 1440, \qquad H = \frac{\text{TST}}{4} - 180^\circ`$
+
+   $`\displaystyle \sin \alpha_\odot = \sin \phi \sin \delta + \cos \phi \cos \delta \cos H`$
+
 5. **Refraction-Corrected Horizon Criterion (`horizonDeg = -0.833°`):**  
    Daylight is true when $\alpha_\odot > -0.833^\circ$ (accounting for $34'$ of standard atmospheric refraction plus $16'$ of solar semi-diameter).
 
@@ -586,8 +665,8 @@ The Rain card in the detail pane displays up to two charts side-by-side:
   - **Explicit Left Axis Labels:** Top scale badge (`Rate · 0.10 in/h` or `Rate · 2.5 mm/h`), 50% midpoint badge (`0.05 in/h` or `1.3 mm/h`), and baseline badge (`0 in/h` or `0 mm/h`).
   - **Direct Bar Callouts:** Up to two peak non-zero bars are annotated directly above the bar cap with their formatted rate.
 - **Monotone Cubic Hermite Curve (`Line: Rain chance %, right axis`):**
-  - Shown on the 24-hour chart; represents the **hourly probability of precipitation** ($0\%\text{ to }100\%$).
-  - Interpolated via a monotone cubic Hermite spline (Fritsch & Carlson, 1980) with tangents clamped to $[0\%, 100\%]$ so the curve never overshoots the plot bounds.
+  - Shown on the 24-hour chart; represents the **hourly probability of precipitation** ($`0\%\text{ to }100\%`$).
+  - Interpolated via a monotone cubic Hermite spline (Fritsch & Carlson, 1980) with tangents clamped to $`[0\%, 100\%]`$ so the curve never overshoots the plot bounds.
   - **Explicit Right Axis Labels:** `100%` (top), `50%` (middle dashed line), and `0%` (bottom baseline), color-coded in warm amber-rose to match the probability curve.
   - **Interactive Hover Readout:** Hovering over any slot displays a vertical guide line and a floating banner showing `<Time> · Bar: <rate> · Chance: <prob>%`.
 
