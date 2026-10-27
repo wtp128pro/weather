@@ -421,43 +421,63 @@ struct SidebarPlaceItem: View {
     let title: String
     let subtitle: String
     let temp: String
+    let unitSuffix: String
     let condition: String
     let symbol: String
     let selected: Bool
     let badge: String?
+    var alertColor: Color? = nil
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 5) {
+                HStack(spacing: 4) {
                     Text(title)
-                        .font(.system(size: 14.5, weight: .bold, design: .rounded))
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    if let alertColor {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(alertColor)
+                            .padding(.horizontal, 3.5)
+                            .padding(.vertical, 1.5)
+                            .background(Color(red: 0.11, green: 0.13, blue: 0.17), in: Capsule())
+                    }
                     if let badge {
                         Text(badge)
-                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
                             .foregroundStyle(Color(red: 0.44, green: 0.88, blue: 1.00))
-                            .padding(.horizontal, 5)
+                            .padding(.horizontal, 4.5)
                             .padding(.vertical, 1.5)
                             .background(Color.black.opacity(0.32), in: Capsule())
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
                 Text(subtitle)
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.76))
+                    .lineLimit(1)
                 Text(condition)
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(Color(red: 0.84, green: 0.91, blue: 0.99))
+                    .lineLimit(1)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 4) {
                 Image(systemName: symbol)
                     .symbolRenderingMode(.multicolor)
                     .font(.system(size: 20))
-                Text(temp)
-                    .font(.system(size: 24, weight: .light, design: .rounded))
-                    .foregroundStyle(.white)
-                    .monospacedDigit()
+                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                    Text(temp)
+                        .font(.system(size: 24, weight: .light, design: .rounded))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                    Text(unitSuffix)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.86))
+                }
             }
         }
         .padding(.horizontal, 13)
@@ -568,6 +588,7 @@ struct MezoraWindowView: View {
                             title: "New York",
                             subtitle: "350 5th Ave · Manhattan, NY",
                             temp: "64°",
+                            unitSuffix: "F",
                             condition: "Light Rain · H:68° L:54°",
                             symbol: "cloud.rain.fill",
                             selected: true,
@@ -576,17 +597,20 @@ struct MezoraWindowView: View {
                         SidebarPlaceItem(
                             title: "Amsterdam",
                             subtitle: "North Holland · Netherlands",
-                            temp: "58°",
-                            condition: "Showers · H:60° L:49°",
+                            temp: "14°",
+                            unitSuffix: "C",
+                            condition: "Showers · H:16° L:9°",
                             symbol: "cloud.sun.rain.fill",
                             selected: false,
-                            badge: "KNMI 2km"
+                            badge: "KNMI 2km",
+                            alertColor: Color(red: 1.00, green: 0.84, blue: 0.04)
                         )
                         SidebarPlaceItem(
                             title: "Munich",
                             subtitle: "Bavaria · Germany",
-                            temp: "61°",
-                            condition: "Partly Cloudy · H:64° L:47°",
+                            temp: "16°",
+                            unitSuffix: "C",
+                            condition: "Partly Cloudy · H:18° L:8°",
                             symbol: "cloud.sun.fill",
                             selected: false,
                             badge: "DWD MOSMIX"
@@ -594,8 +618,9 @@ struct MezoraWindowView: View {
                         SidebarPlaceItem(
                             title: "London",
                             subtitle: "England · United Kingdom",
-                            temp: "59°",
-                            condition: "Overcast · H:62° L:51°",
+                            temp: "15°",
+                            unitSuffix: "C",
+                            condition: "Overcast · H:17° L:11°",
                             symbol: "cloud.fill",
                             selected: false,
                             badge: "UKV 2km"
@@ -603,8 +628,9 @@ struct MezoraWindowView: View {
                         SidebarPlaceItem(
                             title: "Toronto",
                             subtitle: "Ontario · Canada",
-                            temp: "55°",
-                            condition: "Mostly Clear · H:59° L:44°",
+                            temp: "13°",
+                            unitSuffix: "C",
+                            condition: "Mostly Clear · H:15° L:7°",
                             symbol: "sun.max.fill",
                             selected: false,
                             badge: "ECCC HRDPS"
@@ -730,7 +756,7 @@ struct MezoraWindowView: View {
                                         .overlay(Circle().stroke(Color.black.opacity(0.5), lineWidth: 1.5))
                                         .offset(x: 42)
                                 }
-                                Text("Nearest monitor within 45 km as reported · compared with same monitor 24h ago.")
+                                Text("Nearest monitor within 45 km as reported · compared with 24h ago.")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Color.white.opacity(0.82))
                             }
@@ -769,7 +795,7 @@ struct MezoraWindowView: View {
                                             .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     }
                                 }
-                                Text("13 NWP models · 15 station networks · learned hourly local bias (±4°C).")
+                                Text("13 NWP models · 15 station nets · 5 alert issuers · learned local bias (±4°C).")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(Color.white.opacity(0.82))
                             }
@@ -845,7 +871,7 @@ struct RenderMain {
                 MezoraWindowView(),
                 width: 1308,
                 height: 902,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261025b.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261027.png"
             )
             savePNG(
                 RainCardShowcase(showHoverBanner: true)
@@ -853,7 +879,7 @@ struct RenderMain {
                     .background(Color(red: 0.20, green: 0.26, blue: 0.35)),
                 width: 1308,
                 height: 312,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261025b.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261027.png"
             )
         }
     }
