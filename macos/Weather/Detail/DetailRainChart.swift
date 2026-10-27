@@ -139,7 +139,7 @@ struct DetailRainChart: View {
         // 2. Grid lines: crisp baseline + dashed reference lines (including 25% / 75% subdivisions).
         for (idx, line) in geometry.gridLines.enumerated() {
             let r = cgRect(line)
-            let isBaseline = idx == geometry.gridLines.count - 1
+            let isBaseline = idx == 0  // the grid is built bottom first (RainChartData.geometry)
             if isBaseline {
                 context.fill(Path(r), with: .color(Color.white.opacity(0.32)))
             } else {
@@ -502,7 +502,9 @@ struct DetailRainChart: View {
             if slot == 0 { return "Now" }
             return chart.isQuarters ? "+\(slot * 15)m" : "+\(slot)h"
         }()
-        let rateStr = chart.formattedRate(forSlot: slot) ?? "0 \(chart.rateUnitShort)"
+        // nil is a dry slot or an unknown one; only the dry one reads as 0.
+        let knownRate = chart.rateMmH.indices.contains(slot) && chart.rateMmH[slot].isFinite
+        let rateStr = chart.formattedRate(forSlot: slot) ?? (knownRate ? "0 \(chart.rateUnitShort)" : "—")
         let summary: String
         if chart.showsProbabilityLine {
             let probStr = chart.formattedProbability(forSlot: slot) ?? "—"

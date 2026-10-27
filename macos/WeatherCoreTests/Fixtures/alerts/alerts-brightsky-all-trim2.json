@@ -1,0 +1,71 @@
+{
+ "alerts": [
+  {
+   "id": 3045641,
+   "alert_id": 3045641,
+   "effective": "2026-10-25T15:47:00+00:00",
+   "onset": "2026-10-26T00:00:00+00:00",
+   "expires": "2026-10-26T17:00:00+00:00",
+   "category": "met",
+   "response_type": "prepare",
+   "urgency": "immediate",
+   "severity": "moderate",
+   "certainty": "likely",
+   "event_code": 52,
+   "event_en": "gale-force gusts",
+   "event_de": "STURMBÖEN",
+   "headline_en": "Official WARNING of GALE-FORCE GUSTS",
+   "headline_de": "Amtliche WARNUNG vor STURMBÖEN",
+   "description_en": "There is a risk of gale-force gusts (level 2 of 4).\nMax. gusts: < 65 km/h; Wind direction: south-west; Increased gusts: near showers and in exposed locations < 75 km/h",
+   "description_de": "Es treten Sturmböen mit Geschwindigkeiten bis 65 km/h (18 m/s, 35 kn, Bft 8) aus südwestlicher Richtung auf. In Schauernähe sowie in exponierten Lagen muss mit Sturmböen bis 75 km/h (21 m/s, 41 kn, Bft 9) gerechnet werden.",
+   "instruction_en": "Hazard(s) caused by: single branches falling; objects flying through the air. \nRecommendations for what to do: \nSecure free-standing objects (e.g. screens and furniture). For example, fasten tents and coverings. Watch out for falling objects outdoors (e.g. branches).",
+   "instruction_de": "Gefahr durch: einzelne herabstürzende Äste; umherfliegende Gegenstände. \nHandlungsempfehlungen: \nfrei stehende Objekte sichern (z.B. Leinwände und Möbel); z.B. Zelte und Abdeckungen befestigen; im Freien auf herabfallende Gegenstände (z.B. Äste) achten",
+   "status": "actual",
+   "warn_cell_ids": [
+    813073078,
+    813073012,
+    813073013,
+    813073011,
+    813073040,
+    813073105,
+    813073052,
+    813073019,
+    813073080,
+    813073081,
+    813073049,
+    813073030,
+    813073071,
+    813073004,
+    813073100,
+    813073101,
+    813073002,
+    813073067
+   ]
+  },
+  {
+   "id": 3045968,
+   "alert_id": 3045968,
+   "effective": "2026-10-25T18:01:00+00:00",
+   "onset": "2026-10-26T09:00:00+00:00",
+   "expires": "2026-10-27T03:00:00+00:00",
+   "category": "met",
+   "response_type": "prepare",
+   "urgency": "immediate",
+   "severity": "moderate",
+   "certainty": "likely",
+   "event_code": 52,
+   "event_en": "gale-force gusts",
+   "event_de": "STURMBÖEN",
+   "headline_en": "Official WARNING of GALE-FORCE GUSTS",
+   "headline_de": "Amtliche WARNUNG vor STURMBÖEN",
+   "description_en": "There is a risk of gale-force gusts (level 2 of 4).\nHeight range: > 1000 m; Max. gusts: 70-85 km/h; Wind direction: south-west",
+   "description_de": "Es treten oberhalb 1000 m Sturmböen mit Geschwindigkeiten zwischen 70 km/h (20 m/s, 38 kn, Bft 8) und 85 km/h (24 m/s, 47 kn, Bft 9) aus südwestlicher Richtung auf.",
+   "instruction_en": "Hazard(s) caused by: single branches falling; objects flying through the air. \nRecommendations for what to do: \nSecure free-standing objects (e.g. screens and furniture). For example, fasten tents and coverings. Watch out for falling objects outdoors (e.g. branches).",
+   "instruction_de": "Gefahr durch: einzelne herabstürzende Äste; umherfliegende Gegenstände. \nHandlungsempfehlungen: \nfrei stehende Objekte sichern (z.B. Leinwände und Möbel); z.B. Zelte und Abdeckungen befestigen; im Freien auf herabfallende Gegenstände (z.B. Äste) achten",
+   "status": "actual",
+   "warn_cell_ids": [
+    815085370
+   ]
+  }
+ ]
+}

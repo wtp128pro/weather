@@ -37,13 +37,14 @@ PAGE_BODIES: dict[str, str] = {
         <tr><td><strong>Live stations</strong></td><td>Every station network that covers the place is read at each refresh (airports worldwide plus national, road-weather and research networks), the stations are tested against each other, and the trusted ones are blended into the "now" values.</td><td><a href="live-stations.html">Live Station Observations</a></td></tr>
         <tr><td><strong>Learned local corrections</strong></td><td>For each place and hour of the day, the app learns how far the models run from what close stations measure, and corrects the forecast temperatures, feels-like, highs and lows by up to ±4 °C (±7 °F).</td><td><a href="local-corrections.html">Learned Local Corrections</a></td></tr>
         <tr><td><strong>Air quality</strong></td><td>The nearest air-quality monitor's reading as reported (US and Canada), otherwise the CAMS air-quality forecast. Never estimated from the weather.</td><td><a href="forecast-page.html">Reading the Forecast</a></td></tr>
+        <tr><td><strong>Weather alerts</strong></td><td>The official warnings in force for the place, as its issuer published them: the national weather service in the US, Canada, Germany and Norway, MeteoAlarm in 35 more European countries and Israel. Shown on the forecast page and as a warning sign in the sidebar; never made up or estimated by the app.</td><td><a href="weather-alerts.html">Weather Alerts</a></td></tr>
     </tbody>
 </table>
 
 <h2>Where things are</h2>
 <ul>
-    <li><strong>Sidebar:</strong> your saved places (up to 50), each with its temperature and a rain hint. Drag to reorder; the <strong>…</strong> button names, moves or removes a place.</li>
-    <li><strong>Toolbar:</strong> <strong>+</strong> (add a place), refresh, the unit button (<strong>°F</strong>/<strong>°C</strong>), and the gear (Settings).</li>
+    <li><strong>Sidebar:</strong> your saved places (up to 50), each with its temperature in that place's own units, a rain hint and, when an official alert is in force, a warning sign. Drag to reorder; the <strong>…</strong> button names, moves or removes a place.</li>
+    <li><strong>Toolbar:</strong> <strong>+</strong> (add a place), refresh, the unit button (<strong>°F</strong>/<strong>°C</strong>, the selected place's units), and the gear (Settings).</li>
     <li><strong>Settings (<kbd>⌘,</kbd>):</strong> four tabs: <strong>Sources</strong>, <strong>Weights</strong>, <strong>Stations</strong> and <strong>General</strong>. The app menu also has <strong>Data Sources &amp; Weights…</strong> and <strong>Stations &amp; Keys…</strong>, which open those tabs directly.</li>
     <li><strong>Help (<kbd>⌘?</kbd>):</strong> this book. The search field at the top left searches every page, and the Help menu opens the main pages directly.</li>
 </ul>
@@ -53,6 +54,7 @@ PAGE_BODIES: dict[str, str] = {
     <li><a href="places.html">Adding &amp; Managing Places</a></li>
     <li><a href="forecast-page.html">Reading the Forecast</a></li>
     <li><a href="rain-chart.html">Rain Graph &amp; Bars Guide</a></li>
+    <li><a href="weather-alerts.html">Weather Alerts</a></li>
     <li><a href="units-refresh.html">Units, Refreshing &amp; Offline</a></li>
     <li><a href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a></li>
     <li><a href="sources-weights.html">Settings: Data Sources &amp; Weights</a></li>
@@ -74,9 +76,11 @@ PAGE_BODIES: dict[str, str] = {
 <ol>
     <li><strong>Type what you are looking for</strong> in <em>Address, Landmark, or City</em>: a city ("Lyon"), a street address ("1600 Pennsylvania Ave NW, Washington"), a ZIP or postal code, a landmark, or coordinates such as <code>25.76, -80.19</code>, <code>25.76 -80.19</code> or <code>25.76°, -80.19°</code>. At least 2 characters are needed. With an empty field the window suggests a few cities.</li>
     <li><strong>Optionally give it a name</strong> in <em>Location Name</em>: type one, or click a preset (Home, Work, Friend's place, Family, School, Gym, Vacation; click again to clear it). The name replaces the place name in the sidebar and in the forecast header, and picks a matching symbol (a house for Home, a briefcase for Work, and so on).</li>
+    <li><strong>Check the units</strong> in the units menu, labelled <strong>Units for</strong> and the name (with its state or province) of the result that would be added (<strong>Units</strong> while there is no result): <strong>Imperial (°F, mph, in)</strong> or <strong>Metric (°C, km/h, mm)</strong>. Until you pick one yourself it follows the result that would be added, by its country: Imperial for the United States and its territories, Liberia and Myanmar, Metric elsewhere, and the <a href="units-refresh.html">default units for new places</a> when the country is not known. Once you pick, your pick is saved with every place this window adds. Each place keeps its own units.</li>
     <li><strong>Add it:</strong> double-click a result, press Return or Space on the highlighted result, or click its <strong>Add</strong> button. Return in the name field adds the highlighted (or first) result. A place you already saved shows <strong>Added</strong>.</li>
 </ol>
 <p>The window closes after a successful add, and the new place is selected. <kbd>Esc</kbd> closes the window without adding. There is no map to pick a point on: to save an exact spot, type its coordinates.</p>
+<p>With an empty list, the first page suggests a few cities to add with one click. Its units menu works the same way for them: it is labelled <strong>Units for</strong> and the city under the pointer or keyboard focus (the first city when neither is on one), and follows that city's country until you pick. A pick there is not carried into the Add a city window.</p>
 
 <h3>How the search works</h3>
 <ul>
@@ -97,8 +101,9 @@ PAGE_BODIES: dict[str, str] = {
 </table>
 
 <h2>The sidebar</h2>
-<p>Each row shows the condition icon, the name (or your Location Name), the region ("State, Country"), a rain hint, and the temperature. The rain hint is the first of: <em>Raining until 3:30 PM</em>, <em>Raining now</em>, <em>Rain in 25 min</em>, <em>Rain starting now</em>, <em>Rain at 4 PM</em>, <em>Rain tomorrow, 4 PM</em>, <em>Rain Friday, 4 PM</em>, <em>Rain expected</em>, <em>Showers possible</em>, <em>Dry for 48 h</em>; or <em>Loading…</em>, <em>Can't load forecast</em>, <em>Offline</em>, <em>No data yet</em>, <em>No rain data</em>. When a nearby station reports precipitation while the forecast says dry, the hint says so (for example <em>Light rain now</em>).</p>
+<p>Each row shows the condition icon, the name (or your Location Name), the region ("State, Country"), a rain hint, and the temperature with its unit in the place's own units (for example <strong>77°F</strong> beside a place in <strong>18°C</strong>). The rain hint is the first of: <em>Raining until 3:30 PM</em>, <em>Raining now</em>, <em>Rain in 25 min</em>, <em>Rain starting now</em>, <em>Rain at 4 PM</em>, <em>Rain tomorrow, 4 PM</em>, <em>Rain Friday, 4 PM</em>, <em>Rain expected</em>, <em>Showers possible</em>, <em>Dry for 48 h</em>; or <em>Loading…</em>, <em>Can't load forecast</em>, <em>Offline</em>, <em>No data yet</em>, <em>No rain data</em>. When a nearby station reports precipitation while the forecast says dry, the hint says so (for example <em>Light rain now</em>).</p>
 <p>An orange pill marks a row whose forecast is <strong>Offline</strong>, <strong>Stale</strong> (the last refresh failed) or <strong>Updating…</strong>; offline and stale rows are dimmed. Hover over a row for the full place name.</p>
+<p>A <strong>warning triangle</strong> after the name marks a place with an official alert in force. Its colour is the highest level among them (red, orange, yellow; light blue for minor, white for an unknown level), and a number beside it counts the alerts when there is more than one. VoiceOver reads the alerts with the row, for example "Alert: Tornado Warning (red)". See <a href="weather-alerts.html">Weather Alerts</a>.</p>
 
 <h3>Selecting, reordering and removing</h3>
 <ul>
@@ -117,7 +122,7 @@ PAGE_BODIES: dict[str, str] = {
 """,
     "forecast-page": """
 <h1>Reading the Forecast</h1>
-<p>Select a place in the sidebar to see its forecast. From top to bottom: the header, <strong>Now</strong>, <strong>Rain</strong>, <strong>Air Quality</strong> and <strong>Clouds</strong> side by side, <strong>Next 48 hours</strong>, <strong>Next days</strong>, the footer, the credits, and (when a source failed) a <em>Not available right now</em> line. The background colour follows the current sky, day or night. All times are in the place's own time zone.</p>
+<p>Select a place in the sidebar to see its forecast. From top to bottom: the header, <strong>Now</strong>, <strong>Alerts</strong>, <strong>Rain</strong>, <strong>Air Quality</strong> and <strong>Clouds</strong> side by side, <strong>Next 48 hours</strong>, <strong>Next days</strong>, the footer, the credits, and (when a source failed) a <em>Not available right now</em> line. The background colour follows the current sky, day or night. All times are in the place's own time zone.</p>
 
 <h2>Header</h2>
 <p>The place name with its region (or your Location Name with its address line), and a <strong>Name Location</strong> / <strong>Edit Name</strong> button (see <a href="places.html">Naming a place</a>).</p>
@@ -133,6 +138,9 @@ PAGE_BODIES: dict[str, str] = {
     <strong>Where "now" comes from</strong><br>
     When stations are near, the Now values are a blend of the live station readings (tested and weighted; see <a href="live-stations.html">Live Station Observations</a>) and a high-resolution model analysis for the exact spot. The closer and fresher the stations, the more they count: about 95% for a station next door, about 75% at 25 km, about 40% at 60 km. Without stations the model values are shown. The footer names the nearest station.
 </div>
+
+<h2>Alerts</h2>
+<p>The official warnings in force for the place, one card each, highest level first; or one line saying there are none or why none can be shown. The card is also shown while the forecast is loading or could not be loaded; that page scrolls when the alerts do not fit. See <a href="weather-alerts.html">Weather Alerts</a>.</p>
 
 <h2>Rain</h2>
 <p>A headline and a detail line, then one or two charts.</p>
@@ -233,7 +241,15 @@ PAGE_BODIES: dict[str, str] = {
 <h1>Units, Refreshing &amp; Offline</h1>
 
 <h2>Units</h2>
-<p>Switch between <strong>Imperial</strong> (°F, mph, inches) and <strong>Metric</strong> (°C, km/h, mm) with the unit button in the toolbar (it shows the current unit), <kbd>⌘U</kbd>, or Settings › General › Display Units. The choice is saved. Temperatures, wind, rain amounts and rates, the rain chart scale, and station and monitor distances (mi or km) change; percentages and the air quality index do not. Times are shown in 12-hour form in each place's time zone.</p>
+<p>Every place has its own units, <strong>Imperial</strong> (°F, mph, inches) or <strong>Metric</strong> (°C, km/h, mm), saved with the place. The sidebar shows each place's temperature with its unit, and the forecast page uses the units of the place it shows.</p>
+<ul>
+    <li><strong>When you add a place</strong>, the units menu of the Add a city window (<strong>Units for</strong> and the place) sets them, preselected from the place's country (see <a href="places.html">Adding a place</a>).</li>
+    <li><strong>To switch a saved place</strong>, select it and click the unit button in the toolbar (it shows the selected place's unit, <strong>°F</strong> or <strong>°C</strong>) or choose View › <strong>Switch Selected Place to Celsius</strong> (or <strong>to Fahrenheit</strong>; <kbd>⌘U</kbd>), the title the button's tooltip shows too. Only the selected place changes, at once; its forecast is kept, not fetched again.</li>
+    <li><strong>With no place selected</strong> (for example with an empty list), the button and <kbd>⌘U</kbd>, then titled <strong>Set Default Units to Celsius</strong> (or <strong>to Fahrenheit</strong>), switch the default units for new places instead.</li>
+    <li><strong>Settings › General › Default Units for New Places</strong> is used for a new place whose country is not known. Places you have already added keep their own units.</li>
+    <li><strong>Settings › Stations</strong> shows its values in the selected place's units (the default units when none is selected).</li>
+</ul>
+<p>Temperatures, wind, rain amounts and rates, the rain chart scale, and station and monitor distances (mi or km) change; percentages and the air quality index do not. Times are shown in 12-hour form in each place's time zone.</p>
 
 <h2>When forecasts refresh</h2>
 <ul>
@@ -243,6 +259,7 @@ PAGE_BODIES: dict[str, str] = {
     <li><kbd>⌘R</kbd> (View › Refresh, or the refresh button) refreshes the selected place now. It does nothing while that place is loading, within 10 seconds of its last refresh, for 60 seconds after a service asked for fewer requests, or while offline.</li>
     <li>Changing a source switch or a weight re-fetches every place once.</li>
     <li>A refresh waits up to 30 seconds for the services; one that has not answered by then is listed as <em>Not available right now</em>. Network errors are retried twice.</li>
+    <li>Official alerts are checked after each completed forecast refresh of a place, never on their own timer and never while offline. How often each alert source is actually asked is on <a href="weather-alerts.html">Weather Alerts</a>.</li>
 </ul>
 
 <h2>Live stations and air quality</h2>
@@ -253,7 +270,7 @@ PAGE_BODIES: dict[str, str] = {
 </ul>
 
 <h2>Offline</h2>
-<p>When the Mac loses its connection, rows show <strong>Offline</strong>, the forecast page shows the <strong>Offline</strong> badge and the last forecast (without live station values or air quality), and refreshing is off. As soon as the connection is back, places are refreshed. At launch, each place shows its last forecast from the cache with its age until the new one arrives.</p>
+<p>When the Mac loses its connection, rows show <strong>Offline</strong>, the forecast page shows the <strong>Offline</strong> badge and the last forecast (without live station values or air quality), and refreshing is off. Alerts are not checked, and alert answers are not kept between launches. A place with an alert answer (alerts or <em>No active alerts</em>) reads <em>Alerts could not be checked recently.</em> once that answer is older than its source's window; a place with no answer yet keeps <em>Checking for alerts…</em>, one whose last check failed keeps <em>Alerts could not be checked right now.</em>, and one no source covers keeps <em>Alerts not available</em>. As soon as the connection is back, places are refreshed. At launch, each place shows its last forecast from the cache with its age until the new one arrives.</p>
 
 <h2>Saving and quitting</h2>
 <p>Changes are saved a few seconds after you make them. Quitting (or closing the window, which quits) waits up to 5 seconds for pending saves.</p>
@@ -266,7 +283,7 @@ PAGE_BODIES: dict[str, str] = {
     <tbody>
         <tr><td><kbd>⌘N</kbd></td><td>File › Add a City… (opens the <strong>Add a city</strong> window)</td></tr>
         <tr><td><kbd>⌘R</kbd></td><td>View › Refresh (the selected place)</td></tr>
-        <tr><td><kbd>⌘U</kbd></td><td>View › Switch to Celsius / Switch to Fahrenheit</td></tr>
+        <tr><td><kbd>⌘U</kbd></td><td>View › Switch Selected Place to Celsius / Fahrenheit: switches the selected place between °F and °C (with no place selected, Set Default Units to Celsius / Fahrenheit switches the default units for new places)</td></tr>
         <tr><td><kbd>⌃⌘S</kbd></td><td>View › Show/Hide Sidebar</td></tr>
         <tr><td><kbd>⌘,</kbd></td><td>Neginato Mezora › Settings… (opens on the Sources tab)</td></tr>
         <tr><td><kbd>⌘?</kbd> (<kbd>⇧⌘/</kbd>)</td><td>Help › Neginato Mezora Help</td></tr>
@@ -281,7 +298,7 @@ PAGE_BODIES: dict[str, str] = {
 <ul>
     <li><strong>Neginato Mezora:</strong> About Neginato Mezora; Settings… (<kbd>⌘,</kbd>, Sources tab); Data Sources &amp; Weights… (the Weights tab); Stations &amp; Keys… (the Stations tab); Quit.</li>
     <li><strong>File:</strong> Add a City… (<kbd>⌘N</kbd>).</li>
-    <li><strong>View:</strong> Refresh (<kbd>⌘R</kbd>); Switch to Celsius/Fahrenheit (<kbd>⌘U</kbd>); Show/Hide Sidebar.</li>
+    <li><strong>View:</strong> Refresh (<kbd>⌘R</kbd>); Switch Selected Place to Celsius or Fahrenheit (<kbd>⌘U</kbd>; with no place selected, Set Default Units to Celsius or Fahrenheit); Show/Hide Sidebar.</li>
     <li><strong>Help:</strong> Neginato Mezora Help (<kbd>⌘?</kbd>), then direct links to Reading the Forecast, the Rain Graph &amp; Bars Guide, Data Sources &amp; Blend Weights, Station Settings, Free Keys for More Stations, Live Station Observations, Learned Local Corrections, Forecast Algorithms &amp; Citations, and Troubleshooting &amp; FAQ.</li>
 </ul>
 
@@ -291,7 +308,7 @@ PAGE_BODIES: dict[str, str] = {
     <tbody>
         <tr><td><strong>+</strong></td><td>Add a city (<kbd>⌘N</kbd>).</td></tr>
         <tr><td>Refresh</td><td>Refresh this place (<kbd>⌘R</kbd>); dimmed while it loads or when offline.</td></tr>
-        <tr><td><strong>°F</strong> / <strong>°C</strong></td><td>Shows the current unit; click to switch.</td></tr>
+        <tr><td><strong>°F</strong> / <strong>°C</strong></td><td>Shows the selected place's unit; click to switch that place (with no place selected, the default units for new places). Its tooltip is the <kbd>⌘U</kbd> title: <em>Switch Selected Place to Celsius</em> (or <em>to Fahrenheit</em>), or with no place selected <em>Set Default Units to Celsius</em> (or <em>to Fahrenheit</em>).</td></tr>
         <tr><td>Gear</td><td>Settings (<kbd>⌘,</kbd>).</td></tr>
     </tbody>
 </table>
@@ -306,7 +323,7 @@ PAGE_BODIES: dict[str, str] = {
 <table>
     <thead><tr><th>Service</th><th>Models it supplies</th><th>Where</th><th>Licence</th></tr></thead>
     <tbody>
-        <tr><td><strong>Open-Meteo</strong></td><td>ECMWF IFS, DWD ICON, NOAA GFS, ECCC GEM, UK Met Office, Météo-France ARPEGE/AROME, KNMI HARMONIE-AROME, and in the US NOAA HRRR and the National Blend of Models (NBM); the 15-minute rain; also current conditions, air quality and elevations</td><td>Worldwide (each model where it runs)</td><td>CC BY 4.0</td></tr>
+        <tr><td><strong>Open-Meteo</strong></td><td>ECMWF IFS, DWD ICON, NOAA GFS, ECCC GEM, UK Met Office, Météo-France ARPEGE/AROME, KNMI HARMONIE-AROME, and in the US and southern Canada NOAA HRRR and the National Blend of Models (NBM); the 15-minute rain; also current conditions, air quality and elevations</td><td>Worldwide (each model where it runs)</td><td>CC BY 4.0</td></tr>
         <tr><td><strong>National Weather Service</strong></td><td>The forecasters' 2.5 km grid (NDFD)</td><td>United States and territories</td><td>US public domain</td></tr>
         <tr><td><strong>MET Norway</strong></td><td>Locationforecast 2.0 (MEPS 2.5 km in the Nordic area, ECMWF elsewhere)</td><td>Worldwide</td><td>NLOD 2.0 / CC BY 4.0</td></tr>
         <tr><td><strong>Bright Sky (DWD)</strong></td><td>DWD MOSMIX station forecasts</td><td>Germany and neighbouring countries</td><td>CC BY 4.0 (DWD)</td></tr>
@@ -331,7 +348,7 @@ PAGE_BODIES: dict[str, str] = {
     <li>The <strong>Source weight multiplier</strong> (0.10× to 3.00×, steps of 0.05, default 1.00×) scales the weight of all of that service's models. <strong>1.0×</strong> resets one row; <strong>Reset Source Weights</strong> (in the section header, shown when any is changed) resets them all.</li>
     <li>The note under the list is meant literally: the weights are rules of thumb, not statistics measured from past accuracy, so the app claims no accuracy figure.</li>
 </ul>
-<p>Station networks are not in this tab: they have their own switches in <a href="stations-settings.html">Settings › Stations</a>.</p>
+<p>Station networks are not in this tab: they have their own switches in <a href="stations-settings.html">Settings › Stations</a>. Nor are the official alert sources: they have no switch and need no key; they and their credits are on <a href="weather-alerts.html">Weather Alerts</a>.</p>
 
 <h2>The Weights tab</h2>
 <p>Every forecast hour is a <strong>weighted median</strong> of the models that cover it (see <a href="algorithms.html">Algorithms</a>). A model's weight depends on the <strong>regional profile</strong> of the place, the <strong>variable</strong>, and how far ahead the hour is, in four <strong>horizon bands</strong>: <code>H0</code> 0–3 hours, <code>H1</code> 3–18 hours, <code>H2</code> 18–72 hours, <code>H3</code> beyond 72 hours.</p>
@@ -345,7 +362,7 @@ PAGE_BODIES: dict[str, str] = {
 <h2>Regional profiles</h2>
 <p>The profile follows the place's country; places without a country code use their coordinates. These tables are produced from the app's own weight code.</p>
 <!-- WEIGHT_TABLES -->
-<p>Precipitation chance is a weighted mean of the models that report a chance, combined with the share of models that forecast measurable rain when few report one. Models that only run in the US (NWS, HRRR, NBM) weigh 0 elsewhere; HRRR stops after 48 hours.</p>
+<p>Precipitation chance is a weighted mean of the models that report a chance, combined with the share of models that forecast measurable rain when few report one. Models that only run in North America weigh 0 elsewhere: NWS outside the US, HRRR and NBM outside the US and southern Canada; HRRR stops after 48 hours.</p>
 """,
     "stations-settings": """
 <h1>Settings: Stations</h1>
@@ -613,6 +630,75 @@ W          = W_horiz(d) * W_vert(Δz) * trust * health</code></pre>
 </table>
 <p>Station elevations come from the Open-Meteo elevation API (CC BY 4.0).</p>
 """,
+    "weather-alerts": """
+<h1>Weather Alerts</h1>
+<p>Neginato Mezora shows the official weather warnings in force for each saved place, as the issuer published them. The app does not make up, forecast or re-rate alerts, and it does not send notifications: alerts are shown only in the window, on the forecast page and in the sidebar. No alert source needs a key or an account, and there is no setting for them.</p>
+
+<h2>Where alerts come from</h2>
+<p>Each place is served by exactly one source, chosen by its country:</p>
+<table>
+    <thead><tr><th>Source</th><th>Places</th><th>How a place is matched</th></tr></thead>
+    <tbody>
+        <tr><td><strong>National Weather Service</strong></td><td>United States, Puerto Rico, US Virgin Islands, Guam, American Samoa, Northern Mariana Islands and the US Minor Outlying Islands; a place without a country inside the NWS area</td><td>The NWS answers for the place's point. A point it calls out of bounds (for example Wake Island) reads <em>Alerts not available</em>.</td></tr>
+        <tr><td><strong>Deutscher Wetterdienst</strong> (via Bright Sky)</td><td>Germany</td><td>Bright Sky answers for the point; a point it does not cover reads <em>Alerts not available</em>.</td></tr>
+        <tr><td><strong>MET Norway</strong> (MetAlerts)</td><td>Norway (not Svalbard and Jan Mayen)</td><td>MET Norway answers for the point.</td></tr>
+        <tr><td><strong>Environment and Climate Change Canada</strong></td><td>Canada</td><td>The alert areas that contain the point.</td></tr>
+        <tr><td><strong>MeteoAlarm</strong></td><td>35 more countries in Europe, and Israel: Austria, Belgium, Bosnia and Herzegovina, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Greece, Hungary, Iceland, Ireland, Israel, Italy, Latvia, Lithuania, Luxembourg, Malta, Moldova, Montenegro, the Netherlands, North Macedonia, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland, Ukraine and the United Kingdom</td><td>The country's whole warning feed is downloaded (nothing about the place is sent) and matched in the app against each warning's own outline or the issuer's region outlines bundled with the app. In a country whose warnings name regions, a place outside every region its feed uses reads <em>Alerts not available</em>.</td></tr>
+    </tbody>
+</table>
+<p>Places in any other country read <em>Alerts not available</em>.</p>
+
+<h2>The Alerts card</h2>
+<p>On the forecast page, below <strong>Now</strong>, each alert in force gets a card, highest level first (then the earliest start):</p>
+<ul>
+    <li>The event name (for example <em>Tornado Warning</em>) and a badge with a warning triangle and its level: <strong>Red</strong>, <strong>Orange</strong>, <strong>Yellow</strong>, <strong>Minor</strong> or <strong>Unknown</strong>, drawn in the level's colour on a dark background. VoiceOver reads this line as the card's heading. The level is taken from the colour or severity the issuer gives.</li>
+    <li>The issuer's headline, then <em>Effective Today 3:00 PM</em> and <em>Expires Friday 6:00 AM</em>, in the place's time zone, when the issuer gives them.</li>
+    <li>The issuer's instructions, if any, and <strong>Details</strong>, which expands the full description.</li>
+    <li><em>Source: National Weather Service</em> (or the other issuer), linked to the issuer's page for the alert when it gives one.</li>
+</ul>
+<p>In the sidebar, a warning triangle after the place's name, coloured by the highest level, with the number of alerts when there is more than one. Both disappear when the alert expires or ends, without a new download.</p>
+
+<h2>What the card says when there is no alert to show</h2>
+<table>
+    <thead><tr><th>Text</th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td><em>Checking for alerts…</em> (with a spinner)</td><td>No answer has come yet for this place.</td></tr>
+        <tr><td><em>No active alerts</em></td><td>The source answered recently and has no alert in force for the place.</td></tr>
+        <tr><td><em>Alerts could not be checked right now.</em></td><td>The latest check failed (no network answer, a server error, an unreadable answer or one over the size limit) and there is no recent answer to show.</td></tr>
+        <tr><td><em>Alerts could not be checked recently.</em> <em>Last checked: Today 3:00 PM.</em></td><td>The newest answer is older than its source's window (30 minutes for MeteoAlarm, 10 minutes for the others), for example while offline or while the window is hidden. Its alerts are not shown as cards and the sidebar shows no warning sign, because they may no longer be current.</td></tr>
+        <tr><td><em>Alerts not available</em></td><td>No source covers the place.</td></tr>
+    </tbody>
+</table>
+<p>A <em>Source: …</em> line under the text names the issuer the place is routed to. A failed check does not hide alerts from an answer still within its window.</p>
+
+<h2>How often alerts are checked</h2>
+<ul>
+    <li>A place's alerts are checked only after one of its forecast refreshes completes (with a forecast or an error), never on their own timer and never while offline. They therefore follow the <a href="units-refresh.html">forecast refresh</a>: while the window is visible, about every 10 minutes, and with <kbd>⌘R</kbd>.</li>
+    <li><strong>MeteoAlarm:</strong> a country's feed is downloaded at most once every 30 minutes, shared by every place in that country. A failed download is reused for 120 seconds, so the places of one country refreshed within that time cost one attempt; a later refresh tries again. The feed may be up to 16 MiB.</li>
+    <li><strong>NWS, Bright Sky, MET Norway, Environment Canada:</strong> an answer for a point is reused for 5 minutes, also by another place at the same point; a failed one is not reused. As its terms require, a MET Norway answer is reused until the expiry time it sends, and then asked for again with <code>If-Modified-Since</code>.</li>
+    <li>Shown alerts are checked against the clock: one that expires or ends disappears at that time (after the Mac wakes from sleep, within a minute), without a new download.</li>
+</ul>
+
+<h2>Limitations</h2>
+<ul>
+    <li><strong>Alert areas follow each issuer's published region shapes</strong>, which can differ from local boundaries near borders and coasts. In Ireland, MeteoAlarm's own county outlines put a few border towns in a neighbouring county: the centre of Waterford city lies in County Kilkenny's outline, and Youghal, Carrick-on-Shannon and Killaloe likewise lie in a neighbouring county's. A warning for their own county may not reach them, while a neighbour's does.</li>
+    <li><strong>Coastal places and islands</strong> outside the land outlines (for example Howth, Bray, Greystones, Malahide, Tory Island and Cape Clear) are reached only by marine warnings, or read <em>Alerts not available</em>.</li>
+    <li><strong>An old answer is hidden, not shown as current.</strong> When alerts could not be checked for longer than the source's window, you see <em>Alerts could not be checked recently</em> and no warning sign, although an alert may still be in force. Check the issuer's website in that case.</li>
+    <li>If a MeteoAlarm download fails during a long refresh round (many places on a slow network), the feed can be downloaded once more for every further 120 seconds of that round.</li>
+    <li>The app shows what the issuers publish. For your safety, follow the instructions of your local authorities.</li>
+</ul>
+
+<h2>Credits</h2>
+<p>The same credits are listed under <strong>Weather alerts</strong> in About Neginato Mezora:</p>
+<ul>
+    <li>US alerts: NOAA/National Weather Service (<a href="https://www.weather.gov/documentation/services-web-api">api.weather.gov</a>), US government work, credited as a courtesy</li>
+    <li>German alerts: Deutscher Wetterdienst (DWD) via Bright Sky, under the <a href="https://www.dwd.de/EN/service/copyright/copyright_node.html">DWD Terms of Use</a></li>
+    <li>Norwegian alerts: MET Norway (MetAlerts), licensed <a href="https://api.met.no/doc/License">CC BY 4.0</a></li>
+    <li>Canadian alerts: Contains information licenced under the <a href="https://eccc-msc.github.io/open-data/licence/readme_en/">Data Server End-use Licence</a> of Environment and Climate Change Canada.</li>
+    <li>European alerts: MeteoAlarm. Data provided by EUMETNET members, licensed <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></li>
+    <li>MeteoAlarm regions: © EuroGeographics for the administrative boundaries</li>
+</ul>
+""",
     "privacy": """
 <h1>Privacy, Data &amp; Storage</h1>
 <p>Neginato Mezora has no account, no analytics and no server of its own. It talks directly to public weather services. This page lists what it sends and what it stores.</p>
@@ -634,6 +720,8 @@ W          = W_horiz(d) * W_vert(Δz) * trust * health</code></pre>
         <tr><td>GeoSphere Austria, MeteoSwiss</td><td>Codes of nearby stations</td><td>Austria, Switzerland</td></tr>
         <tr><td>Met Office, KNMI, MET Norway Frost</td><td>Your key for that service, and the place's coordinates or area</td><td>Only with your key, for places in their country</td></tr>
         <tr><td>Météo-France, AEMET</td><td>Your key for that service (all of France or Spain is fetched)</td><td>Only with your key, for places in their country</td></tr>
+        <tr><td>Official alerts: National Weather Service (api.weather.gov), Bright Sky (DWD alerts), MET Norway MetAlerts (api.met.no), Environment Canada (api.weather.gc.ca)</td><td>Place coordinates</td><td>After a forecast refresh, for places in the US, Germany, Norway and Canada</td></tr>
+        <tr><td>MeteoAlarm (feeds.meteoalarm.org)</td><td>Nothing about the place (the warnings of the whole country are fetched)</td><td>After a forecast refresh, for places in a MeteoAlarm country</td></tr>
         <tr><td>Place search: Open-Meteo geocoding, Apple Maps, OpenStreetMap Nominatim, Photon (komoot), US Census geocoder</td><td>The text you type in the Add a city window</td><td>While you search</td></tr>
     </tbody>
 </table>
@@ -644,8 +732,8 @@ W          = W_horiz(d) * W_vert(Δz) * trust * health</code></pre>
 <table>
     <thead><tr><th>File</th><th>Contents</th></tr></thead>
     <tbody>
-        <tr><td><code>Application Support/weather/places.json</code></td><td>Your places, names and order</td></tr>
-        <tr><td><code>Application Support/weather/settings.json</code></td><td>Units, sources turned off, the selected place</td></tr>
+        <tr><td><code>Application Support/weather/places.json</code></td><td>Your places, names, order and units</td></tr>
+        <tr><td><code>Application Support/weather/settings.json</code></td><td>Default units for new places, sources turned off, the selected place</td></tr>
         <tr><td><code>Application Support/weather/weights.json</code></td><td>Your weight multipliers</td></tr>
         <tr><td><code>Application Support/weather/station-settings.json</code></td><td>Corrections on or off, station networks turned off</td></tr>
         <tr><td><code>Application Support/weather/local-bias.json</code></td><td>The learned local corrections</td></tr>

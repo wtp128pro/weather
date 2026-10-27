@@ -206,7 +206,9 @@ public struct WxPlace: Equatable, Hashable, Sendable {
                 newName = WxText.isUsableName(underlyingAddress, maxBytes: WxLimits.placeNameMax)
                     ? underlyingAddress
                     : self.name
-                newAdmin1 = self.admin1
+                // The customise branch above stores the street address as admin1;
+                // keeping that copy would label the cleared place "X, X, Country".
+                newAdmin1 = (self.admin1 == underlyingAddress) ? "" : self.admin1
             }
         }
 

@@ -16,7 +16,10 @@ import Foundation
 ///
 /// File format (wx-places.c:486-498, wx-store-json.c:181-200):
 /// `{\n  "version": 1,\n  "places": [\n    {...},\n    {...}\n  ]\n}\n`,
-/// `{\n  "version": 1,\n  "places": []\n}\n` when empty.
+/// `{\n  "version": 1,\n  "places": []\n}\n` when empty. macOS adds an
+/// optional per-place "units" member ("imperial"/"metric", written last when
+/// set) and keeps "version" 1, so older builds still read the file and
+/// ignore it; an element without a valid one loads with its units absent.
 public final class WxPlaces {
     /// Largest places.json that `load` reads (WX_PLACES_MAX_FILE_BYTES, wx-places.h:47).
     public static let maxFileBytes = 1024 * 1024
@@ -34,10 +37,14 @@ public final class WxPlaces {
     /// must end within 24 bytes, i.e. be at most 23 bytes long.
     static let keyBufferLength = 24
 
-    /// One saved place with its cached key (Entry, wx-places.c:20-24).
+    /// One saved place with its cached key (Entry, wx-places.c:20-24) and
+    /// its own unit system; nil until set, meaning "the caller's default".
+    /// The units live here, not in WxPlace, so they never affect a place's
+    /// identity (== / hash / key).
     private struct Entry {
         let place: WxPlace
         let key: String
+        var units: WxUnits?
     }
 
     /// The file `load` and `save` use.
@@ -52,6 +59,9 @@ public final class WxPlaces {
     private var savedGeneration: UInt64 = 0
     /// True while `saveAsync` (or a job from `beginSave`) is running.
     private(set) var isSaveInFlight = false
+    /// True after a load failed on a file that may exist (any failure but
+    /// `isNotFound`) until a save has moved that file aside.
+    private var keepsUnreadableFile = false
 
     /// A new empty list stored at `path`; nil if `path` is empty
     /// (wx_places_new, wx-places.c:211-221; C: critical + NULL).
@@ -83,6 +93,15 @@ public final class WxPlaces {
             return nil
         }
         return entries[index].place
+    }
+
+    /// The unit system saved for the place whose key is `key`; nil if there
+    /// is no such place or it has none (the caller then applies its default).
+    public func units(forKey key: String?) -> WxUnits? {
+        guard let i = index(ofKey: key) else {
+            return nil
+        }
+        return entries[i].units
     }
 
     /// The position of the place whose `WxPlace.key` equals `key`, or nil if
@@ -140,11 +159,11 @@ public final class WxPlaces {
 
     /// Appends without announcing; the single home of the cap and the
     /// duplicate rule (append_place, wx-places.c:313-321).
-    private func append(_ place: WxPlace) -> Bool {
+    private func append(_ place: WxPlace, units: WxUnits? = nil) -> Bool {
         guard canAdd(place) else {
             return false
         }
-        entries.append(Entry(place: place, key: place.key))
+        entries.append(Entry(place: place, key: place.key, units: units))
         generation &+= 1
         return true
     }
@@ -206,7 +225,22 @@ public final class WxPlaces {
         guard entries[i].place != updated else {
             return false
         }
-        entries[i] = Entry(place: updated, key: updated.key)
+        entries[i] = Entry(place: updated, key: updated.key, units: entries[i].units)
+        generation &+= 1
+        onChanged?()
+        return true
+    }
+
+    /// Sets the unit system of the place whose key is `key` (nil clears it).
+    /// The place itself is unchanged; the list becomes dirty and the change
+    /// is announced. Returns false (nothing announced) if no place has that
+    /// key or its units are already `units`.
+    @discardableResult
+    public func setUnits(_ units: WxUnits?, forKey key: String?) -> Bool {
+        guard let i = index(ofKey: key), entries[i].units != units else {
+            return false
+        }
+        entries[i].units = units
         generation &+= 1
         onChanged?()
         return true
@@ -214,8 +248,8 @@ public final class WxPlaces {
 
     // MARK: - Persistence
 
-    /// True iff add/remove/move changed the list since the last load or the
-    /// last successful save snapshot (wx_places_is_dirty).
+    /// True iff add/remove/move/updatePlace/setUnits changed the list since
+    /// the last load or the last successful save snapshot (wx_places_is_dirty).
     public var isDirty: Bool { generation != savedGeneration }
 
     /// Replaces the list with the content of `path` (wx_places_load,
@@ -226,9 +260,11 @@ public final class WxPlaces {
     /// Returns the number of dropped elements. While a save runs it throws
     /// `.pending` and changes nothing. Every other failure (`.file` - e.g. a
     /// missing file, `isNotFound` - or `.parse`) leaves the list EMPTY and
-    /// clean and announces the change once if the list was non-empty. On
-    /// success the list is clean and the change is announced once if the list
-    /// was or became non-empty.
+    /// clean and announces the change once if the list was non-empty; the
+    /// file stays as it is, and unless it was missing the next save moves it
+    /// aside (`FileIO.moveAside`) instead of overwriting it. On success the
+    /// list is clean and the change is announced once if the list was or
+    /// became non-empty.
     @discardableResult
     public func load() throws(WxStoreError) -> Int {
         if isSaveInFlight {
@@ -245,6 +281,7 @@ public final class WxPlaces {
             failure = error
             entries.removeAll()
         }
+        keepsUnreadableFile = failure.map { !$0.isNotFound } ?? false
         savedGeneration = generation
         if hadPlaces || !entries.isEmpty {
             onChanged?()
@@ -263,35 +300,46 @@ public final class WxPlaces {
             throw .parse("places: missing places array")
         }
         for element in arr {
-            if let place = StoreJSON.placeFromJSON(element), append(place) {
+            if let place = StoreJSON.placeFromJSON(element),
+               append(place, units: StoreJSON.placeUnits(element))
+            {
                 continue
             }
             dropped += 1
         }
     }
 
-    /// The document for `places` (serialize_entries, wx-places.c:486-498).
-    static func serialize(_ places: [WxPlace]) -> String {
+    /// The document for `places` (serialize_entries, wx-places.c:486-498);
+    /// `units[i]`, if present and non-nil, is place i's "units" member.
+    static func serialize(_ places: [WxPlace], units: [WxUnits?] = []) -> String {
         var out = "{\n  \"version\": \(version),\n  \"places\": ["
         for (i, place) in places.enumerated() {
             out += i > 0 ? ",\n    " : "\n    "
-            StoreJSON.appendPlace(place, to: &out)
+            StoreJSON.appendPlace(place, units: i < units.count ? units[i] : nil, to: &out)
         }
         out += places.isEmpty ? "]\n}\n" : "\n  ]\n}\n"
         return out
     }
 
+    /// The list as places.json text, units included.
+    private var document: String { Self.serialize(places, units: entries.map(\.units)) }
+
     /// Writes the list to `path` atomically (mode 0600, missing parents 0700)
     /// and marks it clean (wx_places_save, wx-places.c:508-525). Blocking:
     /// call it off the main thread or prefer `saveAsync`. Throws `.pending`
     /// while an asynchronous save runs, `.file` on an I/O failure (the list
-    /// stays dirty and the old file survives).
+    /// stays dirty and the old file survives). After a load that could not
+    /// read the file, the file is first moved aside (see `load`).
     public func save() throws(WxStoreError) {
         if isSaveInFlight {
             throw StoreJSON.pendingError("places")
         }
         do {
-            try FileIO.writeAtomic(path: path, data: Data(Self.serialize(places).utf8))
+            if keepsUnreadableFile {
+                try FileIO.moveAside(path: path)
+                keepsUnreadableFile = false
+            }
+            try FileIO.writeAtomic(path: path, data: Data(document.utf8))
         } catch {
             throw .file(error)
         }
@@ -317,7 +365,9 @@ public final class WxPlaces {
             throw StoreJSON.pendingError("places")
         }
         isSaveInFlight = true
-        return StoreJSON.SaveJob(path: path, data: Data(Self.serialize(places).utf8), generation: generation)
+        return StoreJSON.SaveJob(
+            path: path, data: Data(document.utf8), generation: generation,
+            keepsExistingFile: keepsUnreadableFile)
     }
 
     /// The completion half of `saveAsync` (save_done, wx-places.c:619-638):
@@ -328,6 +378,7 @@ public final class WxPlaces {
         switch outcome {
         case .success:
             savedGeneration = job.generation
+            keepsUnreadableFile = false
         case .failure(let error):
             throw error
         }

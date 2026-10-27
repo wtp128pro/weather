@@ -237,6 +237,24 @@ private func sampleHits() throws -> [WxPlace] {
      try mkPlace("Miami Beach", "Florida", "United States", 25.7907, -80.1300)]
 }
 
+/// A place of country `code` ("" for none) at `lat`, `lon` (U50's units cases).
+private func ccPlace(_ name: String, _ code: String, _ lat: Double, _ lon: Double) throws -> WxPlace {
+    try WxPlace(name: name, admin1: "", country: code.isEmpty ? "" : "Country " + code, countryCode: code,
+                lat: lat, lon: lon, timezone: "UTC")
+}
+
+/// Hits from seven countries and their preselected units (WxGeo.defaultUnits; "" gives the
+/// default units, imperial in a fresh model).
+private func unitsHits() throws -> [(place: WxPlace, units: WxUnits)] {
+    [(try ccPlace("Paris", "FR", 48.8566, 2.3522), .metric),
+     (try ccPlace("Miami", "US", 25.7743, -80.1937), .imperial),
+     (try ccPlace("San Juan", "PR", 18.4655, -66.1057), .imperial),
+     (try ccPlace("Monrovia", "LR", 6.3005, -10.7969), .imperial),
+     (try ccPlace("Yangon", "MM", 16.8409, 96.1735), .imperial),
+     (try ccPlace("Nowhere", "", 0.5, 0.5), .imperial),
+     (try ccPlace("Toronto", "CA", 43.6532, -79.3832), .metric)]
+}
+
 private let searching = "Searching\u{2026}"
 private let delayUs = Int64(PickerViewModel.searchDelayMs) * 1000
 
@@ -1456,6 +1474,119 @@ struct PickerViewModelTests {
         #expect(fx.vm.statusStyle == .dim)
         #expect(fx.vm.statusText == "Suggestions")  // test-picker.c:2718
         #expect(fx.vm.results.count == 5)
+    }
+
+    // MARK: - Units choice (U50, DECISIONS #34)
+
+    @Test("units: preselected by the highlighted place's country, else the default units")
+    func unitsPreselectedByCountry() async throws {
+        let fx = try await Fx.make("units-preselect")
+        defer { fx.finish() }
+        #expect(PickerViewModel.unitsChoices == [.imperial, .metric])
+        #expect(PickerViewModel.unitsTitle(.imperial) == "Imperial (\u{00B0}F, mph, in)")
+        #expect(PickerViewModel.unitsTitle(.metric) == "Metric (\u{00B0}C, km/h, mm)")
+        // Nothing highlighted: the default units.
+        #expect(fx.model.defaultUnits == .imperial)
+        #expect(fx.vm.highlightedPlace == nil && fx.vm.units == .imperial && !fx.vm.isUnitsOverridden)
+        let hits = try unitsHits()
+        await fx.showResults("city", hits.map(\.place), hits.count)
+        for (i, hit) in hits.enumerated() {
+            fx.vm.highlightRow(at: i)
+            #expect(fx.vm.highlightedPlace?.key == hit.place.key)
+            #expect(fx.vm.units == hit.units, "\(hit.place.name)")
+        }
+        // A metric default: only the place without a country code follows it.
+        fx.model.setDefaultUnits(.metric)
+        fx.vm.highlightRow(at: 5)  // ""
+        #expect(fx.vm.units == .metric)
+        fx.vm.highlightRow(at: 1)  // US
+        #expect(fx.vm.units == .imperial)
+        fx.vm.highlightRow(at: 0)  // FR
+        #expect(fx.vm.units == .metric)
+        // A place listed apart from the rows (an address match).
+        fx.vm.highlight(try ccPlace("Monrovia street", "LR", 6.31, -10.80))
+        #expect(fx.vm.units == .imperial)
+        // No highlight (nil or no row there): the default units again.
+        fx.vm.highlightRow(at: nil)
+        #expect(fx.vm.highlightedPlace == nil && fx.vm.units == .metric)
+        fx.vm.highlightRow(at: 1)
+        fx.vm.highlightRow(at: 99)
+        #expect(fx.vm.highlightedPlace == nil && fx.vm.units == .metric)
+        #expect(!fx.vm.isUnitsOverridden)
+    }
+
+    @Test("units: the user's pick survives highlight changes and new results")
+    func unitsOverrideSurvivesHighlight() async throws {
+        let fx = try await Fx.make("units-override")
+        defer { fx.finish() }
+        let hits = try unitsHits()
+        await fx.showResults("city", hits.map(\.place), hits.count)
+        fx.vm.highlightRow(at: 1)  // Miami: imperial
+        #expect(fx.vm.units == .imperial)
+        fx.vm.setUnits(.metric)
+        #expect(fx.vm.isUnitsOverridden && fx.vm.unitsOverride == .metric && fx.vm.units == .metric)
+        for i in hits.indices {
+            fx.vm.highlightRow(at: i)
+            #expect(fx.vm.units == .metric, "\(hits[i].place.name)")
+        }
+        fx.vm.highlightRow(at: nil)
+        #expect(fx.vm.units == .metric)
+        fx.model.setDefaultUnits(.metric)
+        fx.model.setDefaultUnits(.imperial)
+        #expect(fx.vm.units == .metric)
+        // New results: the pick still holds.
+        await fx.showResults("mia", try sampleHits(), 3)
+        fx.vm.highlightRow(at: 0)
+        #expect(fx.vm.units == .metric)
+        // Picking what the country would preselect is a pick too: it holds over a metric country.
+        fx.vm.setUnits(.imperial)
+        await fx.showResults("city", hits.map(\.place), hits.count)
+        fx.vm.highlightRow(at: 0)  // Paris
+        #expect(fx.vm.units == .imperial && fx.vm.isUnitsOverridden)
+    }
+
+    @Test("units: every add passes the chosen units, which are saved with the place")
+    func addPassesChosenUnits() async throws {
+        let fx = try await Fx.make("units-add")
+        defer { fx.finish() }
+        fx.destroyOnClose = false
+        let hits = try unitsHits()
+        await fx.showResults("city", hits.map(\.place), hits.count)
+        #expect(fx.model.defaultUnits == .imperial)
+        // activateRow: the preselection of the activated row, not the default (Paris: metric).
+        fx.vm.activateRow(at: 0)
+        #expect(fx.model.selectedPlace?.key == hits[0].place.key)
+        #expect(fx.model.selectedPlace?.units == .metric)
+        #expect(fx.vm.highlightedPlace?.key == hits[0].place.key)
+        // activateRow after the user's pick: Miami (preselected imperial) saved metric.
+        fx.vm.highlightRow(at: 1)
+        #expect(fx.vm.units == .imperial)
+        fx.vm.setUnits(.metric)
+        fx.vm.activateRow(at: 1)
+        #expect(fx.model.selectedPlace?.key == hits[1].place.key)
+        #expect(fx.model.selectedPlace?.units == .metric)
+        // The view's own add paths, with a metric default: the country preselection (imperial).
+        fx.model.setDefaultUnits(.metric)
+        let vm = PickerViewModel(model: fx.model, clock: fx.clock)
+        #expect(vm.addPlace(hits[2].place) == .added)  // San Juan, PR
+        #expect(fx.model.selectedPlace?.key == hits[2].place.key && fx.model.selectedPlace?.units == .imperial)
+        #expect(vm.addCustomLocation(hits[3].place, customName: "Office", streetAddress: nil) == .added)  // LR
+        #expect(fx.model.selectedPlace?.place.name == "Office" && fx.model.selectedPlace?.units == .imperial)
+        vm.setUnits(.metric)
+        #expect(vm.addCustomLocation(hits[4].place, customName: nil, streetAddress: "1 Main St") == .added)  // MM
+        #expect(fx.model.selectedPlace?.place.isCustomLocation == true && fx.model.selectedPlace?.units == .metric)
+        // Saved with the place: changing the default changes none of them.
+        let saved = fx.model.places.map(\.units)
+        #expect(saved == [.metric, .metric, .imperial, .imperial, .metric])
+        fx.model.setDefaultUnits(.imperial)
+        #expect(fx.model.places.map(\.units) == saved)
+        // A refusal saves nothing; a gone picker adds nothing.
+        #expect(vm.addPlace(hits[2].place) == .duplicate)
+        #expect(fx.model.places.count == 5)
+        vm.invalidate()
+        #expect(vm.addPlace(hits[6].place) == .failed)
+        #expect(vm.addCustomLocation(hits[6].place, customName: "Home", streetAddress: nil) == .failed)
+        #expect(fx.model.places.count == 5)
     }
 
     // MARK: - First run (ui-widgets.md:98-114)

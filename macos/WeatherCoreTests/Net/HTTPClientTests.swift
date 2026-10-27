@@ -45,15 +45,18 @@ struct HTTPClientTests {
 
     typealias Outcome = Result<HTTPClient.Response, any Error>
 
-    /// http_for (test-http.c:1871): a client of `server` with the given timings.
+    /// http_for (test-http.c:1871): a client of `server` with the given timings and the
+    /// decoded-body cap `maxBodyBytes` (nil: its host's, HTTPPolicy.maxBodyBytes on loopback).
     static func client(
         _ server: LoopbackServer, timeoutMs: Int, backoffMs: Int, gapMs: Int = 0,
-        clock: any WxClock = SystemClock(), totalDeadlineMs: Int = HTTPPolicy.totalDeadlineMs
+        clock: any WxClock = SystemClock(), totalDeadlineMs: Int = HTTPPolicy.totalDeadlineMs,
+        maxBodyBytes: Int? = nil
     ) throws -> HTTPClient {
         let policy = try HTTPClientPolicy(
             baseURL: "http://127.0.0.1:\(server.port)", userAgent: ua, timeoutMs: timeoutMs,
             backoffBaseMs: backoffMs, minGapMs: gapMs)
-        return try HTTPClient(policy: policy, clock: clock, totalDeadlineMs: totalDeadlineMs)
+        return try HTTPClient(
+            policy: policy, clock: clock, totalDeadlineMs: totalDeadlineMs, maxBodyBytes: maxBodyBytes)
     }
 
     /// get (test-http.c:1953): GET `path` with JSON_ACCEPT.
@@ -352,6 +355,152 @@ struct HTTPClientTests {
             let http = try Self.client(server, timeoutMs: 2000, backoffMs: 5)
             let response = try await Self.fetch(http).get()
             #expect(response.status == status)
+        }
+    }
+
+    /// GET /x with JSON_ACCEPT, reading the `answering` statuses as answers (U69; C has no such
+    /// option).
+    static func fetch(_ client: HTTPClient, answering: Set<Int>) async -> Outcome {
+        do {
+            return .success(try await client.get("/x", accept: jsonAccept, answering: answering))
+        } catch {
+            return .failure(error)
+        }
+    }
+
+    // U69: a status the caller declares (get's `answering`; the alert sources' "not covered"
+    // NWS 400 and Bright Sky 404) is an answer: its status and body come back after 1 request,
+    // a declared 5xx too (never retried), a gzip body decoded on both gzip paths; the body is
+    // bounded by the client's cap like a 2xx's: one byte over is PARSE x1 (declared
+    // Content-Length or streamed), the cap itself passes.
+    @Test func declaredStatusIsAnsweredWithItsBody() async throws {
+        let body = Data(Self.kBody.utf8)
+        for status in [400, 404, 503] {
+            let server = try LoopbackServer([.respond(status: status, body: body)])
+            defer { server.stop() }
+            let http = try Self.client(server, timeoutMs: 2000, backoffMs: 5)
+            let outcome = await Self.fetch(http, answering: [status])
+            #expect((try? outcome.get()) == HTTPClient.Response(status: status, body: body, expiresS: 0, lastModified: nil),
+                    "\(status): \(outcome)")
+            _ = await server.waitForRequests(2, timeout: .milliseconds(200))
+            #expect(server.requestCount == 1, "\(status)")
+        }
+        for coding in ["gzip", "identity, gzip"] {
+            try await Self.expectDeclared(
+                .raw(Self.framed(404, .contentLength, "Content-Encoding: \(coding)\r\n", Self.gzipJSON,
+                                 sendLen: Self.gzipJSON.count, declared: Self.gzipJSON.count)),
+                status: 404, bodyCount: Self.kGzipJson.utf8.count, "404 \(coding)")
+        }
+        let cap = HTTPPolicy.maxBodyBytes
+        let spaces = [UInt8](repeating: 0x20, count: cap + 1)
+        try await Self.expectDeclared(
+            .raw(Self.framed(404, .contentLength, "", Array("{}".utf8), sendLen: 2, declared: cap + 1)),
+            status: 404, bodyCount: nil, "declared cap + 1")
+        try await Self.expectDeclared(
+            .raw(Self.framed(404, .close, "", spaces, sendLen: cap + 1, declared: 0)), status: 404, bodyCount: nil,
+            "streamed cap + 1")
+        try await Self.expectDeclared(
+            .respond(status: 404, body: Data(spaces.prefix(cap))), status: 404, bodyCount: cap, "the cap")
+    }
+
+    /// Serves `step` to a client answering `status`: expects that status with a body of
+    /// `bodyCount` bytes, or (nil) PARSE "response too large", after 1 request.
+    static func expectDeclared(
+        _ step: LoopbackServer.Step, status: Int, bodyCount: Int?, _ label: String,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        let server = try LoopbackServer([step])
+        defer { server.stop() }
+        let http = try client(server, timeoutMs: 30000, backoffMs: 5)
+        let outcome = await fetch(http, answering: [status])
+        _ = await server.waitForRequests(1, timeout: .seconds(1))
+        if let bodyCount {
+            let response = try? outcome.get()
+            #expect(response?.status == status && response?.body.count == bodyCount, "\(label): \(outcome)",
+                    sourceLocation: sourceLocation)
+        } else {
+            #expect(wxError(outcome) == WxError(.parse, HTTPPolicy.Message.responseTooLarge), "\(label): \(outcome)",
+                    sourceLocation: sourceLocation)
+        }
+        #expect(server.requestCount == 1, "\(label): requests", sourceLocation: sourceLocation)
+    }
+
+    // U69: a declared status's body is held to the 2xx's framing. A body cut short (Content-Length
+    // 100, 10 bytes sent, then close; Content-Length 50, 2 bytes sent on a kept-alive connection,
+    // then close; chunked, cut inside a chunk) is NETWORK "the connection was lost" after
+    // 1 + maxRetries requests for a 200 (CFNetwork's -1005), and the same error after the same
+    // requests for a declared 400, 404 or 503, never the bytes before the cut as the answer
+    // (CFNetwork completes a cut Content-Length body of those without an error; the transfer
+    // reads the cut from the wire count).
+    @Test func declaredStatusCutBodyFailsLikeA2xx() async throws {
+        let lost = WxError(.network, "network error: the connection was lost (NSURLErrorDomain -1005)")
+        let body = Data(repeating: 0x41, count: 100)
+        let head = { (status: Int, framing: String) in
+            "HTTP/1.1 \(status) X\r\nContent-Type: application/json\r\n\(framing)\r\n"
+        }
+        // A gzip member cut half way under its Content-Length, as gzip and as "identity, gzip": the
+        // cut rule comes before every coding rule (U69 iteration-2 handoff), so a declared status
+        // reads like the 200 (the connection was lost), never "compressed body ended before its
+        // end marker".
+        let gz = LoopbackServer.gzip(Data((#"{"detail":"# + String(repeating: "x", count: 400) + #""}"#).utf8))
+        let gzipCut = { (status: Int, coding: String) -> LoopbackServer.Step in
+            .raw(Data(head(status, "Content-Encoding: \(coding)\r\nContent-Length: \(gz.count)\r\nConnection: close\r\n").utf8)
+                 + gz.prefix(gz.count / 2))
+        }
+        let shapes: [(label: String, step: (Int) -> LoopbackServer.Step)] = [
+            ("Content-Length 100, 10 sent, close", { .truncated(status: $0, body: body, sent: 10) }),
+            ("Content-Length 50, 2 sent, kept alive", { .rawText(head($0, "Content-Length: 50\r\n") + "{}") }),
+            ("chunked, cut inside a chunk", {
+                .rawText(head($0, "Transfer-Encoding: chunked\r\nConnection: close\r\n") + "32\r\n{\"a\"")
+            }),
+            ("gzip, Content-Length, half the member sent, close", { gzipCut($0, "gzip") }),
+            ("identity, gzip, Content-Length, half the member sent, close", { gzipCut($0, "identity, gzip") }),
+        ]
+        for (label, step) in shapes {
+            let (twoxx, twoxxRequests) = try await Self.served(step(200), answering: [])
+            #expect(Self.wxError(twoxx) == lost && twoxxRequests == Self.retried, "200, \(label): \(twoxx) x\(twoxxRequests)")
+            for status in [400, 404, 503] {
+                let (outcome, requests) = try await Self.served(step(status), answering: [status])
+                #expect(Self.wxError(outcome) == Self.wxError(twoxx) && requests == twoxxRequests,
+                        "declared \(status), \(label): \(outcome) x\(requests)")
+            }
+        }
+        // NEW U13-N17 platform row (DECISIONS #57), declared: CFNetwork completes a 401's chunked
+        // body cut inside a chunk without an error and no count measures that cut
+        // (bodyFirstStatusOutcomes), so a declared 401 is answered with the bytes before the cut
+        // after 1 request (a 200: NETWORK x3, above).
+        let (outcome, requests) = try await Self.served(shapes[2].step(401), answering: [401])
+        #expect((try? outcome.get()) == HTTPClient.Response(status: 401, body: Data(#"{"a""#.utf8), expiresS: 0, lastModified: nil)
+                    && requests == 1, "declared 401, chunked, cut inside a chunk: \(outcome) x\(requests)")
+    }
+
+    /// GET /x answering `answering`, from a server serving `step` to every request (back-off
+    /// 5 ms): the outcome and the requests made.
+    static func served(_ step: LoopbackServer.Step, answering: Set<Int>) async throws -> (Outcome, Int) {
+        let server = try LoopbackServer([step])
+        defer { server.stop() }
+        let http = try client(server, timeoutMs: 2000, backoffMs: 5)
+        let outcome = await fetch(http, answering: answering)
+        _ = await server.waitForRequests(retried, timeout: .milliseconds(300))
+        return (outcome, server.requestCount)
+    }
+
+    // U69: a declaration covers only its own statuses. Every other status keeps C's outcome for
+    // that caller: its error, retried as C retries it (400 HTTP x1 for a caller answering 404,
+    // 404 NOT_FOUND x1 for one answering 400, 429 RATE_LIMITED x1, 401 HTTP x1, 503 HTTP x3).
+    @Test func undeclaredStatusIsStillThrown() async throws {
+        let body = Data(Self.kBody.utf8)
+        let cases: [(status: Int, answering: Set<Int>, requests: Int)] = [
+            (400, [404], 1), (404, [400], 1), (429, [400, 404], 1), (401, [404], 1), (503, [400, 404], Self.retried),
+        ]
+        for (status, answering, requests) in cases {
+            let server = try LoopbackServer([.respond(status: status, body: body)])
+            defer { server.stop() }
+            let http = try Self.client(server, timeoutMs: 2000, backoffMs: 5)
+            let outcome = await Self.fetch(http, answering: answering)
+            _ = await server.waitForRequests(requests, timeout: .seconds(1))
+            #expect(Self.wxError(outcome) == HTTPPolicy.statusError(status), "\(status) answering \(answering): \(outcome)")
+            #expect(server.requestCount == requests, "\(status) answering \(answering): requests")
         }
     }
 
@@ -1197,7 +1346,10 @@ struct HTTPClientTests {
         let http = try Self.client(server, timeoutMs: 10000, backoffMs: 5)
         let begin = ContinuousClock.now
         let task = Self.start(http)
-        try await Task.sleep(for: .milliseconds(100))
+        // The cancel must land while the request is on the wire (test-http.c:4057-4074): wait for
+        // the server to record it instead of a fixed real-time sleep (U28-F5; the .hang server
+        // never answers, so the request stays on the wire for as long as the poll takes).
+        #expect(await server.waitForRequests(1))
         task.cancel()
         let outcome = await task.value
         #expect(Self.isCancelled(outcome), "\(outcome)")
@@ -1212,7 +1364,9 @@ struct HTTPClientTests {
         let http = try Self.client(server, timeoutMs: 2000, backoffMs: 30000)     // would wait 30 s
         let begin = ContinuousClock.now
         let task = Self.start(http)
-        try await Task.sleep(for: .milliseconds(300))
+        // The cancel must land in the 30 s back-off, not on the wire: wait for the first attempt to
+        // end (its 503 left the wire) instead of a fixed real-time sleep (U28-F6).
+        #expect(await Self.waitUntil { http.finishedAttemptCount == 1 })
         task.cancel()
         let outcome = await task.value
         #expect(Self.isCancelled(outcome), "\(outcome)")
@@ -1311,8 +1465,12 @@ struct HTTPClientTests {
 
         let b = try LoopbackServer([.respond(status: 503, body: Data(Self.kBody.utf8)), .text(Self.kBody)])
         defer { b.stop() }
-        let (backoff, releasedB) = try await dropped(b, timeoutMs: 2000, backoffMs: 150, gapMs: 0, paths: ["/x"]) {
-            try? await Task.sleep(for: .milliseconds(60))
+        // U28-F3: wait for the first attempt to reach the server, then a short positioning wait so
+        // a skipped back-off (an immediate retry) has landed before the count is read; the 1 s
+        // back-off leaves a correct client ~950 ms of margin for a stalled test thread.
+        let (backoff, releasedB) = try await dropped(b, timeoutMs: 2000, backoffMs: 1000, gapMs: 0, paths: ["/x"]) {
+            #expect(await b.waitForRequests(1))
+            try? await Task.sleep(for: .milliseconds(50))
             #expect(b.requestCount == 1)  // the first attempt failed, the back-off is pending
         }
         #expect(Self.body(backoff[0]) == Data(Self.kBody.utf8))

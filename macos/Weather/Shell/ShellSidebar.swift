@@ -92,6 +92,9 @@ struct ShellSidebar: View {
         }
     }
 
+    /// One entry per place with that place's own units (AppModel.Place.units): switching one
+    /// place's units changes only its entry, and refreshAll re-fetches only that place (the
+    /// others match LiveStationStore.refreshIfNeeded's last fetch and return at once).
     private var sidebarLiveTaskKey: [String] {
         model.places.map { "\($0.key):\($0.fetchedS):\($0.offline):\($0.units)" }
     }
@@ -183,7 +186,7 @@ private struct ShellSidebarPreview: View {
                 if let place = try? WxPlace(name: name, admin1: "Florida", country: "United States",
                                             countryCode: "US", lat: name == "Miami" ? 25.7743 : 28.5383,
                                             lon: name == "Miami" ? -80.1937 : -81.3792, timezone: "America/New_York") {
-                    _ = model.add(place)
+                    _ = model.add(place, units: .imperial)
                 }
             }
             self.model = model

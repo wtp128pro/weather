@@ -50,11 +50,16 @@ struct ShellPage: View {
     static let refreshLabel = "Refresh"
     static let sourcesLabel = "Settings — Data sources and weights (\u{2318},)"
 
-    /// The units button shows the CURRENT unit (wx-window.c:290-297).
+    /// The units button shows the CURRENT unit (wx-window.c:290-297): the selected place's
+    /// (AppModel.units), else the default units for new places when there is no place.
     static func unitsLabel(_ units: WxUnits) -> String { units == .metric ? "\u{00B0}C" : "\u{00B0}F" }
-    /// Its tooltip and accessible label name the other unit.
-    static func unitsTooltip(_ units: WxUnits) -> String {
-        units == .metric ? "Switch to Fahrenheit" : "Switch to Celsius"
+    /// Its tooltip and accessible label (and the View menu's ⌘U item) name the other unit and
+    /// what AppModel.toggleUnits() switches: the selected place, else the default units, which
+    /// only places whose country gives no preselection are added with (DECISIONS #34). Title case,
+    /// like the app's other menu items.
+    static func unitsTooltip(_ units: WxUnits, hasSelection: Bool) -> String {
+        let other = units == .metric ? "Fahrenheit" : "Celsius"
+        return hasSelection ? "Switch Selected Place to \(other)" : "Set Default Units to \(other)"
     }
 
     let page: ShellState.Page
@@ -100,8 +105,8 @@ struct ShellPage: View {
                             .font(.system(size: 13, weight: .bold, design: .rounded))
                     }
                     .buttonStyle(TitlebarPillButtonStyle())
-                    .help(Self.unitsTooltip(model?.units ?? .imperial))
-                    .accessibilityLabel(Self.unitsTooltip(model?.units ?? .imperial))
+                    .help(currentUnitsTooltip)
+                    .accessibilityLabel(currentUnitsTooltip)
                     .disabled(model == nil)
 
                     Button {
@@ -117,6 +122,11 @@ struct ShellPage: View {
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
+    }
+
+    /// The units button's tooltip for the selected place (or the default with no place).
+    private var currentUnitsTooltip: String {
+        Self.unitsTooltip(model?.units ?? .imperial, hasSelection: model?.selectedPlace != nil)
     }
 
     @ViewBuilder private var content: some View {
@@ -194,7 +204,7 @@ private struct ShellPagePreview: View {
             let model = AppModel(registry: WxRegistry(), storage: storage, online: false, log: { _, _ in })
             await model.load()
             if withPlace, let place = DetailPreviewData.place {
-                _ = model.add(place)
+                _ = model.add(place, units: .imperial)
             }
             firstRun = FirstRunViewModel(model: model)
             sources = SourcesViewModel(model: model)

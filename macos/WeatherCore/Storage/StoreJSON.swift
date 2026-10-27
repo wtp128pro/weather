@@ -282,11 +282,30 @@ enum StoreJSON {
         return nodeString(n)
     }
 
+    /// The optional per-place "units" member of a places.json element (macOS
+    /// only; the C format has none): "imperial" or "metric". Lenient like the
+    /// "units" of WxSettings: absent, not a string, or any other text is nil
+    /// (the caller applies its default) and never rejects the place.
+    static func placeUnits(_ node: Node?) -> WxUnits? {
+        guard let o = nodeObject(node), let units = nodeString(o.member("units")) else {
+            return nil
+        }
+        if units == Array("metric".utf8) {
+            return .metric
+        }
+        if units == Array("imperial".utf8) {
+            return .imperial
+        }
+        return nil
+    }
+
     /// Appends {"name": .., "admin1": .., "country": .., "country_code": ..,
     /// "lat": .., "lon": .., "timezone": ..} with the hand serialisers
     /// (wx_store_append_place, src/storage/wx-store-json.c:181-200), so the
     /// text passes the gate and the coordinates read back bit-identical.
-    static func appendPlace(_ place: WxPlace, to out: inout String) {
+    /// A non-nil `units` ends the object with "units": "imperial"/"metric"
+    /// (places.json only; see `placeUnits`).
+    static func appendPlace(_ place: WxPlace, units: WxUnits? = nil, to out: inout String) {
         out += "{\"name\": "
         StrictJSON.appendString(place.name, to: &out)
         out += ", \"admin1\": "
@@ -312,6 +331,10 @@ enum StoreJSON {
             out += ", \"street_address\": "
             StrictJSON.appendString(place.streetAddress, to: &out)
         }
+        if let units {
+            out += ", \"units\": "
+            StrictJSON.appendString(units == .metric ? "metric" : "imperial", to: &out)
+        }
         out += "}"
     }
 
@@ -327,6 +350,9 @@ enum StoreJSON {
         let data: Data
         /// The object's generation counter when the snapshot was taken.
         let generation: UInt64
+        /// The object's last load could not read `path`: move it aside
+        /// (`FileIO.moveAside`) before writing, so the write cannot destroy it.
+        var keepsExistingFile = false
 
         /// Writes the snapshot atomically on a background queue (never on the
         /// caller's thread). A cancellation of the calling task that arrived
@@ -339,9 +365,13 @@ enum StoreJSON {
             }
             let path = path
             let data = data
+            let keepsExistingFile = keepsExistingFile
             return await withCheckedContinuation { continuation in
                 DispatchQueue.global(qos: .utility).async {
                     do throws(FileIOError) {
+                        if keepsExistingFile {
+                            try FileIO.moveAside(path: path)
+                        }
                         try FileIO.writeAtomic(path: path, data: data)
                         continuation.resume(returning: .success(()))
                     } catch {

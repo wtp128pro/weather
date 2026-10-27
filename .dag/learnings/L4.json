@@ -1,0 +1,16 @@
+{
+  "id": "L4",
+  "trigger": "U60's frame omitted HTTPClientTransfer.swift, without which its 16 MiB cap and not-covered statuses could not be met (DECISIONS #42, amendment A07).",
+  "lesson": "An acceptance criterion about runtime behaviour (a size cap, a status mapping) is only reachable if the frame includes the layer that enforces it, not just the layer that declares it.",
+  "how_to_apply": "When writing a frame, trace each acceptance criterion to the code that actually enforces it (follow the call into transport/storage layers) and include those files, or split the criterion into a dependent unit.",
+  "scope": {
+    "applies_to": [
+      "tag:network",
+      "tag:alerts"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: DECISIONS.md #42; units/U60/debrief.json handoff_notes",
+  "since_wave": 11,
+  "promotable": true
+}

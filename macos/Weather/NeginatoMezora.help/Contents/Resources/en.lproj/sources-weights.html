@@ -20,6 +20,7 @@
 <a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
 <a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
 <a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="weather-alerts.html">Weather Alerts</a>
 <a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
 <a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
 <div class="nav-section">Settings</div>
@@ -44,7 +45,7 @@
 <table>
     <thead><tr><th>Service</th><th>Models it supplies</th><th>Where</th><th>Licence</th></tr></thead>
     <tbody>
-        <tr><td><strong>Open-Meteo</strong></td><td>ECMWF IFS, DWD ICON, NOAA GFS, ECCC GEM, UK Met Office, Météo-France ARPEGE/AROME, KNMI HARMONIE-AROME, and in the US NOAA HRRR and the National Blend of Models (NBM); the 15-minute rain; also current conditions, air quality and elevations</td><td>Worldwide (each model where it runs)</td><td>CC BY 4.0</td></tr>
+        <tr><td><strong>Open-Meteo</strong></td><td>ECMWF IFS, DWD ICON, NOAA GFS, ECCC GEM, UK Met Office, Météo-France ARPEGE/AROME, KNMI HARMONIE-AROME, and in the US and southern Canada NOAA HRRR and the National Blend of Models (NBM); the 15-minute rain; also current conditions, air quality and elevations</td><td>Worldwide (each model where it runs)</td><td>CC BY 4.0</td></tr>
         <tr><td><strong>National Weather Service</strong></td><td>The forecasters' 2.5 km grid (NDFD)</td><td>United States and territories</td><td>US public domain</td></tr>
         <tr><td><strong>MET Norway</strong></td><td>Locationforecast 2.0 (MEPS 2.5 km in the Nordic area, ECMWF elsewhere)</td><td>Worldwide</td><td>NLOD 2.0 / CC BY 4.0</td></tr>
         <tr><td><strong>Bright Sky (DWD)</strong></td><td>DWD MOSMIX station forecasts</td><td>Germany and neighbouring countries</td><td>CC BY 4.0 (DWD)</td></tr>
@@ -69,7 +70,7 @@
     <li>The <strong>Source weight multiplier</strong> (0.10× to 3.00×, steps of 0.05, default 1.00×) scales the weight of all of that service's models. <strong>1.0×</strong> resets one row; <strong>Reset Source Weights</strong> (in the section header, shown when any is changed) resets them all.</li>
     <li>The note under the list is meant literally: the weights are rules of thumb, not statistics measured from past accuracy, so the app claims no accuracy figure.</li>
 </ul>
-<p>Station networks are not in this tab: they have their own switches in <a href="stations-settings.html">Settings › Stations</a>.</p>
+<p>Station networks are not in this tab: they have their own switches in <a href="stations-settings.html">Settings › Stations</a>. Nor are the official alert sources: they have no switch and need no key; they and their credits are on <a href="weather-alerts.html">Weather Alerts</a>.</p>
 
 <h2>The Weights tab</h2>
 <p>Every forecast hour is a <strong>weighted median</strong> of the models that cover it (see <a href="algorithms.html">Algorithms</a>). A model's weight depends on the <strong>regional profile</strong> of the place, the <strong>variable</strong>, and how far ahead the hour is, in four <strong>horizon bands</strong>: <code>H0</code> 0–3 hours, <code>H1</code> 3–18 hours, <code>H2</code> 18–72 hours, <code>H3</code> beyond 72 hours.</p>
@@ -84,10 +85,10 @@
 <p>The profile follows the place's country; places without a country code use their coordinates. These tables are produced from the app's own weight code.</p>
 <table>
     <thead>
-        <tr><th>Profile</th><th>Used for</th><th>Leads the first 18 hours (temperature)</th><th>Leads after 3 days</th><th>15-minute rain</th></tr>
+        <tr><th>Profile</th><th>Used for</th><th>Leads the first 18 hours (temperature, H0 / H1)</th><th>Leads after 3 days</th><th>15-minute rain</th></tr>
     </thead>
     <tbody>
-        <tr><td><strong>United States</strong></td><td>US states and territories (Puerto Rico, US Virgin Islands, Guam, American Samoa, Northern Mariana Islands), and any place the National Weather Service covers</td><td>NOAA NWS Forecaster Grid (4), NOAA HRRR (Hourly &amp; 15-min Nowcast) (3), NOAA National Blend of Models (NBM) (2.5)</td><td>NOAA NWS Forecaster Grid (5), ECMWF IFS (Open-Meteo) (2), Météo-France ARPEGE / AROME (2)</td><td>NOAA HRRR (contiguous US only)</td></tr>
+        <tr><td><strong>United States</strong></td><td>US states and territories (Puerto Rico, US Virgin Islands, Guam, American Samoa, Northern Mariana Islands), and any place the National Weather Service covers</td><td>NOAA NWS Forecaster Grid (4), NOAA HRRR (Hourly &amp; 15-min Nowcast) (3), NOAA National Blend of Models (NBM) (2.5 / 3)</td><td>NOAA NWS Forecaster Grid (5), ECMWF IFS (Open-Meteo) (2), Météo-France ARPEGE / AROME (2)</td><td>NOAA HRRR (contiguous US only)</td></tr>
         <tr><td><strong>Canada</strong></td><td>Canada</td><td>ECCC MSC GeoMet (HRDPS / RDPS / Citypage) (4), ECCC GEM Seamless (4), NOAA HRRR (Hourly &amp; 15-min Nowcast) (3)</td><td>ECCC MSC GeoMet (HRDPS / RDPS / Citypage) (3.5), ECMWF IFS (Open-Meteo) (3.5), ECCC GEM Seamless (3)</td><td>NOAA HRRR in the south; Open-Meteo's best 15-minute model elsewhere</td></tr>
         <tr><td><strong>UK &amp; Ireland</strong></td><td>United Kingdom, Ireland, Isle of Man, Jersey, Guernsey</td><td>UK Met Office Unified Model (4), ECMWF IFS (Open-Meteo) (3), MET Norway Locationforecast 2.0 (2.5)</td><td>ECMWF IFS (Open-Meteo) (3.5), UK Met Office Unified Model (2.5), MET Norway Locationforecast 2.0 (2)</td><td>UK Met Office 2 km</td></tr>
         <tr><td><strong>Netherlands &amp; Benelux</strong></td><td>Netherlands, Belgium, Luxembourg</td><td>KNMI HARMONIE-AROME (Seamless) (4), DWD ICON Seamless (3.5), DWD MOSMIX &amp; ICON-D2 (Bright Sky) (3)</td><td>ECMWF IFS (Open-Meteo) (3.5), DWD ICON Seamless (2.5), DWD MOSMIX &amp; ICON-D2 (Bright Sky) (2)</td><td>KNMI HARMONIE-AROME 2 km</td></tr>
@@ -255,7 +256,7 @@
 <p>Not used here (weight 0): NOAA NWS Forecaster Grid, NOAA HRRR (Hourly &amp; 15-min Nowcast), NOAA National Blend of Models (NBM), KNMI HARMONIE-AROME (Seamless), DWD MOSMIX &amp; ICON-D2 (Bright Sky), ECCC MSC GeoMet (HRDPS / RDPS / Citypage).</p>
 </details>
 
-<p>Precipitation chance is a weighted mean of the models that report a chance, combined with the share of models that forecast measurable rain when few report one. Models that only run in the US (NWS, HRRR, NBM) weigh 0 elsewhere; HRRR stops after 48 hours.</p>
+<p>Precipitation chance is a weighted mean of the models that report a chance, combined with the share of models that forecast measurable rain when few report one. Models that only run in North America weigh 0 elsewhere: NWS outside the US, HRRR and NBM outside the US and southern Canada; HRRR stops after 48 hours.</p>
         </main>
     </div>
     <script src="search-index.js"></script>

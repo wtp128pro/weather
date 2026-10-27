@@ -650,8 +650,8 @@ struct MezoraWindowView: View {
                                     ForEach([
                                         ("thermometer.medium", "Feels like 62°F · Dew point 58°F"),
                                         ("arrow.up.and.down", "High 68° · Low 54°"),
-                                        ("wind", "Wind 11 mph SSW (gusts 19 mph)"),
-                                        ("antenna.radiowaves.left.and.right", "12 stations (METAR/ASOS/IEM) · −1.2°F learned bias")
+                                        ("wind", "Wind 11 mph · gusts 19"),
+                                        ("antenna.radiowaves.left.and.right", "12 stations · −1.2°F bias")
                                     ], id: \.1) { (sym, label) in
                                         HStack(spacing: 5) {
                                             Image(systemName: sym)
@@ -759,12 +759,12 @@ struct MezoraWindowView: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundStyle(Color.white.opacity(0.85))
                                 }
-                                HStack(spacing: 6) {
+                                HStack(spacing: 4) {
                                     ForEach(["NWS Grid", "HRRR 3km", "ECMWF IFS", "UKV 2km", "KNMI 2km", "DWD MOSMIX", "ECCC HRDPS"], id: \.self) { m in
                                         Text(m)
                                             .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
                                             .foregroundStyle(Color.white.opacity(0.92))
-                                            .padding(.horizontal, 7)
+                                            .padding(.horizontal, 5)
                                             .padding(.vertical, 3)
                                             .background(Color.black.opacity(0.24), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                                     }
@@ -807,6 +807,7 @@ struct MezoraWindowView: View {
                                         Image(systemName: sym)
                                             .symbolRenderingMode(.multicolor)
                                             .font(.system(size: 18))
+                                            .frame(height: 24)
                                         Text(pct)
                                             .font(.system(size: 10, weight: .bold, design: .rounded))
                                             .foregroundStyle(Color(red: 0.44, green: 0.88, blue: 1.00))

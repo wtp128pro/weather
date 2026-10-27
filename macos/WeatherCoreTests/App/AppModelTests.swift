@@ -255,11 +255,15 @@ private final class Fx {
         return await start()
     }
 
-    /// store_places (test-window.c:290-301).
-    func storePlaces(_ places: [WxPlace]) throws {
+    /// store_places (test-window.c:290-301), every place saved with `units`; nil writes a
+    /// places.json from before per-place units, which the load migrates (and saves) once.
+    func storePlaces(_ places: [WxPlace], units: WxUnits? = .imperial) throws {
         let list = try #require(WxPlaces(path: storage.placesPath))
         for p in places {
             #expect(list.add(p))
+            if let units {
+                #expect(list.setUnits(units, forKey: p.key))
+            }
         }
         try list.save()
     }
@@ -383,7 +387,7 @@ struct AppModelTests {
     // test-window.c:2885-2903)
     @Test func apiBeforeLoadIgnored() async throws {
         let fx = try Fx("before-load")
-        try fx.storePlaces([try miami()])
+        try fx.storePlaces([try miami()], units: nil)  // the place takes the settings' units
         try fx.storeSettings(.metric)
         let logs = fx.logs
         let m = AppModel(registry: fx.registry, storage: fx.storage, clock: fx.clock, online: true,
@@ -534,7 +538,7 @@ struct AppModelTests {
     // C: /window/units/from-settings (test_units_from_settings_at_start, test-window.c:2287-2302)
     @Test func unitsFromSettingsAtStart() async throws {
         let fx = try Fx("units-settings")
-        try fx.storePlaces([try miami()])
+        try fx.storePlaces([try miami()], units: nil)  // saved before per-place units
         try fx.storeSettings(.metric)
         let m = await fx.start()
         #expect(m.units == .metric)  // test-window.c:2294
@@ -546,7 +550,9 @@ struct AppModelTests {
     }
 
     // C: /window/app/properties (test_app_properties, test-window.c:3340-3368): "offline" and
-    // "units" notify only on a change.
+    // "units" notify only on a change. Then (U49 handoff, executor-added) the same with a loaded,
+    // selected place: an item change (offline mark, forecast, display tick) is not a units change
+    // and must not notify `units` observers.
     @Test func appPropertiesNotifyOnlyOnChange() async throws {
         let fx = try Fx("properties")
         let m = await fx.start()
@@ -576,6 +582,80 @@ struct AppModelTests {
         m.setUnits(.metric)
         #expect(notified.count == 3)  // test-window.c:3364
         #expect(m.units == .metric)  // test-window.c:3366
+        await fx.stop()
+
+        // The loaded, selected place.
+        let fx2 = try Fx("properties-place")
+        try fx2.storePlaces([try miami()])
+        let m2 = await fx2.start()
+        #expect(m2.selectedKey == (try miami().key))
+        #expect(m2.units == .imperial)
+        #expect(await waitFor { m2.places.first?.loading == false && m2.requestsInFlight == 0 })
+        let both = Counter()
+        withObservationTracking {
+            _ = m2.isOffline
+            _ = m2.units
+        } onChange: {
+            both.bump()
+        }
+        m2.setOnline(false)
+        m2.setOnline(true)
+        #expect(both.count == 1)  // isOffline only: the item's offline mark did not reach `units`
+        let units = Counter()
+        withObservationTracking {
+            _ = m2.units
+        } onChange: {
+            units.bump()
+        }
+        m2.setOnline(false)
+        await fx2.clock.advance(by: RefreshEngine.clockTickS * 1_000_000)
+        m2.setOnline(true)
+        #expect(await waitFor { m2.places.first?.loading == false && m2.requestsInFlight == 0 })
+        #expect(units.count == 0)  // offline marks, a display tick, a refresh: no units change
+        m2.setUnits(.metric)  // the selected place's units: one change
+        #expect(units.count == 1)
+        #expect(m2.units == .metric)
+        await fx2.stop()
+    }
+
+    // U49 handoff, DECISIONS #41 A13: the `units` mirror follows the load-time restore of the
+    // selection and the autoselect after a removal, and notifies exactly when its value changes.
+    // C: none - contract test of the units mirror (executor-added, U51)
+    @Test func unitsMirrorFollowsRestoreAndRemoval() async throws {
+        let fx = try Fx("units-mirror")
+        let list = try #require(WxPlaces(path: fx.storage.placesPath))
+        for (p, units) in [(try miami(), WxUnits.imperial), (try orlando(), .metric), (try tampa(), .metric)] {
+            #expect(list.add(p))
+            #expect(list.setUnits(units, forKey: p.key))
+        }
+        try list.save()
+        try fx.storeSettings(.imperial, selected: try orlando().key)
+        let m = await fx.start(visible: false)
+        #expect(m.selectedKey == (try orlando().key))
+        #expect(m.units == .metric)  // the restored selection's, not the default (imperial)
+        let notified = Counter()
+        withObservationTracking {
+            _ = m.units
+        } onChange: {
+            notified.bump()
+        }
+        #expect(m.remove(key: try orlando().key))  // autoselect: tampa, metric too
+        #expect(m.selectedKey == (try tampa().key))
+        #expect(m.units == .metric)
+        #expect(notified.count == 0)
+        #expect(m.remove(key: try tampa().key))  // autoselect: miami (imperial)
+        #expect(m.selectedKey == (try miami().key))
+        #expect(notified.count == 1)
+        #expect(m.units == .imperial)
+        withObservationTracking {
+            _ = m.units
+        } onChange: {
+            notified.bump()
+        }
+        #expect(m.remove(key: try miami().key))  // no place: the default units (imperial)
+        #expect(m.selectedKey == nil)
+        #expect(m.units == .imperial)
+        #expect(notified.count == 1)
         await fx.stop()
     }
 
@@ -873,7 +953,7 @@ struct AppModelTests {
         let okey = try orlando().key
         #expect(m.add(try orlando()) == .added)  // test-window.c:2826
         m.select(okey)  // test-window.c:2827
-        m.toggleUnits()  // test-window.c:2828
+        m.setDefaultUnits(.metric)  // test-window.c:2828 (the settings' units are the default now)
         #expect(m.saveTimerArmed)
         let (ok, ms) = await fx.stop()
         #expect(ok)
@@ -903,7 +983,7 @@ struct AppModelTests {
                                                     attributes: [.posixPermissions: 0o700])
         }
         #expect(m.add(try miami()) == .added)  // the places and, once fetched, the cache, test-window.c:3440
-        m.toggleUnits()  // the settings, test-window.c:3441
+        m.setDefaultUnits(.metric)  // the settings, test-window.c:3441
         #expect(await waitFor { m.places.first?.forecast != nil })  // test-window.c:3442
         let before = fx.logs.warnings.count
         let (ok, ms) = await fx.stop()
@@ -928,7 +1008,7 @@ struct AppModelTests {
         for _ in 0 ..< steps {
             ticks += 1
             m.move(from: ticks % 2 == 0 ? 1 : 0, to: ticks % 2 == 0 ? 0 : 1)
-            m.setUnits(ticks % 2 == 0 ? .imperial : .metric)
+            m.setDefaultUnits(ticks % 2 == 0 ? .imperial : .metric)
             if ticks % 10 == 0 {
                 m.refresh()
             }
@@ -952,7 +1032,7 @@ struct AppModelTests {
         let m = await fx.start()
         #expect(await waitFor { m.places.first?.forecast != nil })
         #expect(await flushSaves(fx, [(fx.storage.settingsPath, "imperial"), (fx.storage.cachePath, "Miami")]))
-        m.toggleUnits()  // the settings are dirty, test-window.c:3749
+        m.setDefaultUnits(.metric)  // the settings are dirty, test-window.c:3749
         #expect(m.add(try orlando()) == .added)  // so are the places, test-window.c:3751
         try FileManager.default.removeItem(atPath: fx.storage.placesPath)  // test-window.c:3755
         try FileManager.default.removeItem(atPath: fx.storage.settingsPath)  // test-window.c:3756
@@ -991,7 +1071,7 @@ struct AppModelTests {
             #expect(await flushSaves(fx, [(fx.storage.placesPath, "Orlando"), (fx.storage.settingsPath, "imperial"),
                                           (fx.storage.cachePath, "Orlando")]))  // test-window.c:3609-3610
             // All three objects are edited in one turn: units, the removal of Orlando.
-            m.toggleUnits()  // test-window.c:3614
+            m.setDefaultUnits(.metric)  // test-window.c:3614
             #expect(m.remove(key: try orlando().key))  // test-window.c:3616
             for path in [fx.storage.placesPath, fx.storage.settingsPath, fx.storage.cachePath] {
                 try FileManager.default.removeItem(atPath: path)  // test-window.c:3620
@@ -1062,11 +1142,11 @@ struct AppModelTests {
     @Test func everythingPersistsAcrossLaunches() async throws {
         let fx = try Fx("roundtrip")
         let m1 = await fx.start()
+        m1.setDefaultUnits(.metric)  // the places added next are metric
         #expect(m1.add(try miami()) == .added)
         #expect(m1.add(try orlando()) == .added)
         #expect(m1.add(try tampa()) == .added)
         #expect(m1.moveUp(key: try tampa().key))
-        m1.setUnits(.metric)
         m1.setProviderEnabled("fake-b", false)
         m1.select(try orlando().key)
         #expect(await waitFor { m1.places.allSatisfy { $0.forecast != nil && !$0.loading } })
@@ -1082,7 +1162,7 @@ struct AppModelTests {
         m2.setVisible(true)
         m2.setFocused(true)
         #expect(fx.names() == "Miami,Tampa,Orlando")
-        #expect(m2.units == .metric)
+        #expect(m2.units == .metric && m2.defaultUnits == .metric)
         #expect(!fx.registry.isEnabled(id: "fake-b"))
         #expect(m2.selectedKey == (try orlando().key))
         #expect(m2.isOffline)
@@ -1104,7 +1184,7 @@ struct AppModelTests {
         try fx.storeSettings(.imperial, selected: try miami().key)
         let m = await fx.start(visible: false)
         #expect(!m.saveTimerArmed)  // nothing changed by the load
-        m.setUnits(.metric)  // t = 0: the first change
+        m.setDefaultUnits(.metric)  // t = 0: the first change
         #expect(m.saveTimerArmed)
         await fx.clock.advance(by: 2_000_000)
         #expect(m.moveDown(key: try miami().key))  // t = 2 s: does not move the timer
@@ -1395,7 +1475,7 @@ struct AppModelTests {
         try FileManager.default.removeItem(atPath: fx.storage.settingsPath)
         try FileManager.default.createDirectory(atPath: fx.storage.settingsPath, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
-        m.setUnits(.metric)
+        m.setDefaultUnits(.metric)
         await fx.clock.advance(by: AppModel.saveDelayMs * 1000)
         #expect(await waitFor { m.savesInFlight == 0 && fx.logs.warnings.count == 1 })
         #expect(fx.logs.warnings.first?.hasPrefix("Could not save the settings: ") == true)  // wx-app.c:484
@@ -1403,7 +1483,7 @@ struct AppModelTests {
         await fx.clock.advance(by: 10 * AppModel.saveDelayMs * 1000)
         await pump(20)
         #expect(fx.logs.warnings.count == 1)
-        m.setUnits(.imperial)  // the next edit
+        m.setDefaultUnits(.imperial)  // the next edit
         #expect(m.saveTimerArmed)
         try FileManager.default.removeItem(atPath: fx.storage.settingsPath)
         await fx.stop()
@@ -1668,7 +1748,7 @@ struct AppModelTests {
         try fx.storeSettings(.imperial, selected: try miami().key)
         let m = await fx.start()
         #expect(await waitFor { m.places.first?.forecast != nil && m.places.first?.loading == false })
-        m.setUnits(.metric)
+        m.setDefaultUnits(.metric)
         #expect(m.saveTimerArmed)
         let edited = Counter()
         var flushing: Task<Bool, Never>?
@@ -1677,7 +1757,7 @@ struct AppModelTests {
                 return
             }
             edited.bump()
-            m.setUnits(.imperial)  // the settings are dirty again after their "metric" snapshot
+            m.setDefaultUnits(.imperial)  // the settings are dirty again after their "metric" snapshot
             flushing = Task.immediate { @MainActor in await m.flush() }
         }
         await fx.clock.advance(by: AppModel.saveDelayMs * 1000)  // the debounce starts the saves
@@ -1866,5 +1946,60 @@ struct AppModelTests {
         await fx.stop()
         let saved = WxStationSettings.load(path: WxStationSettings.defaultPath(configDirectory: fx.storage.configDirectory))
         #expect(saved.localCorrectionsEnabled && saved.disabledNetworks == [.iemMesonet])
+    }
+
+    // C: none - U13-F1 (U39 handoff): a station-settings write that fails (a read-only
+    // configuration folder) is logged like the other failed saves, for both switches
+    // (executor-added).
+    @Test func stationSettingsSaveFailureIsLogged() async throws {
+        let fx = try Fx("station-settings-readonly")
+        try fx.storePlaces([try miami()])
+        let m = await fx.start(visible: false)
+        let path = WxStationSettings.defaultPath(configDirectory: fx.storage.configDirectory)
+        let folder = (path as NSString).deletingLastPathComponent
+        #expect(FileManager.default.fileExists(atPath: folder))
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: folder)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder) }
+        let before = fx.logs.warnings.count
+        m.setLocalCorrectionsEnabled(false)
+        #expect(!m.stationSettings.localCorrectionsEnabled)
+        #expect(Array(fx.logs.warnings.dropFirst(before)) == ["Could not save the station settings"])
+        m.setStationNetworkEnabled(.iemMesonet, false)
+        #expect(Array(fx.logs.warnings.dropFirst(before)) == Array(repeating: "Could not save the station settings",
+                                                                     count: 2))
+        #expect(!FileManager.default.fileExists(atPath: path))
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder)
+        m.setStationNetworkEnabled(.iemMesonet, true)  // a write that succeeds logs nothing
+        #expect(fx.logs.warnings.count == before + 2)
+        #expect(FileManager.default.fileExists(atPath: path))
+        await fx.stop()
+    }
+
+    // C: none - U32 verifier (minor defect 2): America/Nuuk springs forward at 23:00 on
+    // 2026-03-28, the day's last hour; 23:30 resolves to 23:30 of the NEXT day, so its row is the
+    // skipped hour (nothing learned, never now) like 02:00 elsewhere; rows 0-22 are unchanged
+    // (executor-added).
+    @Test func lastHourSkippedRowIsEmpty() async throws {
+        let fx = try Fx("nuuk-skipped-hour")
+        let place = try WxPlace(name: "Nuuk", admin1: "Sermersooq", country: "Greenland", countryCode: "GL",
+                                lat: 64.1835, lon: -51.7216, timezone: "America/Nuuk")
+        try fx.storePlaces([place])
+        let clock = ManualClock(wallMicroseconds: 1_774_710_000 * 1_000_000)  // 2026-03-28 15:00Z, 13:00 -02
+        let m = AppModel(registry: fx.registry, storage: fx.storage, clock: clock, online: false)
+        fx.model = m
+        await m.load()
+        let hours = try #require(m.localCorrections.first).hours
+        #expect(hours.count == 24 && hours.map(\.hour) == Array(0..<24))
+        #expect(hours[23].tS == 0 && hours[23].samples == 0 && hours[23].correctionC == 0)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "America/Nuuk"))
+        let now = Date(timeIntervalSince1970: 1_774_710_000)
+        for h in hours where h.hour != 23 {
+            let date = Date(timeIntervalSince1970: TimeInterval(h.tS))
+            #expect(calendar.component(.hour, from: date) == h.hour && calendar.component(.minute, from: date) == 30
+                    && calendar.isDate(date, inSameDayAs: now), "row \(h.hour)")
+        }
+        #expect(await m.flush())
+        fx.model = nil
     }
 }

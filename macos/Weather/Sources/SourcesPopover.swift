@@ -5,7 +5,8 @@
 // ui-widgets.md §2 items 30-34). Every text, link, tooltip and accessibility label
 // comes from SourcesViewModel; this view only lays them out, top to bottom:
 // the title, one row per provider in registry order (switch, name, status,
-// attribution, licence), the honesty note and the "About Weather" button.
+// attribution, licence), the alert sources' credits, the honesty note and the "About
+// Weather" button.
 
 import AppKit
 import SwiftUI
@@ -28,6 +29,14 @@ struct SourcesPopover: View {
                 .accessibilityAddTraits(.isHeader)
             ForEach(viewModel.rows) { row in
                 SourcesRowView(row: row, viewModel: viewModel)
+            }
+            Divider()
+            // The alert sources' credits (not in the C popover), dim like the licence lines.
+            Text(SourcesViewModel.alertSourcesTitle)
+                .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
+            ForEach(Array(SourcesViewModel.alertCredits.enumerated()), id: \.offset) { _, line in
+                SourcesTextLineView(line: line, dim: true)
             }
             Divider()
             Text(SourcesViewModel.note)  // wx-sources-note: not a dim-label (wx-sources.c:741-743)

@@ -171,11 +171,6 @@ enum WeatherTheme {
         return LinearGradient(stops: stops, startPoint: .leading, endPoint: .trailing)
     }()
 
-    /// Detects whether `now.temperature` is formatted in Celsius (`°C`).
-    static func isMetric(temperatureText: String) -> Bool {
-        temperatureText.contains("C")
-    }
-
     /// Maps a temperature in the active unit (`isMetric`: °C vs °F) to an Apple Weather
     /// spectrum color (icy cyan -> sky blue -> emerald teal -> warm gold -> amber -> coral red).
     static func temperatureColor(for value: Int, isMetric: Bool) -> Color {

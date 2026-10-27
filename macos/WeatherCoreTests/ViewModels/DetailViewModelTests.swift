@@ -127,12 +127,12 @@ import Testing
     /// The same item with other state (wx_row_item_set_*).
     nonisolated static func with(_ i: DetailViewModel.Item, forecast: WxForecast?? = nil, fetchedS: Int64? = nil,
                      loading: Bool? = nil, stale: Bool? = nil, offline: Bool? = nil, units: WxUnits? = nil,
-                     nowS: Int64? = nil, error: String?? = nil) -> DetailViewModel.Item {
+                     nowS: Int64? = nil, error: String?? = nil, alerts: WxAlertsResult? = nil) -> DetailViewModel.Item {
         let f = forecast ?? i.forecast
         return DetailViewModel.Item(place: i.place, forecast: f, fetchedS: f == nil ? 0 : (fetchedS ?? i.fetchedS),
                                     loading: loading ?? i.loading, stale: stale ?? i.stale,
                                     offline: offline ?? i.offline, units: units ?? i.units, nowS: nowS ?? i.nowS,
-                                    errorText: error ?? i.errorText)
+                                    errorText: error ?? i.errorText, alerts: alerts ?? i.alerts)
     }
 
     static func shown(_ item: DetailViewModel.Item?) -> DetailViewModel {
@@ -1335,6 +1335,111 @@ import Testing
         #expect(p.staleBadgeTooltip == "The last refresh failed: <span foreground='red'>&</span>")  // test-detail.c:2495-2496
     }
 
+    // MARK: - Per-place units (U50)
+
+    /// A loaded model whose default units are `defaultUnits`, holding New York saved with
+    /// `placeUnits` (AppModel.add(_:units:)) and refreshed from one fake source (24 degC, feels
+    /// 26 degC, wind 12 km/h, gusts 20 km/h, 1.5 mm in each of the first 6 hours), and the
+    /// detail page of its item (DetailViewModel.show(place:)). `dir` keeps the files alive.
+    private func unitsPage(_ label: String, defaultUnits: WxUnits, placeUnits: WxUnits) async throws
+        -> (dir: TemporaryDirectory, model: AppModel, item: AppModel.Place, page: DetailViewModel.ForecastPage)
+    {
+        let dir = try TemporaryDirectory("u50-detail-\(label)")
+        let storage = AppEnvironment.StorageRoot(configDirectory: dir.appending("config").path,
+                                                 cacheDirectory: dir.appending("cache").path)
+        let clock = ManualClock()
+        let registry = WxRegistry()
+        let fake = FakeProvider(id: "fake-a")
+        let now = clock.wallSeconds
+        var m = try WxMember(sourceID: "fake-a", modelID: "m1", fetchedS: now)
+        for i in -2..<72 {
+            let wet = i >= 0 && i < 6
+            _ = m.addHour(WxHour(tS: now - now % 3600 + Int64(i) * 3600, tempC: 24, feelsC: 26,
+                                 precipMm: wet ? 1.5 : 0, precipProb: wet ? 90 : 5, cloudPct: 40, windKmh: 12,
+                                 gustKmh: 20, humidityPct: 70))
+        }
+        fake.addMember(m)
+        try registry.addProvider(fake)
+        let model = AppModel(registry: registry, storage: storage, clock: clock, online: true, log: { _, _ in })
+        await model.load()
+        model.setDefaultUnits(defaultUnits)
+        #expect(model.add(try Self.place(Self.ny), units: placeUnits) == .added)
+        model.setVisible(true)
+        let deadline = ContinuousClock.now + .seconds(30)
+        while !(model.selectedPlace?.forecast != nil && model.selectedPlace?.loading == false) {
+            if ContinuousClock.now > deadline {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        let item = try #require(model.selectedPlace)
+        #expect(model.defaultUnits == defaultUnits && item.units == placeUnits)
+        let vm = DetailViewModel()
+        vm.show(place: item)
+        return (dir, model, item, try #require(Self.page(vm)))
+    }
+
+    /// The temperature, wind, rain and chart strings of `page` are in `units` and not in `other`.
+    private func expectStrings(_ page: DetailViewModel.ForecastPage, _ item: AppModel.Place, in units: WxUnits)
+        throws
+    {
+        let other: WxUnits = units == .metric ? .imperial : .metric
+        let forecast = try #require(item.forecast)
+        let cur = try #require(WxBlend.now(forecast, nowS: item.nowS))
+        let deg = units == .metric ? "\(Self.deg)C" : "\(Self.deg)F"
+        let (speed, otherSpeed) = units == .metric ? ("km/h", "mph") : ("mph", "km/h")
+        let (depth, otherDepth) = units == .metric ? (" mm", " in") : (" in", " mm")
+        // Temperature: the now block and the hour cards.
+        #expect(page.now.temperature == WxFormat.temp(cur.tempC, units: units, withUnit: true))
+        #expect(page.now.temperature.hasSuffix(deg))
+        #expect(page.now.temperature != WxFormat.temp(cur.tempC, units: other, withUnit: true))
+        #expect(page.now.feelsLike == "Feels like " + WxFormat.temp(cur.feelsC, units: units, withUnit: false))
+        #expect(page.hours.first?.temp == WxFormat.temp(cur.tempC, units: units, withUnit: false))
+        // Wind: the now block and every hour card's tooltip.
+        #expect(page.now.wind.hasPrefix("Wind " + WxFormat.wind(cur.windKmh, units: units)))
+        #expect(page.now.wind.contains(speed) && !page.now.wind.contains(otherSpeed))
+        #expect(!page.hours.isEmpty)
+        for card in page.hours {
+            let lines = card.tooltip.split(separator: "\n").map(String.init)
+            #expect(lines.count == 4, "\(card.tooltip)")
+            #expect(lines.dropFirst().first?.hasSuffix(deg) == true, "\(card.tooltip)")
+            #expect(lines.dropFirst(2).first?.hasSuffix(" " + speed) == true, "\(card.tooltip)")
+            // Rain amounts.
+            #expect(lines.last?.hasPrefix("Rain ") == true && lines.last?.hasSuffix(depth) == true,
+                    "\(card.tooltip)")
+            #expect(!card.tooltip.contains(otherDepth + "\n") && !card.tooltip.hasSuffix(otherDepth))
+        }
+        // The rain chart: its scale and its bars (its accessible description names the chance).
+        let chart = page.rain.hourly
+        #expect(chart.units == units && chart.hasData)
+        #expect(chart.rateUnitShort == (units == .metric ? "mm/h" : "in/h"))
+        #expect(chart.scaleLabel.hasSuffix(depth + "/h") && chart.midScaleLabel.hasSuffix(depth + "/h"))
+        let wet = try #require(chart.rateMmH.firstIndex { $0 > 0 })
+        #expect(chart.formattedRate(forSlot: wet) == WxFormat.precip(chart.rateMmH[wet], units: units) + "/h")
+        #expect(chart.formattedRate(forSlot: wet)?.hasSuffix(depth + "/h") == true)
+        #expect(chart.compactBarLabel(forSlot: wet)?.hasSuffix(depth + "/h") == true)
+        // The nowcast chart (the other view of the rain card) is in the place's units too
+        // (U50 verifier handoff: forcing either units there left every test green).
+        let nowcast = page.rain.nowcast
+        #expect(nowcast.units == units)
+        #expect(nowcast.rateUnitShort == (units == .metric ? "mm/h" : "in/h"))
+        #expect(nowcast.scaleLabel.hasSuffix(depth + "/h") && nowcast.midScaleLabel.hasSuffix(depth + "/h"))
+    }
+
+    @Test(.timeLimit(.minutes(1))) func metricPlaceWithImperialDefault() async throws {
+        let r = try await unitsPage("metric", defaultUnits: .imperial, placeUnits: .metric)
+        try expectStrings(r.page, r.item, in: .metric)
+        _ = await r.model.flush()
+        _ = r.dir
+    }
+
+    @Test(.timeLimit(.minutes(1))) func imperialPlaceWithMetricDefault() async throws {
+        let r = try await unitsPage("imperial", defaultUnits: .metric, placeUnits: .imperial)
+        try expectStrings(r.page, r.item, in: .imperial)
+        _ = await r.model.flush()
+        _ = r.dir
+    }
+
     // MARK: - The application model's item (owned case /window/refresh/partial)
 
     // C: /window/refresh/partial (test_refresh_partial_one_source_fails, test-window.c:1429-1440)
@@ -1380,4 +1485,360 @@ import Testing
         #expect(Self.page(vm)?.partial == "Not available right now: Fake fake-b")  // test-window.c:1440
         _ = await model.flush()
     }
+
+    // MARK: - Alerts (U52)
+
+    /// An alert of `source` named `event` at `level`, with its headline, description, instruction
+    /// and page.
+    nonisolated static func alert(_ id: String, _ event: String, _ level: WxAlert.Level, onsetS: Int64? = nil,
+                                  expiresS: Int64? = nil, endsS: Int64? = nil, web: String? = nil,
+                                  source: WxAlert.Source = .nws) -> WxAlert {
+        WxAlert(id: source.rawValue + ":" + id, source: source, event: event, headline: event + " until further notice",
+                description: "Details of the " + event + ".", instruction: "Stay indoors.", level: level,
+                issuerSeverity: "", onsetS: onsetS, expiresS: expiresS, endsS: endsS, web: web)
+    }
+
+    /// An answer of the alerts service: `state` from `source` with `alerts`, fetched at `fetchedS`.
+    nonisolated static func alertsResult(_ state: WxAlertsResult.State, _ alerts: [WxAlert] = [],
+                                         source: WxAlert.Source? = .nws, fetchedS: Int64? = nowS - 300)
+        -> WxAlertsResult {
+        WxAlertsResult(state: state, source: source, alerts: alerts, fetchedS: fetchedS)
+    }
+
+    /// The alerts section `vm` shows.
+    static func alertsShown(_ vm: DetailViewModel) throws -> DetailViewModel.AlertsSection {
+        try #require(vm.alerts)
+    }
+
+    /// A loaded model without forecast sources holding `places`, its alerts service answering
+    /// `results` (by place key; given the model clock's "now"); `dir` keeps the files alive.
+    private func alertsModel(_ label: String, _ places: [WxPlace],
+                             _ results: (Int64) throws -> [String: WxAlertsResult]) async throws
+        -> (dir: TemporaryDirectory, model: AppModel)
+    {
+        let dir = try TemporaryDirectory("u52-detail-\(label)")
+        let storage = AppEnvironment.StorageRoot(configDirectory: dir.appending("config").path,
+                                                 cacheDirectory: dir.appending("cache").path)
+        let list = try #require(WxPlaces(path: storage.placesPath))
+        for p in places {
+            #expect(list.add(p))
+        }
+        try list.save()
+        let clock = ManualClock()
+        let service = DetailFixedAlerts()
+        service.results = try results(clock.wallSeconds)
+        let model = AppModel(registry: WxRegistry(), storage: storage, clock: clock, online: true,
+                             log: { _, _ in }, alerts: service)
+        await model.load()
+        return (dir, model)
+    }
+
+    @Test func alertCardsFormattedInPlaceZone() throws {
+        let tornado = Self.alert("a", "Tornado Warning", .red, onsetS: Self.nowS - 2 * 3600,
+                                 expiresS: Self.nowS + 6 * 3600, endsS: Self.nowS + 20 * 3600,
+                                 web: "https://alerts.weather.gov/a")
+        let gale = Self.alert("b", "Gale Warning", .yellow, onsetS: Self.nowS + 3 * 86_400,
+                              web: "http://insecure.example/b")
+        let statement = Self.alert("c", "Special Statement", .unknown, expiresS: Self.nowS + 3600)
+        let result = Self.alertsResult(.current, [tornado, gale, statement])
+        // The same alerts in three place zones (none of them the test machine's alone): the onset,
+        // and the event end, else the message expiry, as "<day> <clock>" in the place's zone.
+        let expected: [(tz: String, effective: [String?], expires: [String?])] = [
+            (Self.ny, ["Today 12:30 PM", "Thursday 2:30 PM", nil], ["Tomorrow 10:30 AM", nil, "Today 3:30 PM"]),
+            (Self.akl, ["Today 5:30 AM", "Friday 7:30 AM", nil], ["Tomorrow 3:30 AM", nil, "Today 8:30 AM"]),
+            ("UTC", ["Today 4:30 PM", "Thursday 6:30 PM", nil], ["Tomorrow 2:30 PM", nil, "Today 7:30 PM"]),
+        ]
+        let vm = DetailViewModel()
+        for e in expected {
+            for item in [Self.with(try Self.plain(e.tz), alerts: result),
+                         Self.with(Self.item(try Self.place(e.tz)), alerts: result)] {  // with and without forecast
+                vm.show(item)
+                let section = try Self.alertsShown(vm)
+                #expect(section.state == .current)
+                #expect(section.text == nil)
+                #expect(!section.showsSpinner)
+                #expect(section.sourceName == "National Weather Service")
+                // One card per alert, in the result's order (highest level first).
+                #expect(section.cards.map(\.id) == ["nws:a", "nws:b", "nws:c"])
+                #expect(section.cards.map(\.event) == ["Tornado Warning", "Gale Warning", "Special Statement"])
+                #expect(section.cards.map(\.level) == [.red, .yellow, .unknown])
+                #expect(section.cards.map(\.severity) == ["Red", "Yellow", "Unknown"])
+                #expect(section.cards.map(\.effective) == e.effective, "\(e.tz)")
+                #expect(section.cards.map(\.expires) == e.expires, "\(e.tz)")
+                #expect(section.cards.map(\.headline) == ["Tornado Warning until further notice",
+                                                          "Gale Warning until further notice",
+                                                          "Special Statement until further notice"])
+                #expect(section.cards.map(\.description) == ["Details of the Tornado Warning.",
+                                                             "Details of the Gale Warning.",
+                                                             "Details of the Special Statement."])
+                #expect(section.cards.allSatisfy { $0.instruction == "Stay indoors." })
+                #expect(section.cards.allSatisfy { $0.sourceName == "National Weather Service" })
+                // The issuer's page when it is a linkable https URL; an NWS alert without one (an
+                // insecure page of another host, no page) links the NWS site, never the http page.
+                #expect(section.cards.map(\.link) == ["https://alerts.weather.gov/a", "https://www.weather.gov/",
+                                                      "https://www.weather.gov/"])
+            }
+        }
+        // Each issuer's name.
+        #expect(WxAlert.Source.allCases.map(DetailViewModel.AlertsSection.sourceName) == [
+            "National Weather Service", "Deutscher Wetterdienst", "MET Norway",
+            "Environment and Climate Change Canada", "MeteoAlarm",
+        ])
+    }
+
+    @Test func alertExpiryFilteredAtNowS() throws {
+        let result = Self.alertsResult(.current, [
+            Self.alert("expired", "Tornado Warning", .red, expiresS: Self.nowS),
+            Self.alert("ended", "Flood Warning", .red, expiresS: Self.nowS + 3600, endsS: Self.nowS),
+            Self.alert("next", "Wind Advisory", .orange, expiresS: Self.nowS + 1),
+            Self.alert("open", "Heat Advisory", .yellow),
+        ])
+        let item = Self.with(try Self.plain(Self.ny), alerts: result)
+        let vm = Self.shown(item)
+        // At nowS, an alert expiring or ending at nowS is gone; one a second later and an
+        // open-ended one are shown.
+        #expect(try Self.alertsShown(vm).cards.map(\.id) == ["nws:next", "nws:open"])
+        #expect(try Self.alertsShown(vm).cards.map(\.expires) == ["Today 2:30 PM", nil])
+        #expect(try Self.alertsShown(vm).text == nil)
+        // The row of the same item shows the same alerts.
+        #expect(RowViewModel(place: item.place, forecast: item.forecast, nowS: item.nowS, alerts: result)
+            .alerts.map(\.id) == ["nws:next", "nws:open"])
+        // One second on: the advisory has expired too.
+        vm.show(Self.with(item, nowS: Self.nowS + 1))
+        #expect(try Self.alertsShown(vm).cards.map(\.id) == ["nws:open"])
+        // A current answer whose alerts have all expired at nowS: no active alerts.
+        vm.show(Self.with(item, alerts: Self.alertsResult(.current, Array(result.alerts.prefix(2)))))
+        #expect(try Self.alertsShown(vm).cards.isEmpty)
+        #expect(try Self.alertsShown(vm).text == "No active alerts")
+    }
+
+    @Test func staleSetNotShownAsCurrent() throws {
+        let held = [Self.alert("t", "Tornado Warning", .red, expiresS: Self.nowS + 3600)]
+        let item = try Self.plain(Self.ny)
+        // Current, the alert is a card.
+        let vm = Self.shown(Self.with(item, alerts: Self.alertsResult(.current, held)))
+        #expect(try Self.alertsShown(vm).cards.map(\.id) == ["nws:t"])
+        // The same set past its source's window: no card, the could-not-check text and the last
+        // check in the place's zone (90 minutes ago: 1:00 PM in New York, 6:00 AM in Auckland).
+        let stale = Self.alertsResult(.stale, held, fetchedS: Self.nowS - 5400)
+        vm.show(Self.with(item, alerts: stale))
+        var section = try Self.alertsShown(vm)
+        #expect(section.state == .stale)
+        #expect(section.cards.isEmpty)
+        #expect(section.text == "Alerts could not be checked recently. Last checked: Today 1:00 PM.")
+        #expect(section.text != DetailViewModel.AlertsSection.noAlertsText)
+        vm.show(Self.with(try Self.plain(Self.akl), alerts: stale))
+        #expect(try Self.alertsShown(vm).text == "Alerts could not be checked recently. Last checked: Today 6:00 AM.")
+        // Without a known check: the sentence alone.
+        vm.show(Self.with(item, alerts: Self.alertsResult(.stale, held, fetchedS: nil)))
+        section = try Self.alertsShown(vm)
+        #expect(section.cards.isEmpty)
+        #expect(section.text == "Alerts could not be checked recently.")
+        // The row of a stale set has no indicator.
+        #expect(RowViewModel(place: item.place, forecast: item.forecast, nowS: item.nowS, alerts: stale)
+            .alertIndicator == nil)
+    }
+
+    @Test func alertStateTexts() async throws {
+        let item = try Self.plain(Self.ny)
+        let one = [Self.alert("t", "Tornado Warning", .red, expiresS: Self.nowS + 3600)]
+        let cases: [(WxAlertsResult, text: String?, spinner: Bool)] = [
+            (Self.alertsResult(.notFetched, source: .nws, fetchedS: nil), "Checking for alerts\u{2026}", true),
+            (Self.alertsResult(.current), "No active alerts", false),
+            (Self.alertsResult(.current, one), nil, false),
+            (Self.alertsResult(.stale, one, fetchedS: nil), "Alerts could not be checked recently.", false),
+            (Self.alertsResult(.unavailable), "Alerts could not be checked right now.", false),
+            (Self.alertsResult(.notCovered, source: nil, fetchedS: nil), "Alerts not available", false),
+        ]
+        let vm = Self.shown(item)
+        // The default item (nothing asked yet) is checking.
+        #expect(try Self.alertsShown(vm).text == "Checking for alerts\u{2026}")
+        var texts: [String] = []
+        for c in cases {
+            // A change of the alerts alone leaves the forecast page and its revision alone.
+            let revision = vm.revision
+            let pageChanges = Self.notifications(vm) { vm.show(Self.with(item, alerts: c.0)) }
+            #expect(pageChanges == 0)
+            #expect(vm.revision == revision)
+            let section = try Self.alertsShown(vm)
+            #expect(section.state == c.0.state)
+            #expect(section.text == c.text, "\(c.0.state)")
+            #expect(section.showsSpinner == c.spinner, "\(c.0.state)")
+            #expect(section.cards.count == (c.text == nil ? 1 : 0), "\(c.0.state)")
+            if let t = section.text {
+                texts.append(t)
+            }
+        }
+        // One text per state; only a current empty answer says "No active alerts", and both
+        // unavailable and stale say alerts could not be checked.
+        #expect(Set(texts).count == texts.count)
+        #expect(texts.filter { $0 == "No active alerts" }.count == 1)
+        #expect(texts.filter { $0.contains("could not be checked") }.count == 2)
+        // No item, no section.
+        vm.show(nil)
+        #expect(vm.alerts == nil)
+
+        // Through the model: each place's state as the service answers it (show(place:)).
+        let places = try ["US", "DE", "NO", "CA", "FR"].enumerated().map { i, cc in
+            try WxPlace(name: "Place \(i)", admin1: "", country: cc, countryCode: cc, lat: 10 + Double(i),
+                        lon: 10, timezone: Self.ny)
+        }
+        let states: [WxAlertsResult.State] = [.notFetched, .current, .stale, .unavailable, .notCovered]
+        let fx = try await alertsModel("states", places) { now in
+            Dictionary(uniqueKeysWithValues: zip(places.map(\.key), states).map { key, state in
+                (key, WxAlertsResult(state: state, source: state == .notCovered ? nil : .nws, alerts: [],
+                                     fetchedS: state == .notFetched ? nil : now - 60))
+            })
+        }
+        var modelTexts: [String] = []
+        for p in places {
+            vm.show(place: fx.model.place(forKey: p.key))
+            modelTexts.append(try Self.alertsShown(vm).text ?? "")
+        }
+        #expect(modelTexts.count == 5)
+        #expect(modelTexts[0] == "Checking for alerts\u{2026}")
+        #expect(modelTexts[1] == "No active alerts")
+        // The model clock starts at 2026-10-11 00:00Z: checked a minute before, 7:59 PM in New York.
+        #expect(modelTexts[2] == "Alerts could not be checked recently. Last checked: Today 7:59 PM.")
+        #expect(modelTexts[3] == "Alerts could not be checked right now.")
+        #expect(modelTexts[4] == "Alerts not available")
+        _ = await fx.model.flush()
+    }
+
+    @Test func uncoveredShowsNotAvailable() async throws {
+        let nowhere = try WxPlace(name: "Nowhere", admin1: "", country: "Nowhere", countryCode: "ZZ", lat: 10,
+                                  lon: 10, timezone: "UTC")
+        // No source for the country, and a source that does not cover the point: not "no alerts".
+        for source in [nil, WxAlert.Source.nws] {
+            let vm = Self.shown(Self.with(Self.item(nowhere), alerts: Self.alertsResult(.notCovered, source: source)))
+            let section = try Self.alertsShown(vm)
+            #expect(section.state == .notCovered)
+            #expect(section.text == "Alerts not available")
+            #expect(section.text != DetailViewModel.AlertsSection.noAlertsText)
+            #expect(section.cards.isEmpty)
+            #expect(!section.showsSpinner)
+            #expect(section.sourceName == source.map(DetailViewModel.AlertsSection.sourceName))
+        }
+        // Through the model: the service says the place is not covered.
+        let fx = try await alertsModel("uncovered", [nowhere]) { now in
+            [nowhere.key: WxAlertsResult(state: .notCovered, source: nil, alerts: [], fetchedS: now)]
+        }
+        let vm = DetailViewModel()
+        vm.show(place: fx.model.place(forKey: nowhere.key))
+        #expect(try Self.alertsShown(vm).text == "Alerts not available")
+        #expect(try Self.alertsShown(vm).cards.isEmpty)
+        _ = await fx.model.flush()
+    }
+
+    // MARK: - Alert links (U52 iteration 2: every NWS card links an https page)
+
+    /// "Now" of the recorded NWS, Bright Sky and MET Norway answers (2026-10-26 14:30:10Z,
+    /// WxAlertTests.nowS), and of the ECCC and MeteoAlarm ones (2026-10-26 16:15:00Z).
+    nonisolated static let pointAlertsNowS: Int64 = 1_793_025_010
+    nonisolated static let regionAlertsNowS: Int64 = 1_793_031_300
+    /// The NWS site, linked by an NWS card whose own page is not an https one.
+    nonisolated static let nwsSite = "https://www.weather.gov/"
+
+    @Test func nwsRecordedAlertsCarryHTTPSLink() throws {
+        // The recorded answer (api.weather.gov/alerts/active?area=AK, three alerts): each carries
+        // the NWS's own page as plain http, which the pane never links as such.
+        let nowS = Self.pointAlertsNowS
+        let alerts = try #require(WxPointAlerts.parseNWS(try Fixtures.data("alerts-nws-area-ak-trim3.json"),
+                                                         status: 200, nowS: nowS)).alerts
+        #expect(alerts.count == 3)
+        #expect(alerts.map(\.web) == Array(repeating: "http://www.weather.gov", count: 3))
+        // Every card links that page over https.
+        let cards = alerts.map { DetailViewModel.AlertCard.card($0, nowS: nowS, zone: .utc) }
+        #expect(cards.map(\.link) == Array(repeating: Self.nwsSite, count: 3))
+        #expect(cards.allSatisfy { $0.link.map { DetailViewModel.isLinkable(urlBytes: Array($0.utf8)) } == true })
+        // Through the pane: an Alaska place whose current answer is the recorded one.
+        let fairbanks = try WxPlace(name: "Fairbanks", admin1: "Alaska", country: "United States",
+                                    countryCode: "US", lat: 64.84, lon: -147.72, timezone: "America/Anchorage")
+        let vm = Self.shown(Self.with(Self.item(fairbanks, nowS: nowS),
+                                      alerts: Self.alertsResult(.current, alerts, fetchedS: nowS - 60)))
+        let section = try Self.alertsShown(vm)
+        #expect(section.cards.map(\.id) == alerts.map(\.id))
+        #expect(section.cards.map(\.link) == Array(repeating: Self.nwsSite, count: 3))
+        #expect(section.cards.allSatisfy { $0.sourceName == "National Weather Service" })
+    }
+
+    @Test func nwsLinkUpgradeOnlyForWeatherGov() throws {
+        func link(_ web: String?, _ source: WxAlert.Source = .nws) -> String? {
+            DetailViewModel.AlertCard.card(Self.alert("x", "Flood Warning", .orange, web: web, source: source),
+                                           nowS: Self.nowS, zone: .utc).link
+        }
+        // The NWS's own http pages, on weather.gov or a subdomain: https, with the path, query and
+        // fragment kept ("/" for none).
+        #expect(link("http://www.weather.gov") == "https://www.weather.gov/")
+        #expect(link("http://www.weather.gov/") == "https://www.weather.gov/")
+        #expect(link("http://weather.gov/safety/flood") == "https://weather.gov/safety/flood")
+        #expect(link("http://forecast.weather.gov/MapClick.php?zoneid=AKZ803#alerts")
+            == "https://forecast.weather.gov/MapClick.php?zoneid=AKZ803#alerts")
+        #expect(link("http://alerts.weather.gov?area=AK") == "https://alerts.weather.gov?area=AK")
+        #expect(link("http://WWW.Weather.GOV/afg") == "https://WWW.Weather.GOV/afg")
+        // An https page is linked as published, whatever its host.
+        #expect(link("https://alerts.weather.gov/a") == "https://alerts.weather.gov/a")
+        #expect(link("https://www.spc.noaa.gov/products/") == "https://www.spc.noaa.gov/products/")
+        // No page, another host's http page, one that only looks like weather.gov, or one that is
+        // not linkable once upgraded: the NWS site, never the other host.
+        let long = "http://www.weather.gov/" + String(repeating: "a", count: WxLimits.sourceURLMax - 23)
+        #expect(long.utf8.count == WxLimits.sourceURLMax)
+        let others: [String?] = [
+            nil, "", "http://insecure.example/b", "http://www.weather.gov.example.com/x", "http://evilweather.gov/x",
+            "http://www.weather.gov@example.com/x", "http://www.weather.gov:8080/x", "http://example.com/www.weather.gov",
+            "http://.weather.gov/x", "http://www..weather.gov/x", "http://weather.gov./x", "ftp://www.weather.gov/x",
+            "HTTP://www.weather.gov/x", " http://www.weather.gov", "http://www.weather.gov/a b",
+            "http://www.weather.gov/<b>", long,
+        ]
+        for web in others {
+            #expect(link(web) == Self.nwsSite, "\(web ?? "nil")")
+        }
+        // Every other issuer: its https page only; an http page stays unlinked, weather.gov
+        // included (only the NWS's own page is upgraded).
+        for source in [WxAlert.Source.dwd, .metNorway, .eccc, .meteoAlarm] {
+            #expect(link("https://www.example.org/w", source) == "https://www.example.org/w", "\(source)")
+            for web in [nil, "http://insecure.example/b", "http://www.weather.gov", "http://www.dwd.de/"] as [String?] {
+                #expect(link(web, source) == nil, "\(source) \(web ?? "nil")")
+            }
+        }
+    }
+
+    @Test func otherIssuersLinksUnchanged() throws {
+        // Each issuer's recorded answer through its parser: the card links exactly the page the
+        // alert carries (Bright Sky and ECCC: their fixed https sites; MET Norway and MeteoAlarm:
+        // the issuer's own https page).
+        let point = Self.pointAlertsNowS, region = Self.regionAlertsNowS
+        let dwd = try #require(WxPointAlerts.parseBrightSky(try Fixtures.data("alerts-brightsky-all-trim2.json"),
+                                                            status: 200, nowS: point)).alerts
+        let met = try #require(WxPointAlerts.parseMETNorway(try Fixtures.data("alerts-metno-current-en-trim2.json"),
+                                                            status: 200, nowS: point)).alerts
+        let eccc = try #require(WxECCCAlerts.parse(try Fixtures.data("alerts-eccc-toronto-point.json"), status: 200,
+                                                   nowS: region)).alerts
+        let meteoAlarm = try #require(WxMeteoAlarm.parse(try Fixtures.data("alerts-meteoalarm-france-trim3.json"),
+                                                         status: 200, nowS: region)).map(\.alert)
+        let cases: [(source: WxAlert.Source, alerts: [WxAlert], nowS: Int64, page: String)] = [
+            (.dwd, dwd, point, WxPointAlerts.dwdWarningsURL),
+            (.eccc, eccc, region, WxECCCAlerts.weatherURL),
+            (.metNorway, met, point, "https://www.met.no/vaer-og-klima/ekstremvaervarsler-og-andre-farevarsler/"
+                + "vaerfenomener-som-kan-gi-farevarsel-fra-met/kuling-stormvarsel-for-kyst-og-naere-fiskebanker"),
+            (.meteoAlarm, meteoAlarm, region, "https://vigilance.meteofrance.fr/"),
+        ]
+        for c in cases {
+            #expect(!c.alerts.isEmpty, "\(c.source)")
+            #expect(c.alerts.allSatisfy { $0.source == c.source && $0.web == c.page }, "\(c.source)")
+            let cards = c.alerts.map { DetailViewModel.AlertCard.card($0, nowS: c.nowS, zone: .utc) }
+            #expect(cards.map(\.link) == Array(repeating: c.page, count: c.alerts.count), "\(c.source)")
+        }
+    }
+}
+
+/// An alerts service that answers fixed results by place key and fetches nothing.
+@MainActor
+private final class DetailFixedAlerts: WxAlertsServing {
+    var results: [String: WxAlertsResult] = [:]
+
+    func refresh(_ place: WxPlace) -> Task<Void, Never> { Task {} }
+    func result(for place: WxPlace) -> WxAlertsResult { results[place.key] ?? AppModel.alertsNotFetched }
+    func remove(placeKey: String) { results[placeKey] = nil }
+    func cancelAll() {}
 }

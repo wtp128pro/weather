@@ -12,14 +12,29 @@
 // and the detail pane that show the same item agree. Texts, their order and
 // the conditions under which they appear are the GTK row's, verbatim:
 //  - name; region "Admin1, Country" (whichever part exists), hidden when empty;
-//  - temperature without unit letter ("77°"), an em dash without current conditions;
+//  - temperature without unit letter ("77°"), an em dash without current conditions,
+//    in the place's own units (the item's units), and beside it the unit label
+//    of those units, "°F" or "°C" (per-place units, not in the GTK row); the
+//    row shows the unit suffix, so that it reads "77°F" / "— °F" like the
+//    accessible label;
 //  - one-line hint: the rain hint when the item has an outlook, else the first of
 //    "No rain data" (forecast present), "Loading…", "Can't load forecast",
 //    "Offline", "No data yet";
 //  - marker (needs a forecast): "Offline", then "Stale", then "Updating…";
 //  - dim while a forecast is shown and offline or stale; empty without forecast;
+//  - the alert indicator (not in the GTK row): the highest normalized level of
+//    the place's current alerts and, above one, their number; none without a
+//    current alert. Current alerts are those of a `.current` result
+//    (WxAlertsResult, AppModel.Place.alerts) that have not expired or ended at
+//    the item's "now" - a stale set, an unavailable or uncovered place and one
+//    not fetched yet show no indicator (a set older than its source's window is
+//    never shown as current);
 //  - tooltip: the full place label; accessible label
-//    "<label>: <temp>, <hint>[, <marker>]".
+//    "<label>: <temp>, <hint>[, <marker>][, <alerts>]" whose temperature carries
+//    its unit ("77°F"; "— °F" without current conditions) and whose alerts part
+//    names the current alerts ("Alert: Tornado Warning (red)", "2 alerts: ..."):
+//    the row is one accessibility element that ignores its children, so the
+//    unit and the alerts are spoken only here.
 //
 // The row actions ("Move up", "Move down", "Remove" and a drop of text on the
 // row) are entry points that hand the row's key to AppModel; the row never edits
@@ -66,6 +81,19 @@ public struct RowViewModel: Sendable, Identifiable {
         public var text: String { rawValue }
     }
 
+    /// The alert indicator of a row whose place has current alerts (not in the GTK row): a warning
+    /// symbol coloured by the highest level, with the number of alerts when there is more than one.
+    public struct AlertIndicator: Sendable, Equatable {
+        /// SF Symbol of the indicator.
+        public static let symbolName = "exclamationmark.triangle.fill"
+        /// The highest normalized level of the current alerts (the indicator's colour).
+        public let level: WxAlert.Level
+        /// The number of current alerts, at least 1.
+        public let count: Int
+        /// The number shown beside the symbol: "3" for more than one alert, nil for one.
+        public var countText: String? { count > 1 ? String(count) : nil }
+    }
+
     /// The items of the row's menu (row_menu, wx-row.c:866-874), always enabled.
     public enum Action: Sendable, CaseIterable {
         case moveUp
@@ -106,12 +134,26 @@ public struct RowViewModel: Sendable, Identifiable {
     public let name: String
     /// "Florida, United States" or whichever part exists, "" for neither (label "wx-row-region").
     public let region: String
-    /// The temperature without unit letter, an em dash without current conditions ("wx-row-temp").
+    /// The temperature without unit letter, an em dash without current conditions ("wx-row-temp"),
+    /// in `units`.
     public let temperature: String
+    /// The unit system of the row's temperature: the place's units (AppModel.Place.units).
+    public let units: WxUnits
+    /// The unit label of `units`: "°F" or "°C" (`unitLabel(_:)` of `units`).
+    public var unitLabel: String { Self.unitLabel(units) }
+    /// What the row shows right after `temperature`, so that it reads as the accessible label
+    /// does: the unit letter "F" / "C" after a temperature that ends with the degree sign ("77°"
+    /// "F": "77°F"), the unit label "°F" / "°C" after the em dash ("—" "°F": "— °F").
+    public var unitSuffix: String {
+        temperature.hasSuffix("\u{00B0}") ? (units == .metric ? "C" : "F") : unitLabel
+    }
     /// The one-line hint ("wx-row-hint").
     public let hint: String
     /// The marker pill, nil while none is shown ("wx-row-marker").
     public let marker: Marker?
+    /// The place's current alerts at the item's "now" (`currentAlerts(_:nowS:)`), highest level
+    /// first; empty unless the place's alerts result is `.current`.
+    public let alerts: [WxAlert]
     /// SF Symbol of the condition at "now" (questionmark.circle without current conditions).
     public let symbolName: String
     /// The GTK icon name of the same condition (wx_icon_name; dialog-question-symbolic fallback).
@@ -129,16 +171,29 @@ public struct RowViewModel: Sendable, Identifiable {
     public var markerText: String { marker?.text ?? "" }
     /// The marker pill is shown (wx-row.c:714).
     public var isMarkerVisible: Bool { marker != nil }
+    /// The alert indicator: the highest level of `alerts` and their number; nil without a current
+    /// alert.
+    public var alertIndicator: AlertIndicator? {
+        alerts.map(\.level).max().map { AlertIndicator(level: $0, count: alerts.count) }
+    }
     /// CSS class "dim": a forecast is shown and the place is offline or stale (wx-row.c:718-720).
     public let isDim: Bool
     /// CSS class "empty": the item has no forecast (wx-row.c:721).
     public let isEmpty: Bool
     /// The row's tooltip: the full place label (wx-row.c:726).
     public var tooltip: String { place.label }
-    /// The row's accessible label "<label>: <temp>, <hint>[, <marker>]" (wx-row.c:723-727).
+    /// The row's accessible label "<label>: <temp>, <hint>[, <marker>][, <alerts>]" (wx-row.c:723-727),
+    /// the temperature with its units: "77°F" (WxFormat.temp's text with the unit letter), or the em
+    /// dash and the unit label ("— °C") without current conditions; then the current alerts
+    /// (`alertsSpoken(_:)`).
     public var accessibilityLabel: String {
         let marker = markerText
-        return "\(place.label): \(temperature), \(hint)\(marker.isEmpty ? "" : ", ")\(marker)"
+        let temp = temperature.hasSuffix("\u{00B0}")
+            ? temperature + (units == .metric ? "C" : "F")
+            : temperature + " " + unitLabel
+        let spoken = Self.alertsSpoken(alerts)
+        return "\(place.label): \(temp), \(hint)\(marker.isEmpty ? "" : ", ")\(marker)"
+            + (spoken.isEmpty ? "" : ", " + spoken)
     }
     /// The drag payload of the row: its place key as text (on_drag_prepare, wx-row.c:922-932).
     public var dragPayload: String { key }
@@ -149,7 +204,7 @@ public struct RowViewModel: Sendable, Identifiable {
     public init(_ item: AppModel.Place) {
         self.init(key: item.key, place: item.place, forecast: item.forecast, loading: item.loading,
                   stale: item.stale, offline: item.offline, units: item.units, nowS: item.nowS,
-                  errorText: item.errorText)
+                  errorText: item.errorText, alerts: item.alerts)
     }
 
     /// The row of the given item state (refresh, wx-row.c:677-728).
@@ -160,12 +215,13 @@ public struct RowViewModel: Sendable, Identifiable {
     ///   - loading: a refresh of the place is in flight.
     ///   - stale: the latest refresh of the place failed.
     ///   - offline: the network is unavailable.
-    ///   - units: the unit system of the temperature.
+    ///   - units: the unit system of the temperature and of the unit label (the place's units).
     ///   - nowS: the item's "now", UTC unix seconds (any value).
     ///   - errorText: the sanitised reason of the latest failed refresh, nil (or "") for none.
+    ///   - alerts: the place's alerts as the alerts service reports them (AppModel.Place.alerts).
     public init(key: String? = nil, place: WxPlace, forecast: WxForecast?, loading: Bool = false,
                 stale: Bool = false, offline: Bool = false, units: WxUnits = .imperial, nowS: Int64,
-                errorText: String? = nil) {
+                errorText: String? = nil, alerts: WxAlertsResult = AppModel.alertsNotFetched) {
         let derived = Self.derive(forecast: forecast, nowS: nowS)
         self.key = key ?? place.key
         self.place = place
@@ -175,6 +231,7 @@ public struct RowViewModel: Sendable, Identifiable {
         self.name = place.name
         self.region = Self.regionText(place)
         self.temperature = WxFormat.temp(derived.current?.tempC ?? .nan, units: units, withUnit: false)
+        self.units = units
         // hint_text (wx-row.c:612-625): the first matching rule wins.
         if let outlook = derived.outlook {
             self.hint = Self.rainHint(outlook, nowS: nowS, timezone: place.timezone)
@@ -207,12 +264,13 @@ public struct RowViewModel: Sendable, Identifiable {
         self.gtkIconName = icon.gtkIconName
         self.isDim = forecast != nil && (offline || stale)
         self.isEmpty = forecast == nil
+        self.alerts = Self.currentAlerts(alerts, nowS: nowS)
     }
 
     private init(
         key: String, place: WxPlace, current: WxBlendHour?, outlook: WxRainOutlook?,
-        hasForecast: Bool, name: String, region: String, temperature: String, hint: String,
-        marker: Marker?, symbolName: String, gtkIconName: String, isDim: Bool, isEmpty: Bool
+        hasForecast: Bool, name: String, region: String, temperature: String, units: WxUnits, hint: String,
+        marker: Marker?, alerts: [WxAlert], symbolName: String, gtkIconName: String, isDim: Bool, isEmpty: Bool
     ) {
         self.key = key
         self.place = place
@@ -222,15 +280,18 @@ public struct RowViewModel: Sendable, Identifiable {
         self.name = name
         self.region = region
         self.temperature = temperature
+        self.units = units
         self.hint = hint
         self.marker = marker
+        self.alerts = alerts
         self.symbolName = symbolName
         self.gtkIconName = gtkIconName
         self.isDim = isDim
         self.isEmpty = isEmpty
     }
 
-    /// Returns a copy of this row with live station conditions applied to its current display.
+    /// Returns a copy of this row with live station conditions applied to its current display; its
+    /// temperature and unit label are in `units` (the caller passes the place's units).
     public func withLiveCurrent(_ liveCurrent: WxBlendHour, liveHint: String? = nil, units: WxUnits) -> RowViewModel {
         let effectiveCond = WxConditionSymbol.effectiveHourlyCondition(for: liveCurrent)
         let icon = WxConditionSymbol.entry(effectiveCond, isDay: liveCurrent.isDay)
@@ -243,8 +304,10 @@ public struct RowViewModel: Sendable, Identifiable {
             name: name,
             region: region,
             temperature: WxFormat.temp(liveCurrent.tempC, units: units, withUnit: false),
+            units: units,
             hint: liveHint ?? hint,
             marker: marker,
+            alerts: alerts,
             symbolName: icon.symbolName,
             gtkIconName: icon.gtkIconName,
             isDim: isDim,
@@ -256,6 +319,53 @@ public struct RowViewModel: Sendable, Identifiable {
     @MainActor
     public static func rows(of model: AppModel) -> [RowViewModel] {
         model.places.map(RowViewModel.init)
+    }
+
+    /// The unit label of `units`: "°F" (imperial) or "°C" (metric).
+    public static func unitLabel(_ units: WxUnits) -> String {
+        units == .metric ? "\u{00B0}C" : "\u{00B0}F"
+    }
+
+    // MARK: - Alerts
+
+    /// The alerts of `result` that are current at `nowS`: those of a `.current` result that have
+    /// neither expired nor ended at `nowS` (WxAlert.isCurrent: one expiring at `nowS` is gone), in
+    /// the result's order (highest level first). Empty for every other state: a stale set (older
+    /// than its source's window) is never current, whatever it holds. The service already left
+    /// out what had expired when it was read; this filter is on top of that one, at the item's
+    /// "now", so that the row and the detail pane of the same item agree.
+    public static func currentAlerts(_ result: WxAlertsResult, nowS: Int64) -> [WxAlert] {
+        guard result.state == .current else {
+            return []
+        }
+        return result.alerts.filter { $0.isCurrent(atS: nowS) }
+    }
+
+    /// The name of a normalized alert level: "Red", "Orange", "Yellow", "Minor", "Unknown" (the
+    /// issuer gave none).
+    public static func alertLevelTitle(_ level: WxAlert.Level) -> String {
+        switch level {
+        case .red: "Red"
+        case .orange: "Orange"
+        case .yellow: "Yellow"
+        case .minor: "Minor"
+        case .unknown: "Unknown"
+        }
+    }
+
+    /// The alerts part of the accessible label: "" without alerts, "Alert: Tornado Warning (red)"
+    /// for one, "2 alerts: Tornado Warning (red), Flood Watch (yellow)" for several, in their
+    /// order; an unknown level is not spoken, and an alert without an event name is named by its
+    /// headline.
+    static func alertsSpoken(_ alerts: [WxAlert]) -> String {
+        guard !alerts.isEmpty else {
+            return ""
+        }
+        let names = alerts.map { a in
+            let name = a.event.isEmpty ? a.headline : a.event
+            return a.level == .unknown ? name : name + " (" + alertLevelTitle(a.level).lowercased() + ")"
+        }
+        return (alerts.count == 1 ? "Alert: " : "\(alerts.count) alerts: ") + names.joined(separator: ", ")
     }
 
     // MARK: - Actions (they only carry keys; AppModel validates and acts)

@@ -1,0 +1,587 @@
+{
+ "warnings": [
+  {
+   "alert": {
+    "identifier": "2.49.0.0.250.0.FR.20261026060017.991021",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Finistère",
+        "geocode": [
+         {
+          "value": "FR522",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral).",
+      "effective": "2026-10-26T06:00:00+01:00",
+      "event": "Vigilance jaune vent-violent",
+      "expires": "2026-10-27T00:00:00+01:00",
+      "headline": "Vigilance jaune vent-violent",
+      "instruction": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation.",
+      "language": "fr-FR",
+      "onset": "2026-10-26T06:00:08+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Finistère",
+        "geocode": [
+         {
+          "value": "FR522",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities.",
+      "effective": "2026-10-26T06:00:00+01:00",
+      "event": "Moderate wind warning",
+      "expires": "2026-10-27T00:00:00+01:00",
+      "headline": "Moderate wind warning",
+      "instruction": "Be careful, keep informed of the latest weather forecast.",
+      "language": "en-GB",
+      "onset": "2026-10-26T06:00:08+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "vigilance@meteo.fr",
+    "sent": "2026-10-26T06:00:17+01:00",
+    "status": "Actual"
+   },
+   "uuid": "07d167bd-02d1-4ca5-8297-d6734f1c4487"
+  },
+  {
+   "alert": {
+    "identifier": "2.49.0.0.250.0.FR.20261026060023.745029",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Pas-de-Calais",
+        "polygon": [
+         "51.0984,1.4893 51.1657,1.6758 51.2176,1.9628 51.0382,2.0838 50.9884,1.8024 50.9429,1.6711 50.8829,1.5447 50.5497,1.5331 50.3915,1.5151 50.4892,1.253 50.619,1.2734 50.986,1.2892 51.0984,1.4893"
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral).",
+      "effective": "2026-10-26T06:00:00+01:00",
+      "event": "Vigilance jaune vagues-submersion",
+      "expires": "2026-10-27T00:00:00+01:00",
+      "headline": "Vigilance jaune vagues-submersion",
+      "instruction": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation.",
+      "language": "fr-FR",
+      "onset": "2026-10-26T06:00:08+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "7; coastalevent",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Pas-de-Calais",
+        "polygon": [
+         "51.0984,1.4893 51.1657,1.6758 51.2176,1.9628 51.0382,2.0838 50.9884,1.8024 50.9429,1.6711 50.8829,1.5447 50.5497,1.5331 50.3915,1.5151 50.4892,1.253 50.619,1.2734 50.986,1.2892 51.0984,1.4893"
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities.",
+      "effective": "2026-10-26T06:00:00+01:00",
+      "event": "Moderate coastalevent warning",
+      "expires": "2026-10-27T00:00:00+01:00",
+      "headline": "Moderate coastalevent warning",
+      "instruction": "Be careful, keep informed of the latest weather forecast.",
+      "language": "en-GB",
+      "onset": "2026-10-26T06:00:08+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "7; coastalevent",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "vigilance@meteo.fr",
+    "sent": "2026-10-26T06:00:23+01:00",
+    "status": "Actual"
+   },
+   "uuid": "9a23e8b7-3aa2-4aa2-8bc5-fc6d575af987"
+  },
+  {
+   "alert": {
+    "identifier": "2.49.0.0.250.0.FR.20261021030430.889021",
+    "incidents": "Update",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Calvados",
+        "geocode": [
+         {
+          "value": "FR251",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Ille-et-Vilaine",
+        "geocode": [
+         {
+          "value": "FR523",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Orne",
+        "geocode": [
+         {
+          "value": "FR253",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Seine-Maritime",
+        "geocode": [
+         {
+          "value": "FR232",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Eure",
+        "geocode": [
+         {
+          "value": "FR231",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Vendée",
+        "geocode": [
+         {
+          "value": "FR515",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Corse-du-Sud",
+        "geocode": [
+         {
+          "value": "FR831",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Côtes d'Armor",
+        "geocode": [
+         {
+          "value": "FR521",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Finistère",
+        "geocode": [
+         {
+          "value": "FR522",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Haute-Corse",
+        "geocode": [
+         {
+          "value": "FR832",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Loire-Atlantique",
+        "geocode": [
+         {
+          "value": "FR511",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Manche",
+        "geocode": [
+         {
+          "value": "FR252",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Morbihan",
+        "geocode": [
+         {
+          "value": "FR524",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Somme",
+        "geocode": [
+         {
+          "value": "FR223",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Pas-de-Calais",
+        "geocode": [
+         {
+          "value": "FR302",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Nord",
+        "geocode": [
+         {
+          "value": "FR301",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Oise",
+        "geocode": [
+         {
+          "value": "FR222",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Des phénomènes habituels dans la région mais occasionnellement et localement dangereux sont prévus (exemple : mistral, orage d'été, montée des eaux, fortes vagues submergeant le littoral).",
+      "effective": "2026-10-21T03:00:00+02:00",
+      "event": "Vigilance jaune vent-violent",
+      "expires": "2026-10-21T03:00:00+02:00",
+      "headline": "Vigilance jaune vent-violent",
+      "instruction": "Soyez attentifs si vous pratiquez des activités sensibles au risque météorologique ou à proximité d'un rivage ou d'un cours d'eau. Tenez-vous au courant de l'évolution de la situation.",
+      "language": "fr-FR",
+      "onset": "2026-10-21T03:04:26+02:00",
+      "parameter": [
+       {
+        "value": "1; green; Minor",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "AllClear"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Minor",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Calvados",
+        "geocode": [
+         {
+          "value": "FR251",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Ille-et-Vilaine",
+        "geocode": [
+         {
+          "value": "FR523",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Orne",
+        "geocode": [
+         {
+          "value": "FR253",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Seine-Maritime",
+        "geocode": [
+         {
+          "value": "FR232",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Eure",
+        "geocode": [
+         {
+          "value": "FR231",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Vendée",
+        "geocode": [
+         {
+          "value": "FR515",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Corse-du-Sud",
+        "geocode": [
+         {
+          "value": "FR831",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Côtes d'Armor",
+        "geocode": [
+         {
+          "value": "FR521",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Finistère",
+        "geocode": [
+         {
+          "value": "FR522",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Haute-Corse",
+        "geocode": [
+         {
+          "value": "FR832",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Loire-Atlantique",
+        "geocode": [
+         {
+          "value": "FR511",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Manche",
+        "geocode": [
+         {
+          "value": "FR252",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Morbihan",
+        "geocode": [
+         {
+          "value": "FR524",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Somme",
+        "geocode": [
+         {
+          "value": "FR223",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Pas-de-Calais",
+        "geocode": [
+         {
+          "value": "FR302",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Nord",
+        "geocode": [
+         {
+          "value": "FR301",
+          "valueName": "NUTS3"
+         }
+        ]
+       },
+       {
+        "areaDesc": "Oise",
+        "geocode": [
+         {
+          "value": "FR222",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "contact": "METEO-FRANCE",
+      "description": "Moderate damages may occur, especially in vulnerable or in exposed areas and to people who carry out weather-related activities.",
+      "effective": "2026-10-21T03:00:00+02:00",
+      "event": "Moderate wind warning",
+      "expires": "2026-10-21T03:00:00+02:00",
+      "headline": "Moderate wind warning",
+      "instruction": "Be careful, keep informed of the latest weather forecast.",
+      "language": "en-GB",
+      "onset": "2026-10-21T03:04:26+02:00",
+      "parameter": [
+       {
+        "value": "1; green; Minor",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "AllClear"
+      ],
+      "senderName": "METEO-FRANCE",
+      "severity": "Minor",
+      "urgency": "Future",
+      "web": "https://vigilance.meteofrance.fr/"
+     }
+    ],
+    "msgType": "Update",
+    "references": "vigilance@meteo.fr,2.49.0.0.250.0.FR.20261020222108.180021,2026-10-20T22:21:08+02:00",
+    "scope": "Public",
+    "sender": "vigilance@meteo.fr",
+    "sent": "2026-10-21T03:04:30+02:00",
+    "status": "Actual"
+   },
+   "uuid": "47e50f76-5de3-4da7-a579-9af5da31920e"
+  }
+ ]
+}

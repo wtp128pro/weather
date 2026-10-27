@@ -55,7 +55,8 @@ private func gridPlace(_ i: Int) throws -> WxPlace {
 private func placesFingerprint(_ pl: WxPlaces) -> String {
     pl.places.map {
         "\($0.name)|\($0.admin1)|\($0.country)|\($0.countryCode)|\($0.timezone)|"
-            + "\(String($0.lat.bitPattern, radix: 16))|\(String($0.lon.bitPattern, radix: 16));"
+            + "\(String($0.lat.bitPattern, radix: 16))|\(String($0.lon.bitPattern, radix: 16))|"
+            + "\(String(describing: pl.units(forKey: $0.key)));"
     }.joined()
 }
 
@@ -605,18 +606,82 @@ private func keys(_ pl: WxPlaces) -> [String] {
         #expect(pl.add(try WxPlace(name: "quote \" back \\", lat: -0.0, lon: -100.0)))
         #expect(pl.add(try WxPlace(name: "Thirds", lat: 0.1 + 0.2, lon: 1.0 / 3.0)))
         #expect(pl.add(try WxPlace(name: "Tiny", lat: 1e-300, lon: 180.0)))
+        // Per-place units (macOS): written last, only when set; "version" stays 1.
+        #expect(pl.setUnits(.metric, forKey: pl.places[0].key))
+        #expect(pl.setUnits(.imperial, forKey: pl.places[1].key))
         #expect(throws: Never.self) { try pl.save() }
         let want = "{\n  \"version\": 1,\n  \"places\": [\n"
-            + "    {\"name\": \"Zürich\", \"admin1\": \"Kanton Zürich\", \"country\": \"Schweiz\", \"country_code\": \"CH\", \"lat\": 47.3769, \"lon\": 8.5417, \"timezone\": \"Europe/Zurich\"},\n"
-            + "    {\"name\": \"quote \\\" back \\\\\", \"admin1\": \"\", \"country\": \"\", \"country_code\": \"\", \"lat\": -0.0, \"lon\": -100, \"timezone\": \"\"},\n"
+            + "    {\"name\": \"Zürich\", \"admin1\": \"Kanton Zürich\", \"country\": \"Schweiz\", \"country_code\": \"CH\", \"lat\": 47.3769, \"lon\": 8.5417, \"timezone\": \"Europe/Zurich\", \"units\": \"metric\"},\n"
+            + "    {\"name\": \"quote \\\" back \\\\\", \"admin1\": \"\", \"country\": \"\", \"country_code\": \"\", \"lat\": -0.0, \"lon\": -100, \"timezone\": \"\", \"units\": \"imperial\"},\n"
             + "    {\"name\": \"Thirds\", \"admin1\": \"\", \"country\": \"\", \"country_code\": \"\", \"lat\": 0.30000000000000004, \"lon\": 0.3333333333333333, \"timezone\": \"\"},\n"
             + "    {\"name\": \"Tiny\", \"admin1\": \"\", \"country\": \"\", \"country_code\": \"\", \"lat\": 1e-300, \"lon\": 180, \"timezone\": \"\"}\n"
             + "  ]\n}\n"
         #expect(try StoreJSONTests.readAll(path) == want)
 
-        // And it reads back bit-identically, -0.0 included.
+        // And it reads back bit-identically, -0.0 and the units included.
         let back = try PlacesOps.create(path)
         #expect(throws: Never.self) { try back.load() }
         #expect(placesFingerprint(back) == placesFingerprint(pl))
+    }
+
+    // MARK: - Per-place units (macOS; no C counterpart)
+
+    @Test func loadDuplicateKeepsFirstUnits() throws {
+        let tmp = try TemporaryDirectory("places-units-dup")
+        let path = tmp.appending("places.json").path
+        try StoreJSONTests.putText(path, "{\"version\": 1, \"places\": ["
+            + "{\"name\": \"A\", \"lat\": 10, \"lon\": 10, \"units\": \"metric\"}, "
+            + "{\"name\": \"A again\", \"lat\": 10, \"lon\": 10, \"units\": \"imperial\"}]}")
+        let pl = try PlacesOps.create(path)
+        #expect(try pl.load() == 1)
+        #expect(keys(pl).count == 1)
+        let key = try #require(keys(pl).first)
+        #expect(pl.units(forKey: key) == .metric)
+    }
+
+    @Test func removedPlaceForgetsUnits() throws {
+        let tmp = try TemporaryDirectory("places-units-remove")
+        let pl = try PlacesOps.create(tmp.appending("places.json").path)
+        let p = try gridPlace(0)
+        #expect(pl.add(p))
+        #expect(pl.setUnits(.metric, forKey: p.key))
+        #expect(pl.remove(key: p.key))
+        #expect(pl.units(forKey: p.key) == nil)
+        #expect(pl.add(p))
+        #expect(pl.units(forKey: p.key) == nil, "a re-added place starts without units")
+    }
+
+    @Test func loadReplacesUnits() throws {
+        let tmp = try TemporaryDirectory("places-units-reload")
+        let path = tmp.appending("places.json").path
+        let pl = try PlacesOps.create(path)
+        let p = try gridPlace(0)
+        #expect(pl.add(p))
+        try pl.save()
+        #expect(pl.setUnits(.metric, forKey: p.key))
+        #expect(throws: Never.self) { try pl.load() }
+        #expect(pl.units(forKey: p.key) == nil, "the file has none")
+        #expect(!pl.isDirty)
+        #expect(pl.setUnits(.imperial, forKey: p.key))
+        try pl.save()
+        #expect(pl.setUnits(.metric, forKey: p.key))
+        #expect(throws: Never.self) { try pl.load() }
+        #expect(pl.units(forKey: p.key) == .imperial)
+    }
+
+    @Test func unitsEditDuringSaveStaysDirty() throws {
+        let tmp = try TemporaryDirectory("places-units-inflight")
+        let path = tmp.appending("places.json").path
+        let pl = try PlacesOps.create(path)
+        let p = try gridPlace(0)
+        #expect(pl.add(p))
+        let job = try pl.beginSave()
+        #expect(pl.setUnits(.metric, forKey: p.key))
+        #expect(!String(decoding: job.data, as: UTF8.self).contains("\"units\""), "the snapshot predates the edit")
+        try pl.finishSave(job, .success(()))
+        #expect(pl.isDirty)
+        try pl.save()
+        #expect(!pl.isDirty)
+        #expect(try StoreJSONTests.readAll(path).contains(", \"units\": \"metric\"}"))
     }
 }

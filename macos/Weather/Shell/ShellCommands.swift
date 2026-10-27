@@ -3,7 +3,8 @@
 //
 // ShellCommands.swift - the menu bar (wx-app.c:1884-1891; ui-widgets.md §2 items 11-12) on the
 // standard Mac menus (DECISIONS #16): File > "Add a City…" ⌘N replaces New Window / New Item;
-// View > Refresh ⌘R (enabled from AppModel.isRefreshEnabled) and the unit switch ⌘U; the app
+// View > Refresh ⌘R (enabled from AppModel.isRefreshEnabled) and the unit switch ⌘U (the
+// selected place's units, else the default for new places); the app
 // menu's About shows the About panel (SourcesAboutPanel), and "Data Sources & Weights…" and
 // "Stations & Keys…" open those Settings tabs; Quit ⌘Q, Edit and Window stay standard.
 // F5 is not bound (DECISIONS #13).
@@ -57,7 +58,8 @@ struct ShellCommands: Commands {
             .keyboardShortcut("r", modifiers: .command)
             .disabled(!(shell.model?.isRefreshEnabled ?? false))
 
-            Button(ShellPage.unitsTooltip(shell.model?.units ?? .imperial)) {
+            Button(ShellPage.unitsTooltip(shell.model?.units ?? .imperial,
+                                          hasSelection: shell.model?.selectedPlace != nil)) {
                 shell.model?.toggleUnits()
             }
             .keyboardShortcut("u", modifiers: .command)

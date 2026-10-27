@@ -10,8 +10,10 @@
 public enum AboutInfo {
     /// "program-name".
     public static let programName = "Neginato Mezora"
-    /// "version": WX_APP_VERSION, the Meson project version (meson.build:3).
-    public static let version = "0.3.0"
+    /// "version": WX_APP_VERSION in C. Here it is the app's MARKETING_VERSION (every
+    /// Debug and Release config in Weather.xcodeproj/project.pbxproj), not meson.build:3;
+    /// bump this literal with it.
+    public static let version = "0.4.0"
     /// "comments".
     public static let comments =
         "Weather forecasts from several free sources, with the rain you can expect and when."

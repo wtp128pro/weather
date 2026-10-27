@@ -189,6 +189,43 @@ struct AppEnvironmentTests {
         #expect(m.requestsStarted == 0)
     }
 
+    // U51 AC4: the production model from make() holds the AlertsService that makeAlerts built
+    // (not the inert default, not a stand-in), fetching through that call's WxAlertsFetchers,
+    // whose five clients are pinned each to its own issuer's https origin; the model's service
+    // alone keeps those fetchers alive (its fetch closure). Nothing is fetched: the window never
+    // reports itself visible and no refresh runs.
+    // C: none - contract test of the U51 production wiring (executor-added)
+    @Test func productionModelHasRealAlertsService() async throws {
+        let dir = try TemporaryDirectory("environment-alerts")
+        let origins: [WxAlert.Source: String] = [
+            .nws: "https://api.weather.gov", .dwd: "https://api.brightsky.dev", .metNorway: "https://api.met.no",
+            .eccc: "https://api.weather.gc.ca", .meteoAlarm: "https://feeds.meteoalarm.org",
+        ]
+        #expect(Set(WxAlert.Source.allCases) == Set(origins.keys))
+        weak var weakFetchers: WxAlertsFetchers?
+        weak var weakModel: AppModel?
+        do {
+            let m = await AppEnvironment.make(storageRoot: AppEnvironment.StorageRoot(home: dir.url), online: false)
+            weakModel = m
+            #expect(!(m.alertsService is InertAlertsService))
+            let service = try #require(m.alertsService as? AlertsService)
+            let built = try #require(AppEnvironment.builtAlerts.first { $0.service === service },
+                                     "the model's alerts service is not the one makeAlerts built")
+            let fetchers = try #require(built.fetchers)
+            weakFetchers = fetchers
+            for source in WxAlert.Source.allCases {
+                #expect(fetchers.client(for: source).policy.origin == origins[source], "\(source)")
+            }
+            #expect(m.requestsStarted == 0)
+            #expect(await m.flush())
+        }
+        for _ in 0 ..< 1_000 where weakModel != nil {
+            await Task.yield()
+        }
+        #expect(weakModel == nil)
+        #expect(weakFetchers == nil)  // the production model's service held them
+    }
+
     // DECISIONS #11 storage roots; wx-places.c:219, wx-settings.c:248, wx-cache.c:172: the C file
     // names under "<dir>/weather/", Application Support and Caches inside the container home.
     // C: none - contract test of DECISIONS #11 and wx-places.c:219, wx-settings.c:248, wx-cache.c:172 (executor-added)

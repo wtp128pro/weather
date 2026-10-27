@@ -207,6 +207,7 @@
 
     /// The network monitor's report (set_offline, wx-app.c:1352-1367).
     public func setOnline(_ online: Bool) {
+        guard !shuttingDown else { return }
         let offline = !online
         guard self.offline != offline else { return }
         self.offline = offline

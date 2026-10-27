@@ -53,20 +53,21 @@ def cell(ws: list[float]) -> str:
     return num(ws[0]) if len(set(ws)) == 1 else " / ".join(num(w) for w in ws)
 
 
-def leaders(rows: list[dict], region: str, band: int) -> str:
-    rs = [r for r in rows if r["region"] == region and r["w"]["temp"][band] > 0]
-    rs.sort(key=lambda r: (-r["w"]["temp"][band], r["id"]))
-    return ", ".join(f'{html.escape(r["name"])} ({num(r["w"]["temp"][band])})' for r in rs[:3])
+def leaders(rows: list[dict], region: str, bands: list[int]) -> str:
+    """The top three temperature models by summed weight over the bands, with each band's weight (one if equal)."""
+    rs = [r for r in rows if r["region"] == region and any(r["w"]["temp"][b] > 0 for b in bands)]
+    rs.sort(key=lambda r: (-sum(r["w"]["temp"][b] for b in bands), r["id"]))
+    return ", ".join(f'{html.escape(r["name"])} ({cell([r["w"]["temp"][b] for b in bands])})' for r in rs[:3])
 
 
 def tables(rows: list[dict]) -> str:
     out = ['<table>', '    <thead>',
-           '        <tr><th>Profile</th><th>Used for</th><th>Leads the first 18 hours (temperature)</th>'
+           '        <tr><th>Profile</th><th>Used for</th><th>Leads the first 18 hours (temperature, H0 / H1)</th>'
            '<th>Leads after 3 days</th><th>15-minute rain</th></tr>',
            '    </thead>', '    <tbody>']
     for key, (name, where) in REGIONS.items():
-        out.append(f'        <tr><td><strong>{name}</strong></td><td>{where}</td><td>{leaders(rows, key, 0)}</td>'
-                   f'<td>{leaders(rows, key, 3)}</td><td>{NOWCAST[key]}</td></tr>')
+        out.append(f'        <tr><td><strong>{name}</strong></td><td>{where}</td><td>{leaders(rows, key, [0, 1])}</td>'
+                   f'<td>{leaders(rows, key, [3])}</td><td>{NOWCAST[key]}</td></tr>')
     out += ['    </tbody>', '</table>']
     out.append('<p>Each table below gives a model\'s weight in the four horizon bands as <code>H0 / H1 / H2 / H3</code> '
                '(one number when all four are equal), before your multipliers. Open a region to see it.</p>')

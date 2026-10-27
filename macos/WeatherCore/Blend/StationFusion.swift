@@ -234,8 +234,11 @@ public enum WxStationFusion {
 
     /// Collapses reports of one site (closer than `sameSiteKm`) into one: the freshest report is
     /// kept and the older ones only fill the variables it lacks. Reports without a finite
-    /// temperature or position are dropped. Order: freshest first.
-    public static func mergeSameSite(_ observations: [WxStationObservation]) -> [WxStationObservation] {
+    /// temperature or position are dropped. Order: freshest first. With `nowS`, an older report
+    /// lends its present weather only while it is at most `presentWeatherMaxAgeS` old.
+    public static func mergeSameSite(
+        _ observations: [WxStationObservation], nowS: Int64? = nil
+    ) -> [WxStationObservation] {
         let usable = observations.filter {
             $0.tempC.isFinite && $0.lat.isFinite && $0.lon.isFinite
                 && WxGeo.isValid(lat: $0.lat, lon: $0.lon)
@@ -258,8 +261,9 @@ public enum WxStationFusion {
             site.name = site.name ?? obs.name
             site.elevM = site.elevM ?? obs.elevM
             if site.dewpC == nil && site.humidityPct == nil {
-                site.dewpC = obs.dewpC
-                site.humidityPct = obs.humidityPct
+                // as a dew point: a humidity belongs to the older report's own temperature
+                site.dewpC = obs.dewpC.flatMap { $0.isFinite ? $0 : nil }
+                    ?? obs.humidityPct.flatMap { dewpointC(tempC: obs.tempC, humidityPct: $0) }
             }
             if site.windKmh == nil, let wind = obs.windKmh {
                 site.windKmh = wind
@@ -272,8 +276,11 @@ public enum WxStationFusion {
                 site.cloudIsCeilometerLimited = obs.cloudIsCeilometerLimited
             }
             // A fresher report that codes weather keeps its "no weather"; one that cannot code
-            // weather (SWOB, most mesonets) takes the older report's weather.
-            if !site.reportsPresentWeather && obs.reportsPresentWeather {
+            // weather (SWOB, most mesonets) takes the older report's weather while it is current.
+            let weatherIsCurrent = nowS.map { now in
+                (obs.obsTimeS.map { max(0, now - $0) } ?? unknownAgeS) <= presentWeatherMaxAgeS
+            } ?? true
+            if !site.reportsPresentWeather && obs.reportsPresentWeather && weatherIsCurrent {
                 site.wxString = obs.wxString
                 site.condition = obs.condition
                 site.reportsPresentWeather = true
@@ -388,8 +395,14 @@ public enum WxStationFusion {
         health: (String) -> Double = { _ in 1.0 }
     ) -> WxStationBlend? {
         guard WxGeo.isValid(lat: lat, lon: lon) else { return nil }
+        // Reports that cannot be candidates are dropped before the merge, so an excluded or stale
+        // report can neither absorb nor fill a usable twin.
+        let usable = observations.filter {
+            $0.tempC >= -90 && $0.tempC <= 65 && $0.trust * max(0.0, min(1.0, health($0.key))) > 0
+                && ($0.obsTimeS.map { nowS - $0 } ?? unknownAgeS) <= maxAgeS
+        }
         let ranked = candidates(
-            mergeSameSite(observations), lat: lat, lon: lon, targetElevationM: targetElevationM,
+            mergeSameSite(usable, nowS: nowS), lat: lat, lon: lon, targetElevationM: targetElevationM,
             nowS: nowS, radiusKm: searchRadiusKm, maxAge: maxAgeS, health: health)
         guard let nearestUsable = ranked.first else { return nil }
 
@@ -495,9 +508,13 @@ public enum WxStationFusion {
     public static func crossValidate(
         _ observations: [WxStationObservation], nowS: Int64, health: (String) -> Double = { _ in 1.0 }
     ) -> [String: Double] {
-        let sites = mergeSameSite(observations).filter {
+        let recent = observations.filter {
             ($0.obsTimeS.map { nowS - $0 } ?? unknownAgeS) <= crossValidationMaxAgeS
         }
+        // An excluded report is still tested (so it can recover), but on its own: merged, it would
+        // take a healthy twin's place under its key.
+        let sites = mergeSameSite(recent.filter { health($0.key) > 0 }, nowS: nowS)
+            + recent.filter { !(health($0.key) > 0) }.flatMap { mergeSameSite([$0]) }
         var out: [String: Double] = [:]
         for (i, site) in sites.enumerated() {
             // Neighbours keep their own health: a sick neighbour must not condemn a healthy site.
@@ -562,7 +579,12 @@ public enum WxStationFusion {
     public static func parseMETARPresentWeather(
         _ wx: String, tempC: Double, wetBulbC: Double, cloudPct: Double
     ) -> WxCondition? {
-        let u = wx.uppercased()
+        // Groups that fall nowhere at the station are skipped: lifted by the wind (BL blowing, DR
+        // drifting: "BLSN" is not snowfall) and in the vicinity ("VCSH", "VCFG"), except thunder.
+        let u = wx.uppercased().split(separator: " ").filter { group in
+            let g = group.drop { $0 == "+" || $0 == "-" }
+            return !(g.hasPrefix("BL") || g.hasPrefix("DR") || (g.hasPrefix("VC") && !g.contains("TS")))
+        }.joined(separator: " ")
         if u.contains("TS") {
             return .thunderstorm
         }

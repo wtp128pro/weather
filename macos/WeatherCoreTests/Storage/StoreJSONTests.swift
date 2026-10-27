@@ -639,4 +639,58 @@ import Testing
         #expect(Self.isParse(e))
         #expect(e?.message.hasPrefix("mydoc:") == true, "\(String(describing: e))")
     }
+
+    // MARK: - Per-place units (macOS; the C places.json has no "units")
+
+    /// The root node of `text`, which must parse.
+    private static func element(_ text: String) -> StoreJSON.Node? {
+        if case .success(let node?) = StoreJSON.Document.parse(Array(text.utf8)) {
+            return node
+        }
+        Issue.record("did not parse: \(text)")
+        return nil
+    }
+
+    @Test func placeUnitsMember() {
+        let base = "{\"name\": \"P\", \"lat\": 1, \"lon\": 2"
+        #expect(StoreJSON.placeUnits(nil) == nil)
+        #expect(StoreJSON.placeUnits(Self.element("[\"metric\"]")) == nil, "not an object")
+        #expect(StoreJSON.placeUnits(Self.element(base + "}")) == nil)
+        #expect(StoreJSON.placeUnits(Self.element(base + ", \"units\": \"metric\"}")) == .metric)
+        #expect(StoreJSON.placeUnits(Self.element(base + ", \"units\": \"imperial\"}")) == .imperial)
+        for bad in ["0", "1", "true", "null", "[]", "{}", "\"\"", "\"Metric\"", "\"IMPERIAL\"", "\"metric \"", "\"si\""] {
+            #expect(StoreJSON.placeUnits(Self.element(base + ", \"units\": \(bad)}")) == nil, "units: \(bad)")
+        }
+    }
+
+    /// Whatever its type, a "units" member never makes the place reader
+    /// reject an element (which would drop the place).
+    @Test func placeFromJSONIgnoresUnits() throws {
+        let base = "{\"name\": \"P\", \"lat\": 1, \"lon\": 2"
+        let plain = try #require(StoreJSON.placeFromJSON(Self.element(base + "}")))
+        for units in ["\"metric\"", "\"imperial\"", "1", "null", "[]", "{}", "\"si\""] {
+            #expect(StoreJSON.placeFromJSON(Self.element(base + ", \"units\": \(units)}")) == plain, "units: \(units)")
+        }
+    }
+
+    @Test func appendPlaceUnits() throws {
+        let p = try WxPlace(name: "P", lat: 1, lon: 2).withCustomLocation(customName: "Home", streetAddress: "1 Main St")
+        var plain = ""
+        StoreJSON.appendPlace(p, to: &plain)
+        #expect(plain == "{\"name\": \"Home\", \"admin1\": \"1 Main St\", \"country\": \"\", \"country_code\": \"\", \"lat\": 1, \"lon\": 2, "
+            + "\"timezone\": \"\", \"custom\": true, \"custom_name\": \"Home\", \"street_address\": \"1 Main St\"}")
+        // No units: the bytes of the forecast cache's place are unchanged.
+        var none = ""
+        StoreJSON.appendPlace(p, units: nil, to: &none)
+        #expect(none == plain)
+        var metric = ""
+        StoreJSON.appendPlace(p, units: .metric, to: &metric)
+        #expect(metric == String(plain.dropLast()) + ", \"units\": \"metric\"}")
+        var imperial = ""
+        StoreJSON.appendPlace(p, units: .imperial, to: &imperial)
+        #expect(imperial == String(plain.dropLast()) + ", \"units\": \"imperial\"}")
+        #expect(StoreJSON.placeFromJSON(Self.element(metric)) == p)
+        #expect(StoreJSON.placeUnits(Self.element(metric)) == .metric)
+        #expect(StoreJSON.placeUnits(Self.element(imperial)) == .imperial)
+    }
 }

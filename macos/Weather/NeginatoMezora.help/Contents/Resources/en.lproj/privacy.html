@@ -20,6 +20,7 @@
 <a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
 <a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
 <a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="weather-alerts.html">Weather Alerts</a>
 <a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
 <a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
 <div class="nav-section">Settings</div>
@@ -56,6 +57,8 @@
         <tr><td>GeoSphere Austria, MeteoSwiss</td><td>Codes of nearby stations</td><td>Austria, Switzerland</td></tr>
         <tr><td>Met Office, KNMI, MET Norway Frost</td><td>Your key for that service, and the place's coordinates or area</td><td>Only with your key, for places in their country</td></tr>
         <tr><td>Météo-France, AEMET</td><td>Your key for that service (all of France or Spain is fetched)</td><td>Only with your key, for places in their country</td></tr>
+        <tr><td>Official alerts: National Weather Service (api.weather.gov), Bright Sky (DWD alerts), MET Norway MetAlerts (api.met.no), Environment Canada (api.weather.gc.ca)</td><td>Place coordinates</td><td>After a forecast refresh, for places in the US, Germany, Norway and Canada</td></tr>
+        <tr><td>MeteoAlarm (feeds.meteoalarm.org)</td><td>Nothing about the place (the warnings of the whole country are fetched)</td><td>After a forecast refresh, for places in a MeteoAlarm country</td></tr>
         <tr><td>Place search: Open-Meteo geocoding, Apple Maps, OpenStreetMap Nominatim, Photon (komoot), US Census geocoder</td><td>The text you type in the Add a city window</td><td>While you search</td></tr>
     </tbody>
 </table>
@@ -66,8 +69,8 @@
 <table>
     <thead><tr><th>File</th><th>Contents</th></tr></thead>
     <tbody>
-        <tr><td><code>Application Support/weather/places.json</code></td><td>Your places, names and order</td></tr>
-        <tr><td><code>Application Support/weather/settings.json</code></td><td>Units, sources turned off, the selected place</td></tr>
+        <tr><td><code>Application Support/weather/places.json</code></td><td>Your places, names, order and units</td></tr>
+        <tr><td><code>Application Support/weather/settings.json</code></td><td>Default units for new places, sources turned off, the selected place</td></tr>
         <tr><td><code>Application Support/weather/weights.json</code></td><td>Your weight multipliers</td></tr>
         <tr><td><code>Application Support/weather/station-settings.json</code></td><td>Corrections on or off, station networks turned off</td></tr>
         <tr><td><code>Application Support/weather/local-bias.json</code></td><td>The learned local corrections</td></tr>

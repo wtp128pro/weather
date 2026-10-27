@@ -85,8 +85,9 @@ public enum WxAddressGeocoder {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.utf8.count >= 2 else { return [] }
 
-        // 1. Check if the user typed raw coordinates like "25.7617, -80.1918".
-        let coordCandidate = await parseDirectCoordinates(query)
+        // 1. Check if the user typed raw coordinates like "25.7617, -80.1918"; its reverse
+        //    lookup runs alongside the geocoders below instead of ahead of them.
+        async let coordTask = parseDirectCoordinates(query)
 
         // 2. Run street-address & city geocoders in parallel.
         async let mapKitTask = searchMapKit(query: query)
@@ -99,8 +100,8 @@ public enum WxAddressGeocoder {
             return (try? await cityFallback(clipped)) ?? []
         }()
 
-        let (mkResults, nomResults, photonResults, censusResults, cityPlaces) = await (
-            mapKitTask, nominatimTask, photonTask, censusTask, citiesTask
+        let (coordCandidate, mkResults, nomResults, photonResults, censusResults, cityPlaces) = await (
+            coordTask, mapKitTask, nominatimTask, photonTask, censusTask, citiesTask
         )
 
         // Collect known timezones by proximity so Nominatim/Photon/Census hits get an exact IANA timezone.
@@ -108,6 +109,10 @@ public enum WxAddressGeocoder {
             mkResults.map { ($0.place.lat, $0.place.lon, $0.place.timezone) }
             + cityPlaces.map { ($0.lat, $0.lon, $0.timezone) }
         ).filter { !$0.tz.isEmpty }
+        // Those hits, and the coordinate candidate, carry a zone inferred from coarse bands.
+        let inferredIDs = Set(
+            ([coordCandidate].compactMap { $0 } + nomResults + photonResults + censusResults).map(\.id)
+        )
 
         var combined: [WxAddressCandidate] = []
         if let coordCandidate {
@@ -142,19 +147,22 @@ public enum WxAddressGeocoder {
             )
         }
 
-        // Fill any missing IANA timezones and deduplicate by proximity + title.
+        // Fill any missing IANA timezones, prefer a known exact zone over an inferred one,
+        // and deduplicate by proximity + title.
         var deduplicated: [WxAddressCandidate] = []
         for item in combined {
             if Task.isCancelled { return [] }
             var resolved = item
-            if resolved.place.timezone.isEmpty {
-                let tz = resolveTimezone(
-                    lat: resolved.place.lat,
-                    lon: resolved.place.lon,
-                    countryCode: resolved.place.countryCode,
-                    admin1: resolved.place.admin1,
-                    known: knownTimezones
-                )
+            let tz = mergedTimezone(
+                current: resolved.place.timezone,
+                inferred: inferredIDs.contains(item.id),
+                lat: resolved.place.lat,
+                lon: resolved.place.lon,
+                countryCode: resolved.place.countryCode,
+                admin1: resolved.place.admin1,
+                known: knownTimezones
+            )
+            if tz != resolved.place.timezone {
                 if !tz.isEmpty,
                    let withTZ = try? WxPlace(
                        name: resolved.place.name,
@@ -407,6 +415,15 @@ public enum WxAddressGeocoder {
 
     // MARK: - 3. OpenStreetMap Nominatim Address Search
 
+    /// Escaping for a free-text query value (Nominatim, Photon, Census): `.urlQueryAllowed`
+    /// minus `&`, `=` and `+`, which it lets through, so "AT&T Stadium" is not split into
+    /// `q=AT` plus a stray parameter and a `+` is not decoded as a space. Internal for tests.
+    static let queryValueAllowed: CharacterSet = {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+")
+        return allowed
+    }()
+
     private struct NominatimItem: Decodable {
         struct Address: Decodable {
             let house_number: String?
@@ -434,7 +451,7 @@ public enum WxAddressGeocoder {
     }
 
     private static func searchNominatim(query: String) async -> [WxAddressCandidate] {
-        guard let escaped = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        guard let escaped = query.addingPercentEncoding(withAllowedCharacters: queryValueAllowed),
               let url = URL(string: "https://nominatim.openstreetmap.org/search?q=\(escaped)&format=jsonv2&addressdetails=1&limit=8&accept-language=en")
         else {
             return []
@@ -574,7 +591,7 @@ public enum WxAddressGeocoder {
     }
 
     private static func searchPhoton(query: String) async -> [WxAddressCandidate] {
-        guard let escaped = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+        guard let escaped = query.addingPercentEncoding(withAllowedCharacters: queryValueAllowed),
               let url = URL(string: "https://photon.komoot.io/api/?q=\(escaped)&limit=8&lang=en")
         else {
             return []
@@ -699,7 +716,7 @@ public enum WxAddressGeocoder {
         // US Census geocoder requires a street address (typically starting with a house number).
         guard query.first?.isNumber == true,
               query.contains(" "),
-              let escaped = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let escaped = query.addingPercentEncoding(withAllowedCharacters: queryValueAllowed),
               let url = URL(string: "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=\(escaped)&benchmark=Public_AR_Current&format=json")
         else {
             return []
@@ -772,6 +789,29 @@ public enum WxAddressGeocoder {
 
     // MARK: - Timezone Resolution
 
+    /// Zone for a candidate in `search`'s merge loop. An empty zone is resolved (a known zone
+    /// within 75 km, else inference). An `inferred` zone (Nominatim/Photon/Census/coordinates)
+    /// yields only to a known zone within 75 km, never to re-inference: `admin1` here is the
+    /// display text ("Phoenix, AZ 85004"), not the raw state its builder inferred from.
+    /// Internal for tests.
+    static func mergedTimezone(
+        current: String,
+        inferred: Bool,
+        lat: Double,
+        lon: Double,
+        countryCode: String,
+        admin1: String,
+        known: [(lat: Double, lon: Double, tz: String)]
+    ) -> String {
+        if current.isEmpty {
+            return resolveTimezone(lat: lat, lon: lon, countryCode: countryCode, admin1: admin1, known: known)
+        }
+        if inferred, let exact = knownTimezone(lat: lat, lon: lon, known: known) {
+            return exact
+        }
+        return current
+    }
+
     private static func resolveTimezone(
         lat: Double,
         lon: Double,
@@ -779,15 +819,25 @@ public enum WxAddressGeocoder {
         admin1: String,
         known: [(lat: Double, lon: Double, tz: String)]
     ) -> String {
+        knownTimezone(lat: lat, lon: lon, known: known)
+            ?? inferFallbackTimezone(lat: lat, lon: lon, countryCode: countryCode, admin1: admin1)
+    }
+
+    private static func knownTimezone(
+        lat: Double,
+        lon: Double,
+        known: [(lat: Double, lon: Double, tz: String)]
+    ) -> String? {
         for item in known {
             if WxGeo.distanceKm(aLat: lat, aLon: lon, bLat: item.lat, bLon: item.lon) <= 75.0 {
                 return item.tz
             }
         }
-        return inferFallbackTimezone(lat: lat, lon: lon, countryCode: countryCode, admin1: admin1)
+        return nil
     }
 
-    private static func inferFallbackTimezone(
+    /// Coarse zone from country, `admin1` (raw state/province) and longitude bands. Internal for tests.
+    static func inferFallbackTimezone(
         lat: Double,
         lon: Double,
         countryCode: String,
@@ -809,7 +859,32 @@ public enum WxAddressGeocoder {
             if lon >= -115.0 { return "America/Edmonton" }
             return "America/Vancouver"
         }
+        // Mexico by state. The US-border strip of Chihuahua, Coahuila, Nuevo Leon and Tamaulipas
+        // keeps US DST, as the US bands below give it, so in those states only places the bands
+        // get wrong in winter are named: Chihuahua south of 29N (the -7/-6 Ciudad Juarez strip is
+        // north of 30N; south of it the state is -6) and Coahuila west of -102 (bands give Denver,
+        // -7, but all of Coahuila is -6 in winter). An empty state falls through, as before.
+        if countryCode == "MX" && !admin1.isEmpty {
+            let u = admin1.uppercased()
+            if u.contains("SONORA") { return "America/Hermosillo" }
+            if u.contains("BAJA CALIFORNIA SUR") || u.contains("SINALOA") || u.contains("NAYARIT") {
+                return "America/Mazatlan"
+            }
+            if u.contains("BAJA CALIFORNIA") { return "America/Tijuana" }
+            if u.contains("QUINTANA ROO") { return "America/Cancun" }
+            if u.contains("DURANGO") { return "America/Monterrey" }
+            if u.contains("CHIHUAHUA") {
+                if lat < 29.0 { return "America/Chihuahua" }
+            } else if u.contains("COAHUILA") {
+                if lon < -102.0 { return "America/Monterrey" }
+            } else if !u.contains("NUEVO LE") && !u.contains("TAMAULIPAS") {
+                return "America/Mexico_City"
+            }
+        }
         if countryCode == "US" || WxGeo.inUSNWS(lat: lat, lon: lon) {
+            // Guam and the western Aleutians have positive longitudes, outside the bands below.
+            if lon >= 144.0 && lat <= 21.0 { return "Pacific/Guam" }
+            if lon >= 172.0 { return "America/Adak" }
             if lat >= 51.0 && lon <= -130.0 { return "America/Anchorage" }
             if lat <= 23.0 && lon <= -154.0 { return "Pacific/Honolulu" }
             if lat <= 19.0 && lon >= -68.0 && lon <= -64.5 { return "America/Puerto_Rico" }

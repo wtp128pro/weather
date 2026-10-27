@@ -20,6 +20,15 @@
 //    `activateRow(at:)` (or `handleRowKey(_:modifiers:at:)`);
 //  - the window's key handler calls `handleKey(_:modifiers:)` first (the C
 //    capture-phase controller): a plain Escape requests the close;
+//  - the units choice of the place being added shows `units` among
+//    `unitsChoices` (titles `unitsTitle(_:)`); the list's keyboard cursor goes
+//    to `highlightRow(at:)` (or `highlight(_:)` for a place that is not one of
+//    `rows`), which preselects WxGeo.defaultUnits of the highlighted place's
+//    country code (the default units for none or a malformed code) until the
+//    user picks units with `setUnits(_:)`; that choice then holds for every
+//    place this picker adds. Every add passes the chosen units to AppModel
+//    explicitly (DECISIONS #34): `activateRow(at:)`, and for the view's own
+//    add paths `addPlace(_:)` / `addCustomLocation(_:customName:streetAddress:)`;
 //  - `onPlaceAdded` and `onCloseRequest` stand for the "place-added" signal
 //    and gtk_window_close(); the owner calls `invalidate()` when the window
 //    goes away for good (gtk_window_destroy): only that cancels the search.
@@ -134,6 +143,10 @@ public final class PickerViewModel {
     public private(set) var results: [WxPlace] = []
     /// True once `invalidate()` ran: no search, no add, no callback any more.
     public private(set) var isInvalidated = false
+    /// The highlighted place (the list's keyboard cursor), nil for none.
+    public private(set) var highlightedPlace: WxPlace?
+    /// The units the user picked (`setUnits(_:)`), nil while the country preselection applies.
+    public private(set) var unitsOverride: WxUnits?
 
     /// "place-added": called once per place this picker added, with its key, before the close
     /// request. Not called for refusals or for changes made elsewhere.
@@ -181,6 +194,20 @@ public final class PickerViewModel {
         }
     }
 
+    /// The units choice of the place being added: the user's pick, else the preselection of the
+    /// highlighted place's country (WxGeo.defaultUnits: imperial for the US, its territories,
+    /// Liberia and Myanmar, metric elsewhere), else, with nothing highlighted or no usable country
+    /// code, AppModel's default units. Reading it observes AppModel.defaultUnits.
+    public var units: WxUnits {
+        if let unitsOverride {
+            return unitsOverride
+        }
+        return WxGeo.defaultUnits(countryCode: highlightedPlace?.countryCode ?? "", fallback: model.defaultUnits)
+    }
+
+    /// The user picked the units: the country preselection no longer applies in this picker.
+    public var isUnitsOverridden: Bool { unitsOverride != nil }
+
     /// Whether a debounced search is pending (debounce_id != 0).
     var isDebouncePending: Bool { debounceTask != nil }
     /// Whether a search is in flight (search_cancellable != NULL).
@@ -199,6 +226,38 @@ public final class PickerViewModel {
             try? WxPlace(name: name, admin1: "Florida", country: "United States", countryCode: "US",
                          lat: lat, lon: lon, timezone: "America/New_York")  // wx-picker.c:45-46
         }
+    }
+
+    // MARK: - Units choice
+
+    /// The units the add flow offers, in their order.
+    public nonisolated static let unitsChoices: [WxUnits] = [.imperial, .metric]
+
+    /// The title of a units choice (the wording of Settings > General).
+    public nonisolated static func unitsTitle(_ units: WxUnits) -> String {
+        units == .metric ? "Metric (\u{00B0}C, km/h, mm)" : "Imperial (\u{00B0}F, mph, in)"
+    }
+
+    /// The list's cursor moved to the row at `position` (nil or a position without a row: none).
+    /// Without a user pick, `units` follows the new place's country.
+    public func highlightRow(at position: Int?) {
+        guard let position, results.indices.contains(position) else {
+            highlight(nil)
+            return
+        }
+        highlight(results[position])
+    }
+
+    /// `place` is highlighted (a place the view lists apart from `rows`, such as an address
+    /// match), nil for none. Without a user pick, `units` follows its country.
+    public func highlight(_ place: WxPlace?) {
+        highlightedPlace = place
+    }
+
+    /// The user picked `units` for the place being added: it holds, whatever is highlighted
+    /// later, for every add of this picker.
+    public func setUnits(_ units: WxUnits) {
+        unitsOverride = units
     }
 
     // MARK: - Query rules
@@ -441,8 +500,8 @@ public final class PickerViewModel {
 
     // MARK: - Adding
 
-    /// on_list_activate (Return / Space on a row, a double click): adds the row's place. Nothing
-    /// happens for a position without a row.
+    /// on_list_activate (Return / Space on a row, a double click): highlights the row and adds
+    /// its place with the chosen `units`. Nothing happens for a position without a row.
     public func activateRow(at position: Int) {
         guard results.indices.contains(position) else {
             return
@@ -450,13 +509,41 @@ public final class PickerViewModel {
         add(results[position])
     }
 
-    /// add_item: AppModel.add; on success "place-added" then the close request, on refusal the
-    /// reason in the status line (class "error").
+    /// The view's own add of `place` (a row it lists, such as an address match): highlights it and
+    /// adds it with the chosen `units` through AppModel.add. No signal, close request or status:
+    /// the caller handles the result. `.failed` once the picker is invalidated.
+    @discardableResult
+    public func addPlace(_ place: WxPlace) -> AppModel.AddResult {
+        guard !isInvalidated else {
+            return .failed
+        }
+        highlight(place)
+        return model.add(place, units: units)
+    }
+
+    /// The view's own custom-location add (a location name or a street address): highlights
+    /// `place` and adds it with the chosen `units` through AppModel.addCustomLocation. No signal,
+    /// close request or status: the caller handles the result. `.failed` once invalidated.
+    @discardableResult
+    public func addCustomLocation(_ place: WxPlace, customName: String?, streetAddress: String?)
+        -> AppModel.AddResult
+    {
+        guard !isInvalidated else {
+            return .failed
+        }
+        highlight(place)
+        return model.addCustomLocation(place, customName: customName, streetAddress: streetAddress, units: units)
+    }
+
+    /// add_item: AppModel.add with the chosen `units` of the highlighted `place`; on success
+    /// "place-added" then the close request, on refusal the reason in the status line (class
+    /// "error").
     private func add(_ place: WxPlace) {
         guard !isInvalidated else {
             return
         }
-        let result = model.add(place)
+        highlight(place)
+        let result = model.add(place, units: units)
         switch result {
         case .added:
             onPlaceAdded?(place.key)

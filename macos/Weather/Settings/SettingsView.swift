@@ -17,20 +17,28 @@ final class SettingsWindowManager {
     static let shared = SettingsWindowManager()
 
     private var windowController: NSWindowController?
+    /// The window's tab, set by every request.
+    private let tabSelection = SettingsTabSelection(.sources)
 
     private init() {}
 
     func showSettings(state: ShellState, initialTab: SettingsTab = .sources) {
-        present(rootView: SettingsView(state: state, initialTab: initialTab))
+        present(rootView: SettingsView(state: state, selection: tabSelection), tab: initialTab)
     }
 
     func showSettings(model: AppModel?, sources: SourcesViewModel?, initialTab: SettingsTab = .sources) {
-        present(rootView: SettingsView(model: model, sources: sources, initialTab: initialTab))
+        present(rootView: SettingsView(model: model, sources: sources, selection: tabSelection), tab: initialTab)
     }
 
-    private func present<Content: View>(rootView: Content) {
+    private func present<Content: View>(rootView: Content, tab: SettingsTab) {
+        tabSelection.tab = tab
         if let wc = windowController, let window = wc.window {
-            window.contentViewController = NSHostingController(rootView: rootView)
+            // An open (or minimised) window keeps its views, so a request only switches the tab
+            // and the user's unsaved edits survive (a key being typed, Replace… mode, the Weights
+            // pickers). A closed window starts again from fresh views: closing discards them.
+            if !window.isVisible && !window.isMiniaturized {
+                window.contentViewController = NSHostingController(rootView: rootView)
+            }
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -66,32 +74,48 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The selected Settings tab. SettingsWindowManager owns its window's, so a request for a tab
+/// can switch the open window without rebuilding its views.
+@MainActor
+@Observable
+final class SettingsTabSelection {
+    var tab: SettingsTab
+
+    init(_ tab: SettingsTab) {
+        self.tab = tab
+    }
+}
+
 /// The main Settings dialogue (`⌘,` and toolbar gear button).
 struct SettingsView: View {
     private let state: ShellState?
     private let explicitModel: AppModel?
     private let explicitSources: SourcesViewModel?
-    @State private var selectedTab: SettingsTab
+    @State private var selection: SettingsTabSelection
 
     init(state: ShellState, initialTab: SettingsTab = .sources) {
+        self.init(state: state, selection: SettingsTabSelection(initialTab))
+    }
+
+    init(state: ShellState, selection: SettingsTabSelection) {
         self.state = state
         self.explicitModel = nil
         self.explicitSources = nil
-        self._selectedTab = State(initialValue: initialTab)
+        self._selection = State(initialValue: selection)
     }
 
-    init(model: AppModel?, sources: SourcesViewModel?, initialTab: SettingsTab = .sources) {
+    init(model: AppModel?, sources: SourcesViewModel?, selection: SettingsTabSelection) {
         self.state = nil
         self.explicitModel = model
         self.explicitSources = sources
-        self._selectedTab = State(initialValue: initialTab)
+        self._selection = State(initialValue: selection)
     }
 
     private var appModel: AppModel? { explicitModel ?? state?.model }
     private var sourcesVM: SourcesViewModel? { explicitSources ?? state?.sources }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: $selection.tab) {
             SourcesSettingsTab(appModel: appModel, sourcesVM: sourcesVM)
                 .tabItem {
                     Label("Sources", systemImage: "antenna.radiowaves.left.and.right")
@@ -537,12 +561,13 @@ private struct GeneralSettingsTab: View {
 
     var body: some View {
         Form {
+            // The default for places added later (settings.json "units"); saved places keep theirs.
             Section("Measurement Units") {
                 Picker(
-                    "Display Units",
+                    "Default Units for New Places",
                     selection: Binding(
-                        get: { appModel?.units ?? .imperial },
-                        set: { appModel?.setUnits($0) }
+                        get: { appModel?.defaultUnits ?? .imperial },
+                        set: { appModel?.setDefaultUnits($0) }
                     )
                 ) {
                     Text("Imperial (°F, mph, in)").tag(WxUnits.imperial)
@@ -550,6 +575,10 @@ private struct GeneralSettingsTab: View {
                 }
                 .pickerStyle(.radioGroup)
                 .disabled(appModel == nil)
+                Text("Places you have already added keep their own units: switch the selected place "
+                    + "with the \u{00B0}F/\u{00B0}C toolbar button or \u{2318}U.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Documentation & About") {

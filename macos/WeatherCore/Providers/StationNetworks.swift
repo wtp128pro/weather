@@ -79,7 +79,8 @@ public enum WxStationNetworks {
             return box(46.8, 55.5, 5.2, 15.7)
         case .dmi:
             return box(54.0, 58.3, 7.2, 15.9) || box(61.2, 62.5, -8.0, -6.0)  // Denmark, Faroes
-                || box(59.0, 84.0, -74.0, -10.0)  // Greenland
+                // Greenland along its coasts, not Iceland, Baffin Island or Nunavik (no DMI station)
+                || box(59.0, 67.0, -61.0, -30.0) || box(67.0, 75.0, -61.0, -10.0) || box(75.0, 84.0, -74.0, -10.0)
         case .fmi:
             return box(59.2, 70.5, 18.8, 32.0)
         case .smhi:
@@ -89,7 +90,7 @@ public enum WxStationNetworks {
         case .meteoSwiss:
             return box(45.4, 48.2, 5.5, 11.0)
         case .metOffice:
-            return box(49.4, 61.3, -9.0, 2.4)  // UK, Channel Islands
+            return box(49.4, 61.3, -9.0, 2.4) || box(48.7, 49.8, -3.0, -1.6)  // UK, Channel Islands
         case .knmi:
             return box(50.3, 54.0, 2.8, 7.8)
         case .frost:
@@ -1051,7 +1052,10 @@ public enum WxPresentWeather {
         if text.contains("thunder") || text.contains("t-storm") {
             return .thunderstorm
         }
-        if text.contains("freezing") || text.contains("sleet") || text.contains("ice pellets") || text.contains("hail") {
+        // "freezing fog" is fog (below), not freezing precipitation
+        if text.contains("freezing rain") || text.contains("freezing drizzle") || text.contains("sleet")
+            || text.contains("ice pellets") || text.contains("hail")
+        {
             return .sleet
         }
         if text.contains("snow") || text.contains("flurries") || text.contains("blizzard") {
@@ -1079,13 +1083,14 @@ public enum WxPresentWeather {
             if cloudPct == nil { cloudPct = 22.0 }
             return .mostlyClear
         }
-        if text.contains("clear") || text.contains("sunny") || text.contains("fair") {
-            if cloudPct == nil { cloudPct = 5.0 }
-            return .clear
-        }
+        // before "sunny": the NWS hourly forecast's "Partly Sunny" is partly cloudy, not clear
         if text.contains("partly cloudy") || text.contains("partly sunny") {
             if cloudPct == nil { cloudPct = 48.0 }
             return .partlyCloudy
+        }
+        if text.contains("clear") || text.contains("sunny") || text.contains("fair") {
+            if cloudPct == nil { cloudPct = 5.0 }
+            return .clear
         }
         if text.contains("mostly cloudy") {
             if cloudPct == nil { cloudPct = 76.0 }

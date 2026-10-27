@@ -20,6 +20,7 @@
 <a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
 <a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
 <a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="weather-alerts.html">Weather Alerts</a>
 <a class="nav-link active" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
 <a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
 <div class="nav-section">Settings</div>
@@ -39,7 +40,15 @@
             <h1>Units, Refreshing &amp; Offline</h1>
 
 <h2>Units</h2>
-<p>Switch between <strong>Imperial</strong> (°F, mph, inches) and <strong>Metric</strong> (°C, km/h, mm) with the unit button in the toolbar (it shows the current unit), <kbd>⌘U</kbd>, or Settings › General › Display Units. The choice is saved. Temperatures, wind, rain amounts and rates, the rain chart scale, and station and monitor distances (mi or km) change; percentages and the air quality index do not. Times are shown in 12-hour form in each place's time zone.</p>
+<p>Every place has its own units, <strong>Imperial</strong> (°F, mph, inches) or <strong>Metric</strong> (°C, km/h, mm), saved with the place. The sidebar shows each place's temperature with its unit, and the forecast page uses the units of the place it shows.</p>
+<ul>
+    <li><strong>When you add a place</strong>, the units menu of the Add a city window (<strong>Units for</strong> and the place) sets them, preselected from the place's country (see <a href="places.html">Adding a place</a>).</li>
+    <li><strong>To switch a saved place</strong>, select it and click the unit button in the toolbar (it shows the selected place's unit, <strong>°F</strong> or <strong>°C</strong>) or choose View › <strong>Switch Selected Place to Celsius</strong> (or <strong>to Fahrenheit</strong>; <kbd>⌘U</kbd>), the title the button's tooltip shows too. Only the selected place changes, at once; its forecast is kept, not fetched again.</li>
+    <li><strong>With no place selected</strong> (for example with an empty list), the button and <kbd>⌘U</kbd>, then titled <strong>Set Default Units to Celsius</strong> (or <strong>to Fahrenheit</strong>), switch the default units for new places instead.</li>
+    <li><strong>Settings › General › Default Units for New Places</strong> is used for a new place whose country is not known. Places you have already added keep their own units.</li>
+    <li><strong>Settings › Stations</strong> shows its values in the selected place's units (the default units when none is selected).</li>
+</ul>
+<p>Temperatures, wind, rain amounts and rates, the rain chart scale, and station and monitor distances (mi or km) change; percentages and the air quality index do not. Times are shown in 12-hour form in each place's time zone.</p>
 
 <h2>When forecasts refresh</h2>
 <ul>
@@ -49,6 +58,7 @@
     <li><kbd>⌘R</kbd> (View › Refresh, or the refresh button) refreshes the selected place now. It does nothing while that place is loading, within 10 seconds of its last refresh, for 60 seconds after a service asked for fewer requests, or while offline.</li>
     <li>Changing a source switch or a weight re-fetches every place once.</li>
     <li>A refresh waits up to 30 seconds for the services; one that has not answered by then is listed as <em>Not available right now</em>. Network errors are retried twice.</li>
+    <li>Official alerts are checked after each completed forecast refresh of a place, never on their own timer and never while offline. How often each alert source is actually asked is on <a href="weather-alerts.html">Weather Alerts</a>.</li>
 </ul>
 
 <h2>Live stations and air quality</h2>
@@ -59,7 +69,7 @@
 </ul>
 
 <h2>Offline</h2>
-<p>When the Mac loses its connection, rows show <strong>Offline</strong>, the forecast page shows the <strong>Offline</strong> badge and the last forecast (without live station values or air quality), and refreshing is off. As soon as the connection is back, places are refreshed. At launch, each place shows its last forecast from the cache with its age until the new one arrives.</p>
+<p>When the Mac loses its connection, rows show <strong>Offline</strong>, the forecast page shows the <strong>Offline</strong> badge and the last forecast (without live station values or air quality), and refreshing is off. Alerts are not checked, and alert answers are not kept between launches. A place with an alert answer (alerts or <em>No active alerts</em>) reads <em>Alerts could not be checked recently.</em> once that answer is older than its source's window; a place with no answer yet keeps <em>Checking for alerts…</em>, one whose last check failed keeps <em>Alerts could not be checked right now.</em>, and one no source covers keeps <em>Alerts not available</em>. As soon as the connection is back, places are refreshed. At launch, each place shows its last forecast from the cache with its age until the new one arrives.</p>
 
 <h2>Saving and quitting</h2>
 <p>Changes are saved a few seconds after you make them. Quitting (or closing the window, which quits) waits up to 5 seconds for pending saves.</p>

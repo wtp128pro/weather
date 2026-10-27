@@ -137,8 +137,10 @@ public enum WxAirQuality {
         }
         return features.compactMap { f -> MonitorReading? in
             let a = f.attributes
+            // A time outside WxLimits would trap in Int64() below.
             guard let raw = a.OZONEPM_AQI, raw.isFinite, raw >= 0, raw <= 500,
                   let validMs = a.ValidTime, validMs.isFinite,
+                  validMs >= Double(WxLimits.timeMinS) * 1000, validMs < Double(WxLimits.timeMaxS) * 1000,
                   let sLat = f.geometry?.y ?? a.Latitude, let sLon = f.geometry?.x ?? a.Longitude
             else {
                 return nil
@@ -222,8 +224,9 @@ public enum WxAirQuality {
                 dayAgo = index(values[i])
             }
         }
-        let pm25 = current.pm2_5.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
-        let no2 = current.nitrogen_dioxide.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        // µg/m³; a larger value is not a concentration (and would trap in Int() on the card).
+        let pm25 = current.pm2_5.flatMap { $0.isFinite && $0 >= 0 && $0 < 100_000 ? $0 : nil }
+        let no2 = current.nitrogen_dioxide.flatMap { $0.isFinite && $0 >= 0 && $0 < 100_000 ? $0 : nil }
         return ModelReading(aqi: aqi, tS: tS, dayAgoAQI: dayAgo, europeanAQI: index(current.european_aqi),
                             pm25: pm25, no2: no2)
     }

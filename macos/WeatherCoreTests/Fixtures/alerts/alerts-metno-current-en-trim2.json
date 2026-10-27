@@ -1,0 +1,185 @@
+{
+ "features": [
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       4.8643,
+       62.034
+      ],
+      [
+       5.0192,
+       62.0217
+      ],
+      [
+       5.1408,
+       62.1837
+      ],
+      [
+       5.0323,
+       62.201
+      ],
+      [
+       5.025,
+       62.196
+      ],
+      [
+       5.0243,
+       62.1955
+      ],
+      [
+       5.0227,
+       62.194
+      ],
+      [
+       4.8663,
+       62.0362
+      ],
+      [
+       4.8658,
+       62.0357
+      ],
+      [
+       4.8643,
+       62.034
+      ],
+      [
+       4.8643,
+       62.034
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "properties": {
+    "altitude_above_sea_level": 0,
+    "area": "Maaloey - Stad",
+    "awarenessResponse": "Be aware",
+    "awarenessSeriousness": "Challenging situation",
+    "awareness_level": "2; yellow; Moderate",
+    "awareness_type": "1; Wind",
+    "ceiling_above_sea_level": 2743,
+    "certainty": "Likely",
+    "consequences": "Moderate waves: Risk of dangerous situations when in a small boat at sea. Very high waves: Considerable tumbling of waves with heavy impact. Reduced visibility. ",
+    "contact": "https://www.met.no/en/contact-us",
+    "county": [],
+    "description": "From Monday evening south gale force 8, early Tuesday morning southeast severe gale force 9. Tuesday morning south storm gale 10, increasing to violent storm gale 11.",
+    "event": "gale",
+    "eventAwarenessName": "Storm",
+    "geographicDomain": "marine",
+    "id": "2.49.0.1.578.0.20261026080722.092",
+    "instruction": "Do not go out in a small boat: High risk of dangerous situations when in a small boat at sea. ",
+    "resources": [
+     {
+      "description": "CAP file",
+      "mimeType": "application/xml",
+      "uri": "https://api.met.no/weatherapi/metalerts/2.0/current?cap=2.49.0.1.578.0.20261026080722.092"
+     }
+    ],
+    "riskMatrixColor": "Yellow",
+    "severity": "Moderate",
+    "status": "Actual",
+    "title": "Storm, yellow level, Maaloey - Stad, 2026-10-26T21:00:00+00:00, 2026-10-27T13:00:00+00:00",
+    "triggerLevel": "24.5m/s",
+    "type": "Alert",
+    "web": "https://www.met.no/vaer-og-klima/ekstremvaervarsler-og-andre-farevarsler/vaerfenomener-som-kan-gi-farevarsel-fra-met/kuling-stormvarsel-for-kyst-og-naere-fiskebanker"
+   },
+   "type": "Feature",
+   "when": {
+    "interval": [
+     "2026-10-26T21:00:00+00:00",
+     "2026-10-27T13:00:00+00:00"
+    ]
+   }
+  },
+  {
+   "geometry": {
+    "coordinates": [
+     [
+      [
+       5.0323,
+       62.201
+      ],
+      [
+       5.1408,
+       62.1837
+      ],
+      [
+       5.446,
+       62.2653
+      ],
+      [
+       5.2447,
+       62.351
+      ],
+      [
+       5.2375,
+       62.3473
+      ],
+      [
+       5.236,
+       62.3465
+      ],
+      [
+       5.2337,
+       62.345
+      ],
+      [
+       5.0323,
+       62.201
+      ],
+      [
+       5.0323,
+       62.201
+      ]
+     ]
+    ],
+    "type": "Polygon"
+   },
+   "properties": {
+    "altitude_above_sea_level": 0,
+    "area": "Stad - Svinoey",
+    "awarenessResponse": "Be aware",
+    "awarenessSeriousness": "Challenging situation",
+    "awareness_level": "2; yellow; Moderate",
+    "awareness_type": "1; Wind",
+    "ceiling_above_sea_level": 2743,
+    "certainty": "Likely",
+    "consequences": "Moderate waves: Risk of dangerous situations when in a small boat at sea. Very high waves: Considerable tumbling of waves with heavy impact. Reduced visibility. ",
+    "contact": "https://www.met.no/en/contact-us",
+    "county": [],
+    "description": "From Monday evening south increasing to gale force 8. Early Tuesday morning backing southeast. Tuesday morning increasing to south storm force 10 near Stad. Tuesday afternoon violent storm force 11 near Stad.",
+    "event": "gale",
+    "eventAwarenessName": "Storm",
+    "geographicDomain": "marine",
+    "id": "2.49.0.1.578.0.20261026081330.059",
+    "instruction": "Do not go out in a small boat: High risk of dangerous situations when in a small boat at sea. Do not go out in a small boat: High risk of dangerous situations when in a small boat at sea. If the engine stops you can float towards land. ",
+    "resources": [
+     {
+      "description": "CAP file",
+      "mimeType": "application/xml",
+      "uri": "https://api.met.no/weatherapi/metalerts/2.0/current?cap=2.49.0.1.578.0.20261026081330.059"
+     }
+    ],
+    "riskMatrixColor": "Yellow",
+    "severity": "Moderate",
+    "status": "Actual",
+    "title": "Storm, yellow level, Stad - Svinoey, 2026-10-26T21:00:00+00:00, 2026-10-27T13:00:00+00:00",
+    "triggerLevel": "24.5m/s",
+    "type": "Alert",
+    "web": "https://www.met.no/vaer-og-klima/ekstremvaervarsler-og-andre-farevarsler/vaerfenomener-som-kan-gi-farevarsel-fra-met/kuling-stormvarsel-for-kyst-og-naere-fiskebanker"
+   },
+   "type": "Feature",
+   "when": {
+    "interval": [
+     "2026-10-26T21:00:00+00:00",
+     "2026-10-27T13:00:00+00:00"
+    ]
+   }
+  }
+ ],
+ "lang": "en",
+ "lastChange": "2026-10-26T14:29:31+00:00",
+ "type": "FeatureCollection"
+}

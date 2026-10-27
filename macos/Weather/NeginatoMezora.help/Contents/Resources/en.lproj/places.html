@@ -20,6 +20,7 @@
 <a class="nav-link active" href="places.html">Adding &amp; Managing Places</a>
 <a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
 <a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link" href="weather-alerts.html">Weather Alerts</a>
 <a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
 <a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
 <div class="nav-section">Settings</div>
@@ -44,9 +45,11 @@
 <ol>
     <li><strong>Type what you are looking for</strong> in <em>Address, Landmark, or City</em>: a city ("Lyon"), a street address ("1600 Pennsylvania Ave NW, Washington"), a ZIP or postal code, a landmark, or coordinates such as <code>25.76, -80.19</code>, <code>25.76 -80.19</code> or <code>25.76°, -80.19°</code>. At least 2 characters are needed. With an empty field the window suggests a few cities.</li>
     <li><strong>Optionally give it a name</strong> in <em>Location Name</em>: type one, or click a preset (Home, Work, Friend's place, Family, School, Gym, Vacation; click again to clear it). The name replaces the place name in the sidebar and in the forecast header, and picks a matching symbol (a house for Home, a briefcase for Work, and so on).</li>
+    <li><strong>Check the units</strong> in the units menu, labelled <strong>Units for</strong> and the name (with its state or province) of the result that would be added (<strong>Units</strong> while there is no result): <strong>Imperial (°F, mph, in)</strong> or <strong>Metric (°C, km/h, mm)</strong>. Until you pick one yourself it follows the result that would be added, by its country: Imperial for the United States and its territories, Liberia and Myanmar, Metric elsewhere, and the <a href="units-refresh.html">default units for new places</a> when the country is not known. Once you pick, your pick is saved with every place this window adds. Each place keeps its own units.</li>
     <li><strong>Add it:</strong> double-click a result, press Return or Space on the highlighted result, or click its <strong>Add</strong> button. Return in the name field adds the highlighted (or first) result. A place you already saved shows <strong>Added</strong>.</li>
 </ol>
 <p>The window closes after a successful add, and the new place is selected. <kbd>Esc</kbd> closes the window without adding. There is no map to pick a point on: to save an exact spot, type its coordinates.</p>
+<p>With an empty list, the first page suggests a few cities to add with one click. Its units menu works the same way for them: it is labelled <strong>Units for</strong> and the city under the pointer or keyboard focus (the first city when neither is on one), and follows that city's country until you pick. A pick there is not carried into the Add a city window.</p>
 
 <h3>How the search works</h3>
 <ul>
@@ -67,8 +70,9 @@
 </table>
 
 <h2>The sidebar</h2>
-<p>Each row shows the condition icon, the name (or your Location Name), the region ("State, Country"), a rain hint, and the temperature. The rain hint is the first of: <em>Raining until 3:30 PM</em>, <em>Raining now</em>, <em>Rain in 25 min</em>, <em>Rain starting now</em>, <em>Rain at 4 PM</em>, <em>Rain tomorrow, 4 PM</em>, <em>Rain Friday, 4 PM</em>, <em>Rain expected</em>, <em>Showers possible</em>, <em>Dry for 48 h</em>; or <em>Loading…</em>, <em>Can't load forecast</em>, <em>Offline</em>, <em>No data yet</em>, <em>No rain data</em>. When a nearby station reports precipitation while the forecast says dry, the hint says so (for example <em>Light rain now</em>).</p>
+<p>Each row shows the condition icon, the name (or your Location Name), the region ("State, Country"), a rain hint, and the temperature with its unit in the place's own units (for example <strong>77°F</strong> beside a place in <strong>18°C</strong>). The rain hint is the first of: <em>Raining until 3:30 PM</em>, <em>Raining now</em>, <em>Rain in 25 min</em>, <em>Rain starting now</em>, <em>Rain at 4 PM</em>, <em>Rain tomorrow, 4 PM</em>, <em>Rain Friday, 4 PM</em>, <em>Rain expected</em>, <em>Showers possible</em>, <em>Dry for 48 h</em>; or <em>Loading…</em>, <em>Can't load forecast</em>, <em>Offline</em>, <em>No data yet</em>, <em>No rain data</em>. When a nearby station reports precipitation while the forecast says dry, the hint says so (for example <em>Light rain now</em>).</p>
 <p>An orange pill marks a row whose forecast is <strong>Offline</strong>, <strong>Stale</strong> (the last refresh failed) or <strong>Updating…</strong>; offline and stale rows are dimmed. Hover over a row for the full place name.</p>
+<p>A <strong>warning triangle</strong> after the name marks a place with an official alert in force. Its colour is the highest level among them (red, orange, yellow; light blue for minor, white for an unknown level), and a number beside it counts the alerts when there is more than one. VoiceOver reads the alerts with the row, for example "Alert: Tornado Warning (red)". See <a href="weather-alerts.html">Weather Alerts</a>.</p>
 
 <h3>Selecting, reordering and removing</h3>
 <ul>

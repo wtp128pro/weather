@@ -52,19 +52,34 @@ public enum HTTPPolicy {
     /// An Expires more than this far ahead of now is implausible, seconds (EXPIRES_MAX_AHEAD_S).
     public static let expiresMaxAheadS: Int64 = 86_400
 
-    /// The project User-Agent used by all four production clients
-    /// (providers/openmeteo/wx-openmeteo.c:17, nws/wx-nws.h:70, metno/wx-metno.h:146).
+    /// The project User-Agent of the C app's four production clients
+    /// (providers/openmeteo/wx-openmeteo.c:17, nws/wx-nws.h:70, metno/wx-metno.h:146);
+    /// the Bright Sky and ECCC clients send it too.
     public static let userAgent = "weather-app/0.1 (github.com/wtp128pro/weather)"
     /// The only content coding offered (wx-http.c:1581).
     public static let acceptEncoding = "gzip"
     /// Hosts that may be reached over plain http (wx-http.c:192-193).
     public static let loopbackHosts: [String] = ["127.0.0.1", "::1", "localhost"]
-    /// The four production hosts (non-goal: no other host is contacted). Informational only:
-    /// like C's WxHttp, this policy accepts any https base URL that passes host_is_acceptable;
-    /// the providers pin these hosts through their fixed base-URL constants.
+    /// The C app's four production hosts, then the MeteoAlarm feed host (not the complete set:
+    /// the Bright Sky, ECCC, air-quality and station-network providers pin further hosts).
+    /// Informational only: like C's WxHttp, this policy accepts any https base URL that passes
+    /// host_is_acceptable; the providers pin these hosts through their fixed base-URL constants.
     public static let productionHosts: [String] = [
         "api.open-meteo.com", "geocoding-api.open-meteo.com", "api.weather.gov", "api.met.no",
+        meteoAlarmHost,
     ]
+    /// The host of MeteoAlarm's keyless country feeds (api/v1/warnings/feeds-<slug>), the only
+    /// host whose answers may exceed maxBodyBytes: a feed holds every warning of its country of
+    /// about the last five days (feeds-switzerland: 9 115 185 bytes on 2026-10-26).
+    public static let meteoAlarmHost = "feeds.meteoalarm.org"
+    /// Body cap of meteoAlarmHost AFTER content decoding, bytes (16 MiB; AlertsService.feedMaxBytes).
+    public static let meteoAlarmMaxBodyBytes = 16 * 1024 * 1024
+
+    /// The decoded-body cap of a client pinned to `host`: meteoAlarmMaxBodyBytes for
+    /// meteoAlarmHost (host names compare without case), maxBodyBytes for every other host.
+    public static func maxBodyBytes(host: String) -> Int {
+        host.lowercased() == meteoAlarmHost ? meteoAlarmMaxBodyBytes : maxBodyBytes
+    }
     /// Lower-cased header names a request may carry on the wire (net/test-http.c:2005-2006);
     /// "if-modified-since" is added only when a validator is sent.
     public static let allowedRequestHeaderNames: Set<String> = [
@@ -337,11 +352,12 @@ public enum HTTPPolicy {
 
     /// host_is_acceptable: 1...253 bytes; an IPv6 literal (contains ':') of hex digits, ':' and
     /// '.', or dot-separated labels of 1...63 ASCII letters, digits and '-', none starting or
-    /// ending with '-', no trailing dot.
+    /// ending with '-', no trailing dot. Unlike C, the IPv6 case must also be an IP address, so
+    /// a %-encoded ':' name ("https://a%3Ab") is refused here, not bracketed into "[a:b]".
     static func hostIsAcceptable(_ host: [UInt8]) -> Bool {
         if host.isEmpty || host.count > hostMaxBytes { return false }
         if host.contains(0x3A) {
-            return host.allSatisfy { GURI.isHex($0) || $0 == 0x2E || $0 == 0x3A }
+            return GURI.isIPAddress(host) && host.allSatisfy { GURI.isHex($0) || $0 == 0x2E || $0 == 0x3A }
         }
         var labelLength = 0
         var previous: UInt8 = 0

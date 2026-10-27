@@ -1,0 +1,35 @@
+{
+  "python": "3.15.1",
+  "script": "scripts/alerts/build_meteoalarm_regions.py",
+  "inputs": [
+    {
+      "file": "MeteoAlarm_Geocodes_2026_07_31.json",
+      "url": "https://gitlab.com/meteoalarm-pm-group/documents/-/raw/master/MeteoAlarm_Geocodes_2026_07_31.json",
+      "sha256": "41ff77fc08cff6b0c8b3f8d56c66f02796b762c3415432a3704b6ca77a8c1ad6",
+      "bytes": 33252745
+    },
+    {
+      "file": "NUTS_RG_03M_2013_4326_LEVL_3.geojson",
+      "url": "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_03M_2013_4326_LEVL_3.geojson",
+      "sha256": "a860545eb4e3afcd22b6f921bdede3e16a7e20778435ff1c9eceae4e05678120",
+      "bytes": 9917062
+    },
+    {
+      "file": "NUTS_RG_03M_2013_4326_LEVL_2.geojson",
+      "url": "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_03M_2013_4326_LEVL_2.geojson",
+      "sha256": "77fa4c28b970a0e5afeba9a44ee23cc872627441e039668cf498a4412c87444f",
+      "bytes": 5909750
+    },
+    {
+      "file": "NUTS_RG_03M_2021_4326_LEVL_3.geojson",
+      "url": "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/NUTS_RG_03M_2021_4326_LEVL_3.geojson",
+      "sha256": "5a5a6cc672c3bc50b51a8d6b9605760dd26322f894624042872fdb9702a50ea4",
+      "bytes": 7100768
+    }
+  ],
+  "output": {
+    "file": "WeatherCore/Resources/MeteoAlarmRegions.json",
+    "bytes": 2723008,
+    "sha256": "1ff49059a29e40f1a041657ba7d5d562b347f8b0355042ef8ddd634e1a0db6ef"
+  }
+}

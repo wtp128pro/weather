@@ -147,7 +147,8 @@ public struct RainChartData: Sendable, Equatable {
                   zone: zone)
     }
 
-    /// The window over hand-built arrays (any order, any values: the range checks of
+    /// The window over hand-built arrays (ascending tS order: the scan stops at the
+    /// first entry past the window, as in C; any values: the range checks of
     /// build_window are applied here as in C).
     public init(hours: [WxBlendHour], quarters: [WxQuarter], units: WxUnits, nowS: Int64, view: View,
                 zone: WxFormat.Zone) {
@@ -204,7 +205,7 @@ public struct RainChartData: Sendable, Equatable {
         return WxFormat.precip(mmh, units: units) + "/h"
     }
 
-    /// Compact numeric value for a bar callout on the canvas (e.g. `"0.06 in"` or `"1.5 mm"`).
+    /// Compact numeric value for a bar callout on the canvas: the bar's rate (e.g. `"0.06 in/h"` or `"1.5 mm/h"`).
     public func compactBarLabel(forSlot slot: Int) -> String? {
         guard rateMmH.indices.contains(slot) else { return nil }
         let mmh = rateMmH[slot]

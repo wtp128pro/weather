@@ -3,18 +3,29 @@
 //
 // HelpBookTests.swift - the Help Book states what the code does: the weight
 // tables of the Data Sources & Weights page are WxWeights' (the page is read
-// from the source tree; scripts/help/weight_tables.py rebuilds the tables).
+// from the source tree; scripts/help/weight_tables.py rebuilds the tables),
+// every page carries its own <title>, and the weights prose matches the
+// Canada profile.
 
 import Foundation
 import Testing
 @testable import WeatherCore
 
 @Suite struct HelpBookTests {
-    /// A page of the book in the source tree (the test bundle is unhosted, not inside the app).
+    /// The book's en.lproj in the source tree (the test bundle is unhosted, not inside the app).
+    static let lproj = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Weather/NeginatoMezora.help/Contents/Resources/en.lproj")
+
+    /// A page of the book in the source tree.
     static func page(_ name: String) throws -> String {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        let url = root.appendingPathComponent("Weather/NeginatoMezora.help/Contents/Resources/en.lproj/\(name)")
-        return try String(contentsOf: url, encoding: .utf8)
+        try String(contentsOf: lproj.appendingPathComponent(name), encoding: .utf8)
+    }
+
+    /// Python's html.escape, which regenerate.py applies to every title it writes.
+    static func escaped(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#x27;")
     }
 
     /// The hour that stands for each horizon band in the tables (H0 0-3 h, H1 3-18 h, H2 18-72 h, H3 72 h+).
@@ -55,5 +66,41 @@ import Testing
                 #expect(listed.contains("\(region)|\(d.id)") == used, "\(region) \(d.id)")
             }
         }
+    }
+
+    /// Every page's nav lists every title, so only the <title> element says which page a file is: each
+    /// page of toc.json has exactly its own, and no other page is bundled (_shell.html is the template).
+    @Test func everyPageHasItsOwnTitle() throws {
+        struct TOC: Decodable {
+            struct Page: Decodable { let href: String; let title: String }
+            struct Section: Decodable { let pages: [Page] }
+            let sections: [Section]
+        }
+        let toc = try JSONDecoder().decode(TOC.self, from: Data(Self.page("toc.json").utf8))
+        let pages = toc.sections.flatMap(\.pages)
+        let title = try Regex(#"<title>(.*?)</title>"#)
+        for p in pages {
+            let titles = try Self.page(p.href).matches(of: title).compactMap { $0.output[1].substring.map(String.init) }
+            #expect(titles == ["\(Self.escaped(p.title)) — Neginato Mezora Help"], "\(p.href)")
+        }
+        let bundled = try FileManager.default.contentsOfDirectory(atPath: Self.lproj.path)
+            .filter { $0.hasSuffix(".html") && $0 != "_shell.html" }
+        #expect(Set(bundled) == Set(pages.map(\.href)))
+    }
+
+    /// HRRR and NBM run in southern Canada and the Canada profile weighs them (U26-F5), so the page must
+    /// not say they weigh 0 outside the US.
+    @Test func canadaWeightsProseMatchesTheCode() throws {
+        for id in ["open-meteo:hrrr", "open-meteo:nbm"] {
+            let d = try #require(WxWeights.modelDescriptors.first { $0.id == id }, "\(id)")
+            #expect(Self.weights(d, .temp, .canada).contains { $0 > 0 }, "\(id)")
+        }
+        let html = try Self.page("sources-weights.html")
+        #expect(!html.contains("Models that only run in the US (NWS, HRRR, NBM) weigh 0 elsewhere"))
+        #expect(html.contains("weigh 0 elsewhere: NWS outside the US, HRRR and NBM outside the US and southern Canada;"))
+        // The claim itself, not only the sentences: the page says "weigh 0" exactly once (the
+        // corrected sentence), so a contradicting sentence beside it ("HRRR and NBM weigh 0
+        // outside the US") is caught too (U66 verifier handoff).
+        #expect(html.components(separatedBy: "weigh 0 ").count == 2)
     }
 }

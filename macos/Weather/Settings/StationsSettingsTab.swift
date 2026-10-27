@@ -34,6 +34,12 @@ struct StationsSettingsTab: View {
 
 /// The texts of the Stations tab (the Help Book quotes them).
 enum StationsSettingsText {
+    /// The units the tab formats with: the selected place's own units (the °F/°C the toolbar
+    /// shows), else the default units for new places when there is no place.
+    static func units(of appModel: AppModel) -> WxUnits {
+        appModel.selectedPlace?.units ?? appModel.defaultUnits
+    }
+
     /// "5 min ago", "just now", "2 h ago".
     static func ago(_ ageS: Int64) -> String {
         let text = WxFormat.updated(ageS: max(0, ageS))
@@ -149,6 +155,7 @@ private struct LocalCorrectionsSection: View {
     var body: some View {
         let corrections = appModel.localCorrections
         let enabled = appModel.stationSettings.localCorrectionsEnabled
+        let units = StationsSettingsText.units(of: appModel)
         Section {
             Toggle(isOn: Binding(
                 get: { appModel.stationSettings.localCorrectionsEnabled },
@@ -158,7 +165,7 @@ private struct LocalCorrectionsSection: View {
                     Text("Correct forecasts with what nearby stations measure")
                     Text("For each place and hour of the day, the app learns how far the models run from close, "
                         + "fresh station readings, and shifts the forecast temperatures (and feels-like, highs and "
-                        + "lows) by up to \(StationsSettingsText.delta(WxLocalBias.maxCorrectionC, units: appModel.units)). "
+                        + "lows) by up to ±\(StationsSettingsText.amount(WxLocalBias.maxCorrectionC, units: units)). "
                         + "Learning continues while this is off.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -170,7 +177,7 @@ private struct LocalCorrectionsSection: View {
             }
             ForEach(corrections) { c in
                 LocalCorrectionRow(
-                    correction: c, units: appModel.units, applied: enabled, nowS: appModel.displayNowS,
+                    correction: c, units: units, applied: enabled, nowS: appModel.displayNowS,
                     onReset: { appModel.resetLocalCorrections(key: c.key) })
             }
         } header: {
@@ -234,7 +241,8 @@ private struct LocalCorrectionRow: View {
                     .accessibilityLabel("Reset the learned corrections of \(correction.place.label)")
             }
             if correction.samples > 0 {
-                HourlyCorrectionBars(hours: correction.hours, units: units, nowS: nowS, dimmed: !applied)
+                HourlyCorrectionBars(hours: correction.hours, units: units, nowS: nowS,
+                                     timeZone: correction.place.timezone, dimmed: !applied)
             }
         }
         .padding(.vertical, 3)
@@ -247,16 +255,26 @@ private struct HourlyCorrectionBars: View {
     let hours: [AppModel.LocalCorrection.Hour]
     let units: WxUnits
     let nowS: Int64
+    /// The place's zone (WxPlace.timezone), whose clock hour of nowS is the bar marked now.
+    let timeZone: String
     let dimmed: Bool
 
     private static let halfHeight: CGFloat = 16
 
+    /// The local clock hour of `nowS` in `timeZone`, as AppModel.localCorrections reads the zone.
+    static func localHour(_ nowS: Int64, timeZone: String) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timeZone) ?? TimeZone(secondsFromGMT: 0) ?? .current
+        return calendar.component(.hour, from: Date(timeIntervalSince1970: TimeInterval(nowS)))
+    }
+
     var body: some View {
         let scale = max(1.0, hours.map { abs($0.correctionC) }.max() ?? 1.0)
+        let nowHour = Self.localHour(nowS, timeZone: timeZone)
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 2) {
                 ForEach(hours, id: \.hour) { h in
-                    bar(h, scale: scale)
+                    bar(h, scale: scale, nowHour: nowHour)
                 }
             }
             .frame(height: Self.halfHeight * 2)
@@ -277,8 +295,10 @@ private struct HourlyCorrectionBars: View {
         .accessibilityLabel(accessibilitySummary)
     }
 
-    private func bar(_ h: AppModel.LocalCorrection.Hour, scale: Double) -> some View {
-        let isNow = nowS >= h.tS - 1800 && nowS < h.tS + 1800
+    private func bar(_ h: AppModel.LocalCorrection.Hour, scale: Double, nowHour: Int) -> some View {
+        // By the place's clock hour, not ±30 min around tS: those windows left the hour a
+        // fall-back day repeats unmarked. A skipped hour (tS 0) is never now.
+        let isNow = h.tS != 0 && h.hour == nowHour
         let height = CGFloat(abs(h.correctionC) / scale) * Self.halfHeight
         return ZStack {
             if abs(h.correctionC) >= 0.05 {
@@ -436,7 +456,7 @@ private struct NetworkRow: View {
                         .foregroundStyle(left <= 0 ? Color.red : (left < 14 * 86_400 ? Color.orange : Color.secondary))
                 }
                 Spacer()
-                Button("Replace…") { replacing = true; draft = "" }
+                Button("Replace…") { replacing = true; draft = ""; saveFailed = false }
                     .controlSize(.small)
                 Button("Remove") { store.setKey(nil, for: network) }
                     .controlSize(.small)
@@ -451,7 +471,7 @@ private struct NetworkRow: View {
                     .controlSize(.small)
                     .disabled(StationKeys.normalized(draft) == nil)
                 if replacing {
-                    Button("Cancel") { replacing = false; draft = "" }
+                    Button("Cancel") { replacing = false; draft = ""; saveFailed = false }
                         .controlSize(.small)
                 }
             }
@@ -495,6 +515,7 @@ private struct NearbyStationsSection: View {
     var body: some View {
         let place = appModel.selectedPlace?.place
         let stations = place.map { store.nearbyStations(lat: $0.lat, lon: $0.lon) } ?? []
+        let units = StationsSettingsText.units(of: appModel)
         Section {
             if place == nil {
                 Text("Select a place to see its stations.")
@@ -504,7 +525,7 @@ private struct NearbyStationsSection: View {
                     .foregroundStyle(.secondary)
             }
             ForEach(showAll ? stations : Array(stations.prefix(Self.shortList))) { s in
-                StationRow(station: s, units: appModel.units, nowS: appModel.displayNowS)
+                StationRow(station: s, units: units, nowS: appModel.displayNowS)
             }
             if stations.count > Self.shortList {
                 Button(showAll ? "Show Fewer" : "Show All \(stations.count) Stations") { showAll.toggle() }

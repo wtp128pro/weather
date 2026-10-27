@@ -9,8 +9,10 @@
 // (U11), the daily summary WxDaily.build (U16, called as wx-blend.c:797 does),
 // the nowcast WxNowcast (Nowcast.swift).
 //
-// Pure: no I/O, no global state, no locale or local time zone use; all time
-// handling is in Int64 UTC unix seconds. Deterministic.
+// No I/O, no locale or local time zone use; all time handling is in Int64
+// UTC unix seconds. The one global state read is WxWeights.activeMultipliers
+// (the Settings weight multipliers; all 1.0, the C table, by default), so the
+// result is deterministic for a given set of multipliers.
 //
 // Kept bit for bit with the C code (do not "simplify"): the member order
 // (argument order, first (source, model) wins, at most 128), the gather order
@@ -277,6 +279,11 @@ public enum WxBlend {
         /// It gave a value to the current bucket.
         var contributed: [Bool]
         var hoursContributed: [Int]
+        /// The weight of each member, variable and horizon class
+        /// (WxWeights.horizonClass), looked up on first use: the same for every
+        /// hour of the class, so one lookup stands for the per-value calls of
+        /// gather (wx-blend.c:561-585) with identical results.
+        var weights: [Double?]
 
         init(_ members: [WxMember]) {
             self.members = members
@@ -285,6 +292,7 @@ public enum WxBlend {
             current = [Int?](repeating: nil, count: members.count)
             contributed = [Bool](repeating: false, count: members.count)
             hoursContributed = [Int](repeating: 0, count: members.count)
+            weights = [Double?](repeating: nil, count: members.count * WxVar.count * WxWeights.horizonClassCount)
         }
     }
 
@@ -380,6 +388,7 @@ public enum WxBlend {
     ) -> (values: [Double], weights: [Double]) {
         var values: [Double] = []
         var weights: [Double] = []
+        let horizonClass = WxWeights.horizonClass(horizonH)
         for i in s.members.indices {
             guard let c = s.current[i] else {
                 continue
@@ -391,13 +400,20 @@ public enum WxBlend {
             if !WxLimits.valueInRange(v, field.lo, field.hi) {
                 continue
             }
-            let w = useRegionalProfile
-                ? WxWeights.weight(
-                    sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
-                    horizonH: horizonH, region: region)
-                : WxWeights.weight(
-                    sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
-                    horizonH: horizonH, usRegion: usRegion)
+            let slot = (i * WxVar.count + field.variable.rawValue) * WxWeights.horizonClassCount + horizonClass
+            let w: Double
+            if let known = s.weights[slot] {
+                w = known
+            } else {
+                w = useRegionalProfile
+                    ? WxWeights.weight(
+                        sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
+                        horizonH: horizonH, region: region)
+                    : WxWeights.weight(
+                        sourceID: s.members[i].sourceID, modelID: s.members[i].modelID, variable: field.variable,
+                        horizonH: horizonH, usRegion: usRegion)
+                s.weights[slot] = w
+            }
             if !(w > 0.0) {
                 continue
             }

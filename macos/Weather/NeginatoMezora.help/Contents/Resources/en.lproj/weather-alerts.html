@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="AppleTitle" content="Neginato Mezora Help">
+    <title>Weather Alerts — Neginato Mezora Help</title>
+    <link rel="stylesheet" href="book.css">
+    <link rel="stylesheet" href="help-ui.css">
+</head>
+<body>
+    <div class="help-layout">
+        <aside class="help-sidebar">
+            <div class="brand">⛅ Neginato Mezora Help</div>
+            <input id="help-search" class="search-input" type="search" placeholder="Search documentation…">
+            <div id="search-results" class="search-results"></div>
+            <nav>
+                <div class="nav-section">Getting Started</div>
+<a class="nav-link" href="index.html">Welcome to Neginato Mezora</a>
+<a class="nav-link" href="places.html">Adding &amp; Managing Places</a>
+<a class="nav-link" href="forecast-page.html">Reading the Forecast</a>
+<a class="nav-link" href="rain-chart.html">Rain Graph &amp; Bars Guide</a>
+<a class="nav-link active" href="weather-alerts.html">Weather Alerts</a>
+<a class="nav-link" href="units-refresh.html">Units, Refreshing &amp; Offline</a>
+<a class="nav-link" href="shortcuts.html">Keyboard Shortcuts &amp; Menus</a>
+<div class="nav-section">Settings</div>
+<a class="nav-link" href="sources-weights.html">Settings: Data Sources &amp; Weights</a>
+<a class="nav-link" href="stations-settings.html">Settings: Stations</a>
+<a class="nav-link" href="station-keys.html">Free Keys for More Stations</a>
+<div class="nav-section">How It Works</div>
+<a class="nav-link" href="local-corrections.html">Learned Local Corrections</a>
+<a class="nav-link" href="live-stations.html">Live Station Observations</a>
+<a class="nav-link" href="algorithms.html">Ensemble Blending &amp; Citations</a>
+<div class="nav-section">Reference</div>
+<a class="nav-link" href="privacy.html">Privacy, Data &amp; Storage</a>
+<a class="nav-link" href="troubleshooting.html">Troubleshooting &amp; FAQ</a>
+            </nav>
+        </aside>
+        <main class="help-main">
+            <h1>Weather Alerts</h1>
+<p>Neginato Mezora shows the official weather warnings in force for each saved place, as the issuer published them. The app does not make up, forecast or re-rate alerts, and it does not send notifications: alerts are shown only in the window, on the forecast page and in the sidebar. No alert source needs a key or an account, and there is no setting for them.</p>
+
+<h2>Where alerts come from</h2>
+<p>Each place is served by exactly one source, chosen by its country:</p>
+<table>
+    <thead><tr><th>Source</th><th>Places</th><th>How a place is matched</th></tr></thead>
+    <tbody>
+        <tr><td><strong>National Weather Service</strong></td><td>United States, Puerto Rico, US Virgin Islands, Guam, American Samoa, Northern Mariana Islands and the US Minor Outlying Islands; a place without a country inside the NWS area</td><td>The NWS answers for the place's point. A point it calls out of bounds (for example Wake Island) reads <em>Alerts not available</em>.</td></tr>
+        <tr><td><strong>Deutscher Wetterdienst</strong> (via Bright Sky)</td><td>Germany</td><td>Bright Sky answers for the point; a point it does not cover reads <em>Alerts not available</em>.</td></tr>
+        <tr><td><strong>MET Norway</strong> (MetAlerts)</td><td>Norway (not Svalbard and Jan Mayen)</td><td>MET Norway answers for the point.</td></tr>
+        <tr><td><strong>Environment and Climate Change Canada</strong></td><td>Canada</td><td>The alert areas that contain the point.</td></tr>
+        <tr><td><strong>MeteoAlarm</strong></td><td>35 more countries in Europe, and Israel: Austria, Belgium, Bosnia and Herzegovina, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Greece, Hungary, Iceland, Ireland, Israel, Italy, Latvia, Lithuania, Luxembourg, Malta, Moldova, Montenegro, the Netherlands, North Macedonia, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland, Ukraine and the United Kingdom</td><td>The country's whole warning feed is downloaded (nothing about the place is sent) and matched in the app against each warning's own outline or the issuer's region outlines bundled with the app. In a country whose warnings name regions, a place outside every region its feed uses reads <em>Alerts not available</em>.</td></tr>
+    </tbody>
+</table>
+<p>Places in any other country read <em>Alerts not available</em>.</p>
+
+<h2>The Alerts card</h2>
+<p>On the forecast page, below <strong>Now</strong>, each alert in force gets a card, highest level first (then the earliest start):</p>
+<ul>
+    <li>The event name (for example <em>Tornado Warning</em>) and a badge with a warning triangle and its level: <strong>Red</strong>, <strong>Orange</strong>, <strong>Yellow</strong>, <strong>Minor</strong> or <strong>Unknown</strong>, drawn in the level's colour on a dark background. VoiceOver reads this line as the card's heading. The level is taken from the colour or severity the issuer gives.</li>
+    <li>The issuer's headline, then <em>Effective Today 3:00 PM</em> and <em>Expires Friday 6:00 AM</em>, in the place's time zone, when the issuer gives them.</li>
+    <li>The issuer's instructions, if any, and <strong>Details</strong>, which expands the full description.</li>
+    <li><em>Source: National Weather Service</em> (or the other issuer), linked to the issuer's page for the alert when it gives one.</li>
+</ul>
+<p>In the sidebar, a warning triangle after the place's name, coloured by the highest level, with the number of alerts when there is more than one. Both disappear when the alert expires or ends, without a new download.</p>
+
+<h2>What the card says when there is no alert to show</h2>
+<table>
+    <thead><tr><th>Text</th><th>Meaning</th></tr></thead>
+    <tbody>
+        <tr><td><em>Checking for alerts…</em> (with a spinner)</td><td>No answer has come yet for this place.</td></tr>
+        <tr><td><em>No active alerts</em></td><td>The source answered recently and has no alert in force for the place.</td></tr>
+        <tr><td><em>Alerts could not be checked right now.</em></td><td>The latest check failed (no network answer, a server error, an unreadable answer or one over the size limit) and there is no recent answer to show.</td></tr>
+        <tr><td><em>Alerts could not be checked recently.</em> <em>Last checked: Today 3:00 PM.</em></td><td>The newest answer is older than its source's window (30 minutes for MeteoAlarm, 10 minutes for the others), for example while offline or while the window is hidden. Its alerts are not shown as cards and the sidebar shows no warning sign, because they may no longer be current.</td></tr>
+        <tr><td><em>Alerts not available</em></td><td>No source covers the place.</td></tr>
+    </tbody>
+</table>
+<p>A <em>Source: …</em> line under the text names the issuer the place is routed to. A failed check does not hide alerts from an answer still within its window.</p>
+
+<h2>How often alerts are checked</h2>
+<ul>
+    <li>A place's alerts are checked only after one of its forecast refreshes completes (with a forecast or an error), never on their own timer and never while offline. They therefore follow the <a href="units-refresh.html">forecast refresh</a>: while the window is visible, about every 10 minutes, and with <kbd>⌘R</kbd>.</li>
+    <li><strong>MeteoAlarm:</strong> a country's feed is downloaded at most once every 30 minutes, shared by every place in that country. A failed download is reused for 120 seconds, so the places of one country refreshed within that time cost one attempt; a later refresh tries again. The feed may be up to 16 MiB.</li>
+    <li><strong>NWS, Bright Sky, MET Norway, Environment Canada:</strong> an answer for a point is reused for 5 minutes, also by another place at the same point; a failed one is not reused. As its terms require, a MET Norway answer is reused until the expiry time it sends, and then asked for again with <code>If-Modified-Since</code>.</li>
+    <li>Shown alerts are checked against the clock: one that expires or ends disappears at that time (after the Mac wakes from sleep, within a minute), without a new download.</li>
+</ul>
+
+<h2>Limitations</h2>
+<ul>
+    <li><strong>Alert areas follow each issuer's published region shapes</strong>, which can differ from local boundaries near borders and coasts. In Ireland, MeteoAlarm's own county outlines put a few border towns in a neighbouring county: the centre of Waterford city lies in County Kilkenny's outline, and Youghal, Carrick-on-Shannon and Killaloe likewise lie in a neighbouring county's. A warning for their own county may not reach them, while a neighbour's does.</li>
+    <li><strong>Coastal places and islands</strong> outside the land outlines (for example Howth, Bray, Greystones, Malahide, Tory Island and Cape Clear) are reached only by marine warnings, or read <em>Alerts not available</em>.</li>
+    <li><strong>An old answer is hidden, not shown as current.</strong> When alerts could not be checked for longer than the source's window, you see <em>Alerts could not be checked recently</em> and no warning sign, although an alert may still be in force. Check the issuer's website in that case.</li>
+    <li>If a MeteoAlarm download fails during a long refresh round (many places on a slow network), the feed can be downloaded once more for every further 120 seconds of that round.</li>
+    <li>The app shows what the issuers publish. For your safety, follow the instructions of your local authorities.</li>
+</ul>
+
+<h2>Credits</h2>
+<p>The same credits are listed under <strong>Weather alerts</strong> in About Neginato Mezora:</p>
+<ul>
+    <li>US alerts: NOAA/National Weather Service (<a href="https://www.weather.gov/documentation/services-web-api">api.weather.gov</a>), US government work, credited as a courtesy</li>
+    <li>German alerts: Deutscher Wetterdienst (DWD) via Bright Sky, under the <a href="https://www.dwd.de/EN/service/copyright/copyright_node.html">DWD Terms of Use</a></li>
+    <li>Norwegian alerts: MET Norway (MetAlerts), licensed <a href="https://api.met.no/doc/License">CC BY 4.0</a></li>
+    <li>Canadian alerts: Contains information licenced under the <a href="https://eccc-msc.github.io/open-data/licence/readme_en/">Data Server End-use Licence</a> of Environment and Climate Change Canada.</li>
+    <li>European alerts: MeteoAlarm. Data provided by EUMETNET members, licensed <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a></li>
+    <li>MeteoAlarm regions: © EuroGeographics for the administrative boundaries</li>
+</ul>
+        </main>
+    </div>
+    <script src="search-index.js"></script>
+    <script src="help.js"></script>
+</body>
+</html>

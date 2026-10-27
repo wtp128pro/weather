@@ -629,7 +629,7 @@ import Testing
     @Test func aboutFieldsVerbatim() throws {
         // C: /window/sources/about-dialog (show_about, src/ui/wx-window.c:672-678)
         #expect(AboutInfo.programName == "Neginato Mezora")  // wx-window.c:672
-        #expect(AboutInfo.version == "0.3.0")  // meson.build:3 (WX_APP_VERSION, src/ui/meson.build:52)
+        #expect(AboutInfo.version == "0.4.0")  // MARKETING_VERSION (C: WX_APP_VERSION, src/ui/meson.build:52)
         #expect(AboutInfo.comments
                 == "Weather forecasts from several free sources, with the rain you can expect and when.")  // wx-window.c:673-675
         #expect(Array(AboutInfo.copyright.utf8)
@@ -683,5 +683,31 @@ import Testing
         vm.setForecast(try forecast([("b", .ok, nil, 2)]))  // ignored: follows the selection
         #expect(vm.rows[1].status == "No forecast loaded yet")
         withExtendedLifetime(dir) {}
+    }
+
+    // MARK: - Alert credits
+
+    /// Every alert source is credited with the attribution its terms ask for, each link is an
+    /// acceptable https URL, and the EuroGeographics notice of the region boundaries closes the list.
+    @Test func creditsAlertSources() throws {
+        let credits = SourcesViewModel.alertCredits
+        #expect(credits.count == WxAlert.Source.allCases.count + 1)
+        let text = credits.map(\.text)
+        func credit(_ source: WxAlert.Source) -> String { SourcesViewModel.alertCredit(source).text }
+        #expect(credit(.nws).contains("NOAA/National Weather Service"))
+        #expect(credit(.dwd).contains("Deutscher Wetterdienst (DWD) via Bright Sky"))
+        #expect(credit(.metNorway).contains("MET Norway"))
+        #expect(SourcesViewModel.alertCredit(.metNorway).link?.text == "CC BY 4.0")
+        #expect(credit(.eccc).contains(
+            "Contains information licenced under the Data Server End-use Licence of Environment and Climate "
+                + "Change Canada."))
+        #expect(credit(.meteoAlarm).contains("Data provided by EUMETNET members"))
+        #expect(SourcesViewModel.alertCredit(.meteoAlarm).link?.text == "CC BY 4.0")
+        #expect(text.last == "MeteoAlarm regions: \u{00A9} EuroGeographics for the administrative boundaries")
+        for source in WxAlert.Source.allCases {
+            let link = try #require(SourcesViewModel.alertCredit(source).link)
+            #expect(SourcesViewModel.isAcceptableURL(bytes: Array(link.urlString.utf8)), "\(source)")
+            #expect(text.contains(credit(source)))
+        }
     }
 }

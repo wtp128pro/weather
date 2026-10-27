@@ -329,4 +329,54 @@ private func sunUpMinutes(_ lat: Double, _ lon: Double, _ dayStart: Int64) -> In
         #expect(sunUpMinutes(-89.0001, 0.0, dec) == 0)
         #expect(sunUpMinutes(-90.0, 0.0, dec) == 0)
     }
+
+    // Swift-only (no C case): WxGeo.defaultUnits, the add-place units preselection.
+    @Test func defaultUnitsImperialCodes() {
+        for code in ["US", "PR", "GU", "VI", "AS", "MP", "UM", "LR", "MM"] {
+            #expect(WxGeo.defaultUnits(countryCode: code, fallback: .metric) == .imperial, "\(code)")
+            #expect(WxGeo.defaultUnits(countryCode: code.lowercased(), fallback: .metric) == .imperial, "\(code)")
+        }
+        #expect(WxGeo.defaultUnits(countryCode: "Us", fallback: .metric) == .imperial)
+        #expect(WxGeo.defaultUnits(countryCode: "mM", fallback: .metric) == .imperial)
+    }
+
+    @Test func defaultUnitsMetricElsewhere() {
+        // neighbours of the imperial codes (CA, MX, BS, CU), near-miss spellings
+        // (UA, UG, UY, LI, LU, MY, MN), "UK" and a well-formed unassigned "ZZ"
+        let metric = [
+            "CA", "MX", "BS", "CU", "GB", "UK", "IE", "DE", "FR", "NL", "JP", "AU", "NZ", "IN", "BR", "TH", "SL",
+            "UA", "UG", "UY", "LI", "LU", "MY", "MN", "ZZ",
+        ]
+        for code in metric {
+            #expect(WxGeo.defaultUnits(countryCode: code, fallback: .imperial) == .metric, "\(code)")
+            #expect(WxGeo.defaultUnits(countryCode: code.lowercased(), fallback: .imperial) == .metric, "\(code)")
+        }
+        // Exhaustive (U59 verifier handoff): of all 676 two-letter codes AA-ZZ, in either case,
+        // exactly these nine are imperial, so a code added to the list (e.g. FM, MH, PW) is caught.
+        let imperial: Set<String> = ["US", "PR", "GU", "VI", "AS", "MP", "UM", "LR", "MM"]
+        let letters = (UInt8(ascii: "A")...UInt8(ascii: "Z")).map { String(UnicodeScalar($0)) }
+        var found: Set<String> = []
+        for a in letters {
+            for b in letters {
+                let code = a + b
+                for spelling in [code, code.lowercased()] where WxGeo.defaultUnits(countryCode: spelling, fallback: .metric) == .imperial {
+                    found.insert(code)
+                }
+                #expect(WxGeo.defaultUnits(countryCode: code, fallback: .imperial) == (imperial.contains(code) ? .imperial : .metric),
+                        "\(code)")
+            }
+        }
+        #expect(found == imperial)
+    }
+
+    @Test func defaultUnitsFallbackForEmpty() {
+        // empty, wrong length, padded, digits, punctuation, non-ASCII, and a long s
+        // that uppercased() would fold to "US"
+        let malformed = ["", "U", "USA", " US", "US ", "U1", "12", "--", "\u{DC}S", "\u{DF}", "u\u{17F}"]
+        for fallback in WxUnits.allCases {
+            for code in malformed {
+                #expect(WxGeo.defaultUnits(countryCode: code, fallback: fallback) == fallback, "\(code.debugDescription)")
+            }
+        }
+    }
 }

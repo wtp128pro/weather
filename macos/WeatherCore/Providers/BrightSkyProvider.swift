@@ -115,6 +115,12 @@ public final class BrightSkyProvider: WxProvider {
         }
         var member = try WxMember(sourceID: providerID, modelID: modelID, fetchedS: fetchedS)
         var lastTS: Int64 = -1
+        // A record's precipitation and its probability cover the hour BEFORE its timestamp
+        // (Bright Sky WeatherRecord: "during previous 60 minutes"), so they go in bucket
+        // T - 3600, merged into the previous record's bucket when that is T - 3600, as
+        // OpenMeteoParse.buildMember does; every other field stays in bucket T.
+        var open = WxHour()
+        var haveOpen = false
 
         for node in weather {
             guard case .object(let entry) = node else { continue }
@@ -123,11 +129,12 @@ public final class BrightSkyProvider: WxProvider {
                   tS % 3600 == 0, tS > lastTS else {
                 continue
             }
+            var precip = WxHour(tS: tS - 3600)
+            precip.precipMm = numberInRange(entry, "precipitation", 0.0, WxLimits.precipMaxMmH)
+            precip.precipProb = numberInRange(entry, "precipitation_probability", WxLimits.percentMin, WxLimits.percentMax)
             var hour = WxHour(tS: tS)
             hour.tempC = numberInRange(entry, "temperature", WxLimits.tempMinC, WxLimits.tempMaxC)
             hour.humidityPct = numberInRange(entry, "relative_humidity", WxLimits.percentMin, WxLimits.percentMax)
-            hour.precipMm = numberInRange(entry, "precipitation", 0.0, WxLimits.precipMaxMmH)
-            hour.precipProb = numberInRange(entry, "precipitation_probability", WxLimits.percentMin, WxLimits.percentMax)
             hour.cloudPct = numberInRange(entry, "cloud_cover", WxLimits.percentMin, WxLimits.percentMax)
             hour.windKmh = numberInRange(entry, "wind_speed", 0.0, WxLimits.windMaxKmh)
             hour.gustKmh = numberInRange(entry, "wind_gust_speed", 0.0, WxLimits.windMaxKmh)
@@ -141,17 +148,32 @@ public final class BrightSkyProvider: WxProvider {
             hour.wmo = mapConditionToWMO(
                 condition: entry.string("condition"),
                 icon: entry.string("icon"),
-                precipMm: hour.precipMm,
+                precipMm: precip.precipMm,
                 cloudPct: hour.cloudPct
             )
             let hasNumeric =
                 hour.tempC.isFinite || hour.feelsC.isFinite || hour.humidityPct.isFinite
-                || hour.precipMm.isFinite || hour.precipProb.isFinite || hour.cloudPct.isFinite
+                || precip.precipMm.isFinite || precip.precipProb.isFinite || hour.cloudPct.isFinite
                 || hour.windKmh.isFinite || hour.gustKmh.isFinite
             guard hasNumeric else { continue }
-            if member.addHour(hour) {
-                lastTS = tS
+            if haveOpen && open.tS == precip.tS {
+                open.precipMm = precip.precipMm
+                open.precipProb = precip.precipProb
+                member.addHour(open)
+            } else {
+                if haveOpen {
+                    member.addHour(open)
+                }
+                if precip.precipMm.isFinite || precip.precipProb.isFinite {
+                    member.addHour(precip)
+                }
             }
+            open = hour
+            haveOpen = true
+            lastTS = tS
+        }
+        if haveOpen {
+            member.addHour(open)
         }
 
         if member.hours.isEmpty {

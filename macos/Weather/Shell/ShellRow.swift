@@ -2,9 +2,12 @@
 // Copyright (C) 2026 wtp128pro
 //
 // ShellRow.swift - one sidebar row (WxRow, wx-row.c:1105-1180, style.css:6-49; ui-widgets.md §2
-// items 16-18): the 32 pt condition icon, the bold name, the region and the hint (0.85em,
-// opacity 0.7), the temperature (1.6em, weight 300, tabular digits) with the marker pill below,
-// and the flat "…" menu (Move up, Move down, Remove; always enabled, no confirmation). The row
+// items 16-18): the 32 pt condition icon, the bold name with the alert indicator after it (a
+// warning triangle coloured by the highest current alert level, with the count when there is more
+// than one, on a dark plate; not in the GTK row), the region and the hint (0.85em, opacity 0.7),
+// the temperature (1.6em, weight 300, tabular digits) and its unit suffix ("77°" "F", "—" "°F":
+// the place's own units) with the marker pill below, and the flat "…" menu (Move up,
+// Move down, Remove; always enabled, no confirmation). The row
 // is a MOVE-only drag source of its key and a drop target for one string (wx-row.c:1171-1179);
 // a hovering drop draws a 2 px #3584e4 line at the top. Every text comes from RowViewModel.
 
@@ -30,23 +33,24 @@ struct ShellRow: View {
         Self.symbolForPlace(row.place)
     }
 
+    /// The badge of a name's meaning, matched by whole words ("Mom's house", "Apt 4B"), first
+    /// match wins. A substring test badged places that merely contain a keyword: Munich and
+    /// Union Station as schools, Homestead as a home, Miami-Dade as family.
+    private static let badgeWords: [(symbol: String, words: Set<String>)] = [
+        ("house.fill", ["home", "homes", "homeoffice", "house", "houses", "apt", "apartment", "apartments"]),
+        ("briefcase.fill", ["work", "workplace", "office", "offices", "coworking"]),
+        ("person.2.fill", ["friend", "friends", "family", "mom", "moms", "mommy", "dad", "dads", "daddy",
+                           "granddad"]),
+        ("graduationcap.fill", ["school", "schools", "preschool", "highschool", "college", "uni", "university"]),
+        ("dumbbell.fill", ["gym", "gyms", "fitness"]),
+    ]
+
     static func symbolForPlace(_ place: WxPlace) -> String? {
         let lower = (!place.customName.isEmpty ? place.customName : (place.isCustomLocation ? place.name : "")).lowercased()
         if !lower.isEmpty {
-            if lower.contains("home") || lower.contains("house") || lower.contains("apt") {
-                return "house.fill"
-            }
-            if lower.contains("work") || lower.contains("office") {
-                return "briefcase.fill"
-            }
-            if lower.contains("friend") || lower.contains("family") || lower.contains("mom") || lower.contains("dad") {
-                return "person.2.fill"
-            }
-            if lower.contains("school") || lower.contains("college") || lower.contains("uni") {
-                return "graduationcap.fill"
-            }
-            if lower.contains("gym") || lower.contains("fitness") {
-                return "dumbbell.fill"
+            let words = Set(lower.split(whereSeparator: { !$0.isLetter }).map(String.init))
+            if let badge = badgeWords.first(where: { !$0.words.isDisjoint(with: words) }) {
+                return badge.symbol
             }
             if !place.customName.isEmpty {
                 return "tag.fill"
@@ -80,6 +84,9 @@ struct ShellRow: View {
                         .foregroundStyle(Color.white)
                         .lineLimit(1)
                         .truncationMode(.tail)
+                    if let indicator = row.alertIndicator {
+                        AlertIndicatorView(indicator: indicator, size: Self.baseSize * 0.9)
+                    }
                 }
                 .modifier(Self.SingleLine(maxChars: 24, minChars: 10, fontSize: Self.baseSize))
                 if row.isRegionVisible {
@@ -95,12 +102,21 @@ struct ShellRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 2) {
-                Text(row.temperature)
-                    .font(.system(size: Self.baseSize * 1.65, weight: .light, design: .rounded).monospacedDigit())
-                    .foregroundStyle(Color.white)
-                    .opacity(Self.temperatureOpacity(row))
-                    .lineLimit(1)
-                    .frame(minWidth: Self.charWidth(fontSize: Self.baseSize * 1.65) * 4, alignment: .trailing)
+                // The temperature in the place's own units and its suffix: "77°" "F" read as one
+                // "77°F" (no gap), "—" "°F" keep a gap (unitSuffix is then the unit label).
+                HStack(alignment: .firstTextBaseline, spacing: row.unitSuffix == row.unitLabel ? 2 : 0) {
+                    Text(row.temperature)
+                        .font(.system(size: Self.baseSize * 1.65, weight: .light, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
+                        .frame(minWidth: Self.charWidth(fontSize: Self.baseSize * 1.65) * 4, alignment: .trailing)
+                    Text(row.unitSuffix)
+                        .font(.system(size: Self.baseSize * 0.85, weight: .medium))
+                        .foregroundStyle(Color.white.opacity(0.86))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .opacity(Self.temperatureOpacity(row))
                 if row.isMarkerVisible {
                     Text(row.markerText)
                         .font(.system(size: Self.baseSize * 0.75, weight: .bold))
@@ -243,6 +259,57 @@ struct ShellRow: View {
                 .truncationMode(.tail)
                 .frame(minWidth: minChars * char, maxWidth: maxChars * char, alignment: .leading)
         }
+    }
+}
+
+/// The colour of an alert level (WxAlert.Level): the red / orange / yellow of the issuers' warning
+/// scales; minor (no colour from its issuer) and unknown are neutral. Always drawn with the
+/// warning symbol and a text, never as colour alone, and on `plate`.
+enum AlertLevelStyle {
+    /// The opaque dark slate the level colour is drawn on (the row's indicator, the card's level
+    /// badge): every level reads at 4.7:1 or more on it (WCAG relative luminance; red 4.72,
+    /// orange 7.79, yellow 11.42, minor 10.78, unknown 10.71), where on the row's or the card's
+    /// slate red alone fell to 1.3-1.7:1.
+    static let plate = Color(red: 0.11, green: 0.13, blue: 0.17)
+
+    static func color(_ level: WxAlert.Level) -> Color {
+        switch level {
+        case .red: Color(red: 1.00, green: 0.27, blue: 0.23)
+        case .orange: Color(red: 1.00, green: 0.62, blue: 0.04)
+        case .yellow: Color(red: 1.00, green: 0.84, blue: 0.04)
+        case .minor: Color(red: 0.62, green: 0.86, blue: 1.00)
+        case .unknown: Color.white.opacity(0.80)
+        }
+    }
+}
+
+/// A row's alert indicator (RowViewModel.alertIndicator): the warning triangle in the level's
+/// colour, then the count when there is more than one, on AlertLevelStyle.plate. The plate is a
+/// background drawn 3 pt beyond the indicator's frame (2 pt above and below), so it takes no
+/// layout: the name line keeps its height and the name its room. The row's accessibility label
+/// names the alerts, so the indicator itself is hidden from VoiceOver.
+private struct AlertIndicatorView: View {
+    let indicator: RowViewModel.AlertIndicator
+    let size: CGFloat
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: RowViewModel.AlertIndicator.symbolName)
+                .font(.system(size: size, weight: .semibold))
+            if let count = indicator.countText {
+                Text(count)
+                    .font(.system(size: size, weight: .bold).monospacedDigit())
+            }
+        }
+        .foregroundStyle(AlertLevelStyle.color(indicator.level))
+        .background {
+            Capsule()
+                .fill(AlertLevelStyle.plate)
+                .padding(.horizontal, -3)
+                .padding(.vertical, -2)
+        }
+        .fixedSize()
+        .accessibilityHidden(true)
     }
 }
 

@@ -309,6 +309,57 @@ public final class SourcesViewModel {
         }
     }
 
+    // MARK: - Alert sources (not in the C popover)
+
+    /// The heading of the alert credits, below the provider rows.
+    public nonisolated static let alertSourcesTitle = "Weather alerts"
+
+    /// The credit line of an official alert source, with the attribution its terms ask for:
+    /// NWS and Bright Sky ask none (US government work; "the DWD's Terms of Use apply"),
+    /// MET Norway and MeteoAlarm CC BY 4.0 with credit and link, ECCC its licence sentence
+    /// verbatim. Exhaustive, so a new WxAlert.Source cannot ship uncredited.
+    public nonisolated static func alertCredit(_ source: WxAlert.Source) -> TextLine {
+        switch source {
+        case .nws:
+            TextLine(
+                before: "US alerts: NOAA/National Weather Service (",
+                link: Link(text: "api.weather.gov", urlString: "https://www.weather.gov/documentation/services-web-api"),
+                after: "), US government work, credited as a courtesy")
+        case .dwd:
+            TextLine(
+                before: "German alerts: Deutscher Wetterdienst (DWD) via Bright Sky, under the ",
+                link: Link(text: "DWD Terms of Use", urlString: "https://www.dwd.de/EN/service/copyright/copyright_node.html"),
+                after: "")
+        case .metNorway:
+            TextLine(
+                before: "Norwegian alerts: MET Norway (MetAlerts), licensed ",
+                link: Link(text: "CC BY 4.0", urlString: "https://api.met.no/doc/License"), after: "")
+        case .eccc:
+            TextLine(
+                before: "Canadian alerts: Contains information licenced under the ",
+                link: Link(
+                    text: "Data Server End-use Licence",
+                    urlString: "https://eccc-msc.github.io/open-data/licence/readme_en/"),
+                after: " of Environment and Climate Change Canada.")
+        case .meteoAlarm:
+            TextLine(
+                before: "European alerts: MeteoAlarm. Data provided by EUMETNET members, licensed ",
+                link: Link(text: "CC BY 4.0", urlString: "https://creativecommons.org/licenses/by/4.0/"),
+                after: "")
+        }
+    }
+
+    /// The notice of the MeteoAlarm region geometry the app bundles (NUTS boundaries,
+    /// WeatherCore/Alerts/AlertRegions.swift).
+    public nonisolated static let alertBoundariesNotice =
+        "MeteoAlarm regions: \u{00A9} EuroGeographics for the administrative boundaries"
+
+    /// Every alert credit, in WxAlert.Source order, then the boundaries notice.
+    public nonisolated static var alertCredits: [TextLine] {
+        WxAlert.Source.allCases.map(alertCredit)
+            + [TextLine(before: alertBoundariesNotice, link: nil, after: "")]
+    }
+
     /// The row of one provider (add_row + set_attribution + set_licence,
     /// wx-sources.c:186-238, 515-560). The texts are read as C strings; nil is
     /// treated like "" (wx-sources.h:22-23).

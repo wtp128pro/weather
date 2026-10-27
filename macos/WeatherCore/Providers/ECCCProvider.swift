@@ -124,7 +124,7 @@ public final class ECCCProvider: WxProvider {
 
         // Pick the closest feature when multiple Citypage stations fall inside the bbox
         var bestProps: WxJSON.Object?
-        var bestDistKm = Double.greatestFiniteMagnitude
+        var bestDistKm = Double.infinity // stays infinite (no distance gate) unless a feature is measured
         for node in features {
             guard case .object(let feature) = node,
                   let props = feature.object("properties") else { continue }
@@ -248,7 +248,9 @@ public final class ECCCProvider: WxProvider {
             wmo = lower.contains("heavy") ? 75 : 71
             cloud = 90.0
         } else if lower.contains("rain") || lower.contains("showers") || lower.contains("drizzle") {
-            if lower.contains("drizzle") {
+            if lower.contains("freezing drizzle") {
+                wmo = lower.contains("heavy") ? 57 : 56
+            } else if lower.contains("drizzle") {
                 wmo = 51
             } else if lower.contains("heavy") {
                 wmo = 65

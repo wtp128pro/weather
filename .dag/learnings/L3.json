@@ -1,0 +1,20 @@
+{
+  "id": "L3",
+  "trigger": "Verifier private copies made with 'cp -cR … (exclude nothing)' carried 89 copies of the user's gitignored scripts/signing_credentials.sh, and work copies ~200 of Local.xcconfig (P8 whole-run verification).",
+  "lesson": "A full-tree copy of a user's repository picks up gitignored secrets and machine-local config; instructions that say 'exclude nothing' propagate that to every helper.",
+  "how_to_apply": "Make every private copy with an explicit exclude list for known secret/local files (rsync --exclude=scripts/signing_credentials.sh --exclude=Local.xcconfig …) and state it in the executor AND verifier guides; sweep the run dir for those names before cleanup.",
+  "scope": {
+    "applies_to": [
+      "tag:tests",
+      "tag:fix",
+      "tag:alerts",
+      "tag:ui",
+      "tag:docs",
+      "tag:integration"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: PROGRESS.md 2026-10-27 (89 copies deleted); VERIFIER_GUIDE.md corrected",
+  "since_wave": 11,
+  "promotable": true
+}

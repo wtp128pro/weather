@@ -23,11 +23,11 @@ INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.3.0</string>
+    <string>0.4.0</string>
     <key>CFBundleSignature</key>
     <string>hbwr</string>
     <key>CFBundleVersion</key>
-    <string>3</string>
+    <string>4</string>
     <key>HPDBookAccessPath</key>
     <string>index.html</string>
     <key>HPDBookTitle</key>
@@ -274,29 +274,23 @@ def render_shell(current_id: str, title: str, body_html: str) -> str:
 """
 
 
-def main() -> None:
-    CONTENTS_DIR.mkdir(parents=True, exist_ok=True)
-    EN_LPROJ.mkdir(parents=True, exist_ok=True)
-
-    (CONTENTS_DIR / "Info.plist").write_text(INFO_PLIST.strip() + "\n", encoding="utf-8")
-    (EN_LPROJ / "book.css").write_text(BOOK_CSS.strip() + "\n", encoding="utf-8")
-    (EN_LPROJ / "help-ui.css").write_text("/* Additional UI overrides */\n", encoding="utf-8")
-    (EN_LPROJ / "help.js").write_text(HELP_JS.strip() + "\n", encoding="utf-8")
-    (EN_LPROJ / "toc.json").write_text(
-        json.dumps({"sections": SECTIONS}, indent=2) + "\n", encoding="utf-8"
-    )
-    (EN_LPROJ / "_shell.html").write_text(
-        render_shell("__PAGE_ID__", "__PAGE_TITLE__", "__PAGE_BODY__"),
-        encoding="utf-8",
-    )
+def bundle_files() -> dict[Path, str]:
+    """Every file of the bundle and its contents; validate.py compares the bundle on disk with this."""
+    files = {
+        CONTENTS_DIR / "Info.plist": INFO_PLIST.strip() + "\n",
+        EN_LPROJ / "book.css": BOOK_CSS.strip() + "\n",
+        EN_LPROJ / "help-ui.css": "/* Additional UI overrides */\n",
+        EN_LPROJ / "help.js": HELP_JS.strip() + "\n",
+        EN_LPROJ / "toc.json": json.dumps({"sections": SECTIONS}, indent=2) + "\n",
+        EN_LPROJ / "_shell.html": render_shell("__PAGE_ID__", "__PAGE_TITLE__", "__PAGE_BODY__"),
+    }
 
     weight_tables = WEIGHT_TABLES.read_text(encoding="utf-8")
     search_index = []
     for page in all_pages():
         pid = page["id"]
         body = PAGE_BODIES[pid].replace(WEIGHT_TABLES_MARKER, weight_tables)
-        full_html = render_shell(pid, page["title"], body)
-        (EN_LPROJ / page["href"]).write_text(full_html, encoding="utf-8")
+        files[EN_LPROJ / page["href"]] = render_shell(pid, page["title"], body)
         search_index.append(
             {
                 "id": pid,
@@ -307,9 +301,16 @@ def main() -> None:
             }
         )
 
-    search_js = "window.HELP_SEARCH_INDEX = " + json.dumps(search_index, indent=2) + ";\n"
-    (EN_LPROJ / "search-index.js").write_text(search_js, encoding="utf-8")
-    print(f"Regenerated {len(search_index)} help pages in {EN_LPROJ}")
+    files[EN_LPROJ / "search-index.js"] = "window.HELP_SEARCH_INDEX = " + json.dumps(search_index, indent=2) + ";\n"
+    return files
+
+
+def main() -> None:
+    CONTENTS_DIR.mkdir(parents=True, exist_ok=True)
+    EN_LPROJ.mkdir(parents=True, exist_ok=True)
+    for path, text in bundle_files().items():
+        path.write_text(text, encoding="utf-8")
+    print(f"Regenerated {len(all_pages())} help pages in {EN_LPROJ}")
 
 
 if __name__ == "__main__":

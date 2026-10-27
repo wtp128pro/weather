@@ -597,14 +597,26 @@ import Testing
     func productionHosts() throws {
         // WX_OPEN_METEO_BASE_URL (wx-openmeteo.h:182), WX_OPEN_METEO_GEOCODING_BASE_URL (:184),
         // WX_NWS_BASE_URL (wx-nws.h:68), WX_METNO_BASE_URL (wx-metno.h:144).
+        // Then the MeteoAlarm feed host of the alert fetchers (WxAlertsFetchers.origin(of: .meteoAlarm)).
         let cBaseURLs = ["https://api.open-meteo.com", "https://geocoding-api.open-meteo.com",
-                         "https://api.weather.gov", "https://api.met.no"]
+                         "https://api.weather.gov", "https://api.met.no", "https://feeds.meteoalarm.org"]
         #expect(HTTPPolicy.productionHosts == ["api.open-meteo.com", "geocoding-api.open-meteo.com",
-                                               "api.weather.gov", "api.met.no"])
+                                               "api.weather.gov", "api.met.no", "feeds.meteoalarm.org"])
+        #expect(HTTPPolicy.productionHosts.count == cBaseURLs.count)
         for (host, base) in zip(HTTPPolicy.productionHosts, cBaseURLs) {
             let client = try HTTPClientPolicy(baseURL: base, userAgent: Self.ua)
             #expect(client.origin == "https://" + host)
         }
+        // The decoded-body cap: 16 MiB for the MeteoAlarm feed host alone (any case), the general
+        // 4 MiB for every other production host, alert host and loopback host.
+        #expect(HTTPPolicy.meteoAlarmHost == "feeds.meteoalarm.org")
+        #expect(HTTPPolicy.meteoAlarmMaxBodyBytes == 16 * 1024 * 1024)
+        for host in HTTPPolicy.productionHosts + ["api.brightsky.dev", "api.weather.gc.ca", "127.0.0.1",
+                                                  "meteoalarm.org", "feeds.meteoalarm.org.evil"] {
+            let cap = host == "feeds.meteoalarm.org" ? 16 * 1024 * 1024 : 4 * 1024 * 1024
+            #expect(HTTPPolicy.maxBodyBytes(host: host) == cap, "\(host)")
+        }
+        #expect(HTTPPolicy.maxBodyBytes(host: "Feeds.MeteoAlarm.ORG") == 16 * 1024 * 1024)
         // Informational only: like C's WxHttp the policy does not restrict hosts.
         #expect(throws: Never.self) { _ = try HTTPClientPolicy(baseURL: "https://example.org", userAgent: Self.ua) }
     }

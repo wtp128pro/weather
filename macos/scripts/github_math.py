@@ -74,15 +74,18 @@ def parse(text: str) -> list[str | Math]:
     while i < len(lines):
         fence = FENCE.fullmatch(lines[i])
         dollars = re.match(r"([ \t]*)\$\$(.*)", lines[i])
-        one_line = dollars is not None and dollars.group(2).rstrip().endswith("$$")
+        # One $$...$$ line only when no $$ sits between the outer pair; "$$a$$ prose $$b$$" is left to scan_inline.
+        one_line = dollars is not None and (rest := dollars.group(2).rstrip()).endswith("$$") and "$$" not in rest[:-2]
         if fence:
             indent, marker, info = fence.groups()
             close = re.compile(rf"[ \t]*{re.escape(marker[0])}{{{len(marker)},}}[ \t]*")
-            j = next((k for k in range(i + 1, len(lines)) if close.fullmatch(lines[k])), len(lines) - 1)
+            j = next((k for k in range(i + 1, len(lines)) if close.fullmatch(lines[k])), len(lines))
+            # A fence left open runs to the end of the file, so its last line is body, not a closing fence.
+            body_end, j = j, min(j, len(lines) - 1)
             raw = text[starts[i]:starts[j] + len(lines[j])]
             pieces += scan_inline(text, plain_start, starts[i])
             if info.strip() == "math":
-                body = "\n".join(dedent(l, indent) for l in lines[i + 1:j])
+                body = "\n".join(dedent(l, indent) for l in lines[i + 1:body_end])
                 pieces.append(Math("fence", body, i + 1, indent))
             else:
                 pieces.append(raw)

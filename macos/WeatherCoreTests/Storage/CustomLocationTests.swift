@@ -152,4 +152,43 @@ import Testing
         #expect(labels.contains("Work"))
         #expect(labels.contains("Friend's place"))
     }
+
+    @Test func customLocationUnitsRoundTrip() throws {
+        let dir = try TemporaryDirectory("custom-units")
+        let path = dir.appending("places.json").path
+        let list = try #require(WxPlaces(path: path))
+        let base = try WxPlace(name: "100 Main St", admin1: "Miami, Florida", lat: 25.7617, lon: -80.1918)
+        let home = try base.withCustomLocation(customName: "Home", streetAddress: "100 Main St, Miami, FL")
+        #expect(list.add(home))
+        #expect(list.setUnits(.metric, forKey: home.key))
+        try list.save()
+        let text = try StoreJSONTests.readAll(path)
+        #expect(text.contains("\"street_address\": \"100 Main St, Miami, FL\", \"units\": \"metric\"}"))
+
+        let back = try #require(WxPlaces(path: path))
+        #expect(try back.load() == 0)
+        let loaded = try #require(back.place(at: 0))
+        #expect(loaded == home)
+        #expect(loaded.isCustomLocation && loaded.customName == "Home")
+        #expect(back.units(forKey: loaded.key) == .metric)
+    }
+
+    /// The app's own load keeps every place of a places.json with valid,
+    /// malformed or no "units" members.
+    @Test @MainActor func appModelLoadsPlacesWithUnits() async throws {
+        let dir = try TemporaryDirectory("custom-appmodel-units")
+        let storage = AppEnvironment.StorageRoot(
+            configDirectory: dir.appending("config").path,
+            cacheDirectory: dir.appending("cache").path
+        )
+        try FileManager.default.createDirectory(
+            atPath: (storage.placesPath as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try StoreJSONTests.putText(storage.placesPath, "{\"version\": 1, \"places\": ["
+            + "{\"name\": \"350 Fifth Ave\", \"lat\": 40.7484, \"lon\": -73.9857, \"custom\": true, \"custom_name\": \"Work\", \"units\": \"metric\"}, "
+            + "{\"name\": \"Boston\", \"lat\": 42.36, \"lon\": -71.06, \"units\": 42}, "
+            + "{\"name\": \"Denver\", \"lat\": 39.74, \"lon\": -104.99}]}")
+        let model = AppModel(registry: WxRegistry(), storage: storage, online: false, log: { _, _ in })
+        await model.load()
+        #expect(model.places.map(\.place.displayTitle) == ["Work", "Boston", "Denver"])
+    }
 }

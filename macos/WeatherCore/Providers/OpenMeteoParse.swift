@@ -30,8 +30,8 @@ public enum OpenMeteoParse {
     ///
     /// - Parameters:
     ///   - data: the body bytes.
-    ///   - models: the requested models in request order, 1...8 of them, none
-    ///     repeated. With one model the body keys are plain
+    ///   - models: the requested models in request order, 1...OpenMeteoShared.maxModels
+    ///     (10) of them, none repeated. With one model the body keys are plain
     ///     ("temperature_2m"), with several they carry "_<api name>".
     ///   - fetchedS: fetch time stored in every member, in [timeMinS, timeMaxS).
     /// - Returns: provider "open-meteo" with one member per model that has

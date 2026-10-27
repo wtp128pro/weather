@@ -144,6 +144,146 @@ extension HTTPClientTests {
         return .raw(Data(head.utf8) + bomb)
     }
 
+    // MARK: The client's own body cap (U69)
+
+    /// The two caps a client can have (HTTPPolicy.maxBodyBytes(host:)): 4 MiB, which a loopback
+    /// client takes from its host as every host but the MeteoAlarm feed host does, and the feed
+    /// host's 16 MiB, injected as WxAlertsFetchers' test init does.
+    static let ownCaps: [(cap: Int, injected: Int?)] = [
+        (HTTPPolicy.maxBodyBytes, nil), (HTTPPolicy.meteoAlarmMaxBodyBytes, HTTPPolicy.meteoAlarmMaxBodyBytes),
+    ]
+
+    /// For each of `ownCaps`: a client served `atCap(cap)` gets a body of exactly `cap` decoded
+    /// bytes after 1 request, one served `over(cap)` gets PARSE "response too large" after 1.
+    static func expectOwnCap(
+        _ label: String, atCap: (Int) throws -> LoopbackServer.Step, over: (Int) throws -> LoopbackServer.Step,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) async throws {
+        for (cap, injected) in ownCaps {
+            for (step, accepted) in try [(atCap(cap), true), (over(cap), false)] {
+                let server = try LoopbackServer([step])
+                defer { server.stop() }
+                let http = try client(server, timeoutMs: 30000, backoffMs: 5, maxBodyBytes: injected)
+                #expect(http.maxBodyBytes == cap, sourceLocation: sourceLocation)
+                let outcome = await fetch(http)
+                _ = await server.waitForRequests(1, timeout: .seconds(1))
+                let what = "\(label), \(accepted ? "at" : "one byte over") the \(cap >> 20) MiB cap"
+                if accepted {
+                    #expect(body(outcome)?.count == cap, "\(what): \(outcome)", sourceLocation: sourceLocation)
+                } else {
+                    #expect(wxError(outcome) == WxError(.parse, HTTPPolicy.Message.responseTooLarge),
+                            "\(what): \(outcome)", sourceLocation: sourceLocation)
+                }
+                #expect(server.requestCount == 1, "\(what): requests", sourceLocation: sourceLocation)
+            }
+        }
+    }
+
+    /// A 200 with Content-Encoding `coding` and a gzip member of `size` zero bytes: with its
+    /// CRC-32 / ISIZE trailer (`valid`), or with zeroBomb's zero trailer for a member past the cap
+    /// (decoding stops at cap + 1 bytes, before it).
+    static func zeroMemberAnswer(_ coding: String, size: Int, valid: Bool) throws -> LoopbackServer.Step {
+        let member = try zeroMember(size: size, valid: valid)
+        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Encoding: \(coding)\r\n"
+            + "Content-Length: \(member.count)\r\nConnection: close\r\n\r\n"
+        return .raw(Data(head.utf8) + member)
+    }
+
+    /// The gzip member of `size` zero bytes of zeroMemberAnswer: valid (its CRC-32 / ISIZE
+    /// trailer) or with zeroBomb's zero trailer.
+    static func zeroMember(size: Int, valid: Bool) throws -> Data {
+        let zeros = Data(count: size)
+        if valid { return try gzipMember(zeros, crc: try #require(zeroCRC32s[size])) }
+        var member = Data([0x1F, 0x8B, 0x08, 0, 0, 0, 0, 0, 0, 0xFF])
+        member.append(try (zeros as NSData).compressed(using: .zlib) as Data)
+        member.append(Data(count: 8))
+        return member
+    }
+
+    /// gzip's CRC-32 of the caps' runs of zero bytes and of the 4 MiB cap + 1, computed once (the
+    /// longer runs continue the 4 MiB one; the debug build's table CRC-32 is the slow part of
+    /// these members).
+    private static let zeroCRC32s: [Int: UInt32] = {
+        let small = HTTPPolicy.maxBodyBytes, large = HTTPPolicy.meteoAlarmMaxBodyBytes
+        let crcSmall = tableCRC32(Data(count: small))
+        return [small: crcSmall, small + 1: tableCRC32(Data(count: 1), continuing: crcSmall),
+                large: tableCRC32(Data(count: large - small), continuing: crcSmall)]
+    }()
+
+    // U69: the declared Content-Length is held to the client's own cap. A head declaring cap + 1
+    // is refused from the head: .bigDeclared then sends only "{}" and closes, which without the
+    // head's verdict would be a cut body (NETWORK x3). A Content-Length body of the cap passes.
+    @Test func ownCapOnDeclaredLength() async throws {
+        try await Self.expectOwnCap(
+            "declared Content-Length", atCap: { .respond(body: Data(count: $0)) }, over: { .bigDeclared(size: $0 + 1) })
+    }
+
+    // U69: the streamed bytes are held to the client's own cap: a close-delimited body (no
+    // Content-Length) of cap + 1 bytes is refused, one of exactly the cap passes.
+    @Test func ownCapOnStreamedBytes() async throws {
+        try await Self.expectOwnCap(
+            "streamed bytes", atCap: { .bigStreamed(size: $0) }, over: { .bigStreamed(size: $0 + 1) })
+    }
+
+    // U69: gzip inflation is held to the client's own cap, CFNetwork's ("gzip": the inflated
+    // bytes it hands over are counted) and the strict decoder's ("identity, gzip":
+    // GzipMemberDecoder's limit): a member of cap zero bytes passes, one of cap + 1 is refused.
+    @Test func ownCapOnGzipInflation() async throws {
+        for coding in ["gzip", "identity, gzip"] {
+            try await Self.expectOwnCap(
+                "Content-Encoding \(coding)", atCap: { try Self.zeroMemberAnswer(coding, size: $0, valid: true) },
+                over: { try Self.zeroMemberAnswer(coding, size: $0 + 1, valid: false) })
+        }
+    }
+
+    // U69: the inflate backstop of Transfer.finalOutcome (the raw member of a list CFNetwork is
+    // expected to inflate itself, first element gzip) is held to the client's own cap. No loopback
+    // answer makes CFNetwork hand such a member over, so a production Transfer is driven through
+    // its delegate methods (backstopAttempt). 4 MiB client: a member of the cap passes, one of
+    // cap + 1 is PARSE "response too large"; 16 MiB client: members of 4 MiB + 1 and of the cap
+    // pass, one of cap + 1 is refused.
+    @Test func ownCapOnTheInflateBackstop() async throws {
+        let small = HTTPPolicy.maxBodyBytes, large = HTTPPolicy.meteoAlarmMaxBodyBytes
+        let rows: [(cap: Int, size: Int, accepted: Bool)] = [
+            (small, small, true), (small, small + 1, false),
+            (large, small + 1, true), (large, large, true), (large, large + 1, false),
+        ]
+        for (cap, size, accepted) in rows {
+            let outcome = await Self.backstopAttempt(try Self.zeroMember(size: size, valid: accepted), cap: cap)
+            let what = "\(cap >> 20) MiB cap, a member of \(size) zero bytes"
+            switch outcome {
+            case .success(let response):
+                #expect(accepted && response.status == 200 && response.body == Data(count: size),
+                        "\(what): \(response.body.count) bytes")
+            case .failure(let error, let status, _):
+                #expect(!accepted && error == WxError(.parse, HTTPPolicy.Message.responseTooLarge) && status == 200,
+                        "\(what): \(error.code) \(status) '\(error.message)'")
+            case .cancelled:
+                Issue.record("\(what): cancelled")
+            }
+        }
+    }
+
+    /// One production Transfer with the decoded-body cap `cap`, driven through its delegate methods
+    /// in URLSession's order on a task that is never resumed (nothing goes on the wire): a 200 head
+    /// with Content-Encoding: gzip and no Content-Length (so, without metrics, the bytes count as
+    /// undecoded by the gzip magic alone), `member` as the bytes handed over, completion without
+    /// an error.
+    static func backstopAttempt(_ member: Data, cap: Int) async -> HTTPClient.AttemptOutcome {
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        let url = URL(string: "http://127.0.0.1:9/x")!
+        let task = session.dataTask(with: url)
+        let transfer = HTTPClient.Transfer(sentIfModifiedSince: false, clock: ManualClock(), deadline: .max, totalFirst: false,
+                                           maxBodyBytes: cap, answering: [])
+        let head = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+                                   headerFields: ["Content-Type": "application/json", "Content-Encoding": "gzip"])!
+        transfer.urlSession(session, dataTask: task, didReceive: head) { _ in }
+        transfer.urlSession(session, dataTask: task, didReceive: member)
+        transfer.urlSession(session, task: task, didCompleteWithError: nil)
+        return await transfer.outcome()
+    }
+
     // C: /http/net/gzip-truncated (test-http.c:2566-2632). Ported: the control, (a) a cut
     // connection at every wanted position, the over-declared length, a non-gzip body, an
     // empty body, a body split in two reads and the stalled cut. The rows DECISIONS #30 accepted
@@ -287,7 +427,12 @@ extension HTTPClientTests {
         let shadowed = wrongCRC + z.suffix(8)
         try await Self.expectCase(.raw(Self.responseWith(list, shadowed, sendLen: shadowed.count, declared: shadowed.count)),
                                   code: .network, requests: Self.retried, "wrong CRC, right trailer after it")
-        // The garbage arrives in a later read than the end of the stream (test-http.c:2622-2624).
+        // The garbage arrives in a later read than the end of the stream (test-http.c:2622-2624):
+        // PARSE after 1 request. Which PARSE message it gets depends on whether the client sees the
+        // server's 100 ms split as two reads (a client stall merges them into one: "data after the
+        // end"), so the message is not checked here; the read-by-read verdict ("continues after its
+        // end marker" for a later read) is pinned without timing at the decoder,
+        // U35AuditFixTests.gzipVerdictComesFromTheReadThatHoldsIt() (U35 verifier handoff).
         let late = Self.responseWith(list, z + Array("xyz".utf8), sendLen: n + 3, declared: n + 3)
         try await Self.expectCase(Self.split(late, first: late.count - 3), code: .parse, requests: 1, "late garbage")
         // A stored block whose NLEN is not the one's complement of LEN, with the right CRC-32 and
@@ -1854,7 +1999,8 @@ extension HTTPClientTests {
         let session = URLSession(configuration: HTTPClient.makeConfiguration(), delegate: HTTPClient.SessionDelegate(),
                                  delegateQueue: nil)
         defer { session.invalidateAndCancel() }
-        let transfer = HTTPClient.Transfer(sentIfModifiedSince: false, clock: clock, deadline: budgetUs, totalFirst: false)
+        let transfer = HTTPClient.Transfer(sentIfModifiedSince: false, clock: clock, deadline: budgetUs, totalFirst: false,
+                                           maxBodyBytes: http.maxBodyBytes, answering: [])
         transfer.begin(session: session, request: request)
         #expect(await server.waitForRequests(1), "the request reached the server")
         if headLate {

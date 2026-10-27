@@ -12,10 +12,16 @@ import WeatherCore
 
 /// The first-run page.
 struct FirstRunView: View {
-    /// The page's view model (its chips; adding a chip adds and selects the place).
+    /// The page's view model (its chips and units choice; adding a chip adds and selects the
+    /// place with the chosen units).
     let viewModel: FirstRunViewModel
     /// The "Add a city" button: the add command (it opens the picker).
     let onAddCity: () -> Void
+
+    /// The chip under the mouse pointer, nil for none.
+    @State private var hoveredChip: Int?
+    /// The chip with keyboard focus (Full Keyboard Access, or VoiceOver moving it), nil for none.
+    @FocusState private var focusedChip: Int?
 
     var body: some View {
         ZStack {
@@ -38,16 +44,50 @@ struct FirstRunView: View {
                         .foregroundStyle(WeatherTheme.secondaryText)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
-                    FirstRunChipFlow(spacing: 8) {
-                        ForEach(Array(viewModel.chips.enumerated()), id: \.element.id) { index, chip in
-                            Button(chip.title) {
-                                // A refused add shows nothing (wx-window.c:646-654).
-                                viewModel.addSuggestion(at: index)
+                    // The chips and the units their places are saved with (the country
+                    // preselection of the chip the next add takes, until the user picks); "Add a
+                    // city" has its own units picker.
+                    VStack(spacing: 10) {
+                        FirstRunChipFlow(spacing: 8) {
+                            ForEach(Array(viewModel.chips.enumerated()), id: \.element.id) { index, chip in
+                                Button(chip.title) {
+                                    // A refused add shows nothing (wx-window.c:646-654).
+                                    viewModel.addSuggestion(at: index)
+                                }
+                                .buttonStyle(.glass)
+                                .buttonBorderShape(.capsule)
+                                .help(chip.tooltip)
+                                .focused($focusedChip, equals: index)
+                                .onHover { inside in
+                                    // A click adds the chip under the pointer; when the pointer
+                                    // leaves, Space adds the focused chip.
+                                    if inside {
+                                        hoveredChip = index
+                                        viewModel.highlight(at: index)
+                                    } else if hoveredChip == index {
+                                        hoveredChip = nil
+                                        viewModel.highlight(at: focusedChip ?? 0)
+                                    }
+                                }
                             }
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.capsule)
-                            .help(chip.tooltip)
                         }
+                        .onChange(of: focusedChip) {
+                            // Space adds the focused chip; with none, a click the chip under the pointer.
+                            viewModel.highlight(at: focusedChip ?? hoveredChip ?? 0)
+                        }
+                        .onAppear {
+                            // At rest the first chip is highlighted, so the picker never shows units
+                            // that no chip would be saved with (each chip's country preselects its own).
+                            viewModel.highlight(at: focusedChip ?? hoveredChip ?? 0)
+                        }
+                        Picker(PickerView.unitsLabel(for: viewModel.highlightedIndex.map { viewModel.chips[$0].place },
+                                                     fallback: "Units for these cities"), selection: Binding(get: { viewModel.units }, set: { viewModel.setUnits($0) })) {
+                            ForEach(PickerViewModel.unitsChoices, id: \.self) { units in
+                                Text(PickerViewModel.unitsTitle(units)).tag(units)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .fixedSize()
                     }
                     Button(FirstRunViewModel.addCityTitle, action: onAddCity)
                         .buttonStyle(.glassProminent)

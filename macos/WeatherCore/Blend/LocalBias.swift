@@ -189,9 +189,19 @@ public struct WxLocalBias: Sendable, Equatable, Codable {
     public static func load(path: String) -> WxLocalBias {
         guard !path.isEmpty,
               let data = try? FileIO.readBounded(path: path, maxBytes: 4 * 1024 * 1024),
-              let value = try? JSONDecoder().decode(WxLocalBias.self, from: data)
+              var value = try? JSONDecoder().decode(WxLocalBias.self, from: data)
         else {
             return WxLocalBias()
+        }
+        // The decoder checks only the types. Drop a record this type never writes (an
+        // out-of-band edit): every use indexes 24 bins, divides by count + 1 and subtracts
+        // the stored times from now, so short bins, negative counts and negative times trap
+        // or poison the bias at every launch.
+        value.places = value.places.filter {
+            let r = $0.value
+            return r.biasC.count == 24 && r.counts.count == 24 && r.lastSampleS.count == 24
+                && r.counts.allSatisfy { $0 >= 0 } && r.biasC.allSatisfy(\.isFinite)
+                && r.lastUpdateS >= 0 && r.lastSampleS.allSatisfy { $0 >= 0 }
         }
         return value
     }

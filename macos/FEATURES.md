@@ -27,7 +27,7 @@ Open **Settings** via `Neginato Mezora > Settings…` (`⌘,`, Sources tab), `Ne
    - Toggle **Open-Meteo**, **National Weather Service**, **MET Norway**, **DWD Bright Sky**, and **Environment Canada** on or off.
    - View real-time status for the currently selected location (e.g., `Used for this place (7 forecast models)`).
    - Adjust each provider's **Source weight multiplier** (`0.10×` to `3.00×`, default `1.00×`).
-   - Inspect data attribution and open official license links (`CC BY 4.0`, `NLOD`, Environment and Climate Change Canada's `Data Server End-use Licence`, `US government work`).
+   - Inspect data attribution and open official license links (`CC BY 4.0`, `NLOD`, Environment and Climate Change Canada's `Data Server End-use Licence`, `US government work`). The **Weather alerts** credits (§4) are listed in the **About Neginato Mezora** panel (the app menu, or the General tab), not here.
 2. **Weights Tab:**
    - Select any regional profile (`Inspect Regional Profile`: United States, UK & Ireland, Netherlands & Benelux, Germany & Central Europe, Canada, Nordic & Baltic, Rest of Europe, or Rest of World) and variable group (`Temperature & Feels Like`, `Wind & Gusts`, `Cloud Cover`, `Relative Humidity`, `Precipitation Amount`, `Precipitation Chance`) to inspect the 4 lead-time horizon bands (`H0: 0–3h`, `H1: 3–18h`, `H2: 18–72h`, `H3: 72h+`) plus `World`.
    - Adjust individual model multipliers (`0.00×` to `3.00×`) for all 13 NWP models (`NOAA NWS`, `HRRR`, `NBM`, `ECMWF IFS`, `GFS`, `ICON`, `GEM`, `UKMO`, `Météo-France`, `KNMI HARMONIE`, `MET Norway`, `DWD MOSMIX`, `ECCC HRDPS`).
@@ -38,7 +38,7 @@ Open **Settings** via `Neginato Mezora > Settings…` (`⌘,`, Sources tab), `Ne
    - **Networks Used Without a Key:** a switch per network, with its status and credit.
    - **Stations Near the selected place:** every station within 60 km with its weight and the reason (good, on probation, reduced, not used, stuck); **Forget All Stations…** clears the catalog.
 4. **General Tab:**
-   - Switch between **Imperial (`°F, mph, in`)** and **Metric (`°C, km/h, mm`)**.
+   - **Default Units for New Places:** **Imperial (`°F, mph, in`)** or **Metric (`°C, km/h, mm`)**. It sets the units a new place starts with when none is chosen for it; places already saved keep their own (§5).
    - Open the **Neginato Mezora Help Book (`⌘?`)** or the **About Neginato Mezora** panel.
 
 ---
@@ -56,13 +56,45 @@ For every selected location, **Neginato Mezora** queries nearby physical weather
 
 ---
 
-## 4. Keyboard Shortcuts
+## 4. Official Weather Alerts
+
+Every place shows the warnings its official issuer has in force — no key, no account:
+
+| Place | Issuer |
+| :--- | :--- |
+| United States and its territories (and a place without a country inside the NWS area) | NOAA National Weather Service (`api.weather.gov`) |
+| Germany | Deutscher Wetterdienst, via Bright Sky |
+| Norway | MET Norway (MetAlerts) |
+| Canada | Environment and Climate Change Canada |
+| Austria, Belgium, Bosnia and Herzegovina, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Luxembourg, Malta, Moldova, Montenegro, the Netherlands, North Macedonia, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland, Ukraine, the United Kingdom, and Israel | MeteoAlarm (the country's feed) |
+| Any other country | none: `Alerts not available` |
+
+- **Matching MeteoAlarm warnings to a place:** each warning area is matched against the region table bundled with the app (MeteoAlarm geocodes with EuroGeographics boundaries) or against the warning's own polygons; a warning that cannot be placed is dropped, and a place outside every region its country's feed uses reads `Alerts not available`.
+- **Sidebar:** a warning triangle after the place's name, coloured by the highest level (red, orange, yellow, minor), with a count when there is more than one alert.
+- **Alerts section (detail pane):** one card per current alert with the event, level, start and end times, headline, an expandable description, the instructions and a link to the source when the issuer gives one.
+- **States:** `Checking for alerts…` (not yet checked), `No active alerts`, `Alerts could not be checked right now.` (the check failed and no earlier set is still valid), `Alerts could not be checked recently.` plus the time last checked (the last set is too old; it is hidden, not shown as current), and `Alerts not available` (no issuer covers the place).
+- **How often:** alerts are checked after each completed forecast refresh, never while offline and never on a timer of their own. A successful download of a country's MeteoAlarm feed is reused by all its places for 30 minutes; a failed one is held for only 120 seconds, shared by every place in that country, and a later refresh tries again. An answer from the other four issuers is reused for 5 minutes. An alert disappears when it expires, without a new download. A failed or slow alert check never delays or changes the forecast; a still-valid set survives one failed check.
+- **Window only:** alerts are shown in the app window; there are no system notifications.
+- **Limits:** alert areas follow each issuer's published region shapes, which can differ from local boundaries near borders and coasts. A few Irish border towns (Waterford city centre, Youghal, Carrick-on-Shannon, Killaloe) lie inside a neighbouring county's MeteoAlarm outline, so a warning for their own county may not reach them while a neighbour's does; some coastal places and islands (for example Howth, Bray, Greystones, Malahide, Tory Island, Cape Clear) are reached only by marine warnings or read `Alerts not available`. After a failed MeteoAlarm download, a refresh round that lasts longer than 120 seconds can cost one more download of that feed for each further 120 seconds.
+
+---
+
+## 5. Units Per Place
+
+- **Each place has its own units:** Imperial (`°F, mph, in`) or Metric (`°C, km/h, mm`), shown in its sidebar row, detail pane and charts.
+- **Adding a place:** the units picker in the add window is labelled with the highlighted place (**Units for** *name, region*; just **Units** while there are no results) and preselected from that place's country — Imperial for the US, Puerto Rico, Guam, the US Virgin Islands, American Samoa, the Northern Mariana Islands, the US Minor Outlying Islands, Liberia and Myanmar; Metric elsewhere; the default for new places when the country is unknown. A choice you make there holds for every place that window adds. On first run, the picker under the city suggestions is labelled with the highlighted city the same way and preselected from its country; a choice you make holds for every city added there.
+- **Changing a place:** the toolbar units button and `⌘U` switch the selected place (tooltip and menu command **Switch Selected Place to Celsius** / **Fahrenheit**); with no place selected they change the **Default Units for New Places** (also in Settings › General), and the tooltip and menu command read **Set Default Units to Celsius** / **Fahrenheit**.
+- **Upgrading:** places saved by an earlier version have no units of their own; on the first launch of this version each takes the units the app was set to, and the list is saved once.
+
+---
+
+## 6. Keyboard Shortcuts
 
 | Shortcut | Action |
 | :--- | :--- |
 | `⌘N` | Open **Add a City / Street Address / Coordinates** picker |
 | `⌘R` | Refresh the selected place immediately |
-| `⌘U` | Toggle display units between Imperial (`°F`) and Metric (`°C`) |
+| `⌘U` | **Switch Selected Place to Celsius** / **Fahrenheit**; with no place selected, **Set Default Units to Celsius** / **Fahrenheit** (the default units for new places) |
 | `⌘,` | Open **Neginato Mezora Settings** (`Sources`, `Weights`, `Stations`, `General`) |
 | `⌘?` | Open **Neginato Mezora Help Book** |
 | `⌘Q` | Flush pending saves and quit Neginato Mezora |

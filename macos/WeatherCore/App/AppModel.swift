@@ -15,8 +15,10 @@
 // Start-up (wx-app.h:34-45, load_thread/load_done wx-app.c:1690-1820): init
 // reads nothing and requests nothing; load() reads the three files once on a
 // worker thread (a missing file is normal; an unreadable or corrupt one is
-// logged and treated as empty), then applies the persisted units and disabled
-// providers, builds the items (painted from the cache, with their age), restores
+// logged and treated as empty), then applies the persisted default units and
+// disabled providers, gives every place saved without units the settings' units
+// (once: the migration of a places.json from before per-place units, saved like
+// any edit), builds the items (painted from the cache, with their age), restores
 // the persisted selection when that place still exists and gives the places to
 // the RefreshEngine. Until load() has finished every state-changing call is
 // ignored (/window/app/api-before-load-ignored).
@@ -33,6 +35,33 @@
 // return G_IO_ERROR_CANCELLED, wx-service.c:1173) - so a late 429 starts no
 // cool-down and a late OK does not clear the stale mark. During shutdown no
 // outcome is applied to the items.
+//
+// Alerts (no C counterpart; DECISIONS #41): each item carries its official
+// alerts, exactly what the alerts service (AlertsService in the app, injected;
+// an inert one that never requests anything and reports every place not
+// fetched when none is given) reports for the place. When a request of a place
+// completes - a forecast or a failure, not a cancelled request - and only after
+// it was applied and reported to the engine, the service's refresh(place) is
+// kicked and never awaited, unless the network is down or shutdown has begun:
+// alert sources are asked exactly as often as the forecast is refreshed, and
+// whatever they do (fail, hang) cannot reach the forecast path. Every item's
+// state is re-read from the service when a kick's result lands (only the
+// place's newest kick counts), on every display tick, whenever the items are
+// rebuilt (syncItems), at once when the window becomes visible and at once when
+// the system clock is set (NSSystemClockDidChange, DECISIONS #43 b); and,
+// while the window is visible (online or offline: the display clock stops
+// offline), by a wake-up on the injected clock at the earliest upcoming alert
+// expiry or end of a source window among the items, but never more than
+// alertWakeMaxS (60 s, the display clock's period) away, so a system sleep or
+// a clock change is caught up within it (#43 a).
+// The answer time is whole seconds (WxAlertsResult.fetchedS), so a window ends
+// somewhere in the second after fetchedS + window: the wake-up re-reads at its
+// start, then every alertWindowStepUS (10 ms) until the set reads stale.
+// Every re-read re-arms the wake-up (#43 c); it fetches nothing. A removed
+// place's alert work is cancelled and forgotten (a late result is dropped);
+// shutdown cancels it all (AlertsService.cancelAll, at shutdown only) and
+// writes no alert state any more; flush neither waits for nor reports alert
+// work; a units change touches none of it.
 //
 // Persistence (wx-app.h:104-115, wx-app.c:307-578): edits of the places, the
 // settings (units, disabled providers, selection) and cache updates arm ONE
@@ -56,6 +85,13 @@
 // autoselected neighbour); add(_:) selects the place it added (on_place_added,
 // on_suggestion_clicked, wx-window.c:573-587, 646-654). select(_:) keeps the C
 // contract: an unknown or invalid key selects nothing (wx-app.h:417-436).
+//
+// Units: every place keeps its own unit system in places.json (WxPlaces
+// units(forKey:)); an item's units are always derived from it (else the default
+// units) by syncItems, so a units change is an edit of the list that changes one
+// item and never touches its forecast or its requests. settings.json "units" is
+// the default given to places added later (setDefaultUnits); units, setUnits(_:)
+// and toggleUnits() act on the selected place, else on the default.
 //
 // The 50-place cap and the 5 km duplicate rule are WxPlaces' (U12): add(_:)
 // calls WxPlaces.add and only classifies a refusal with WxPlaces.maxPlaces and
@@ -86,6 +122,14 @@ public final class AppModel {
     public nonisolated static let shutdownWaitMs: Int64 = 5000
     /// Longest error text an item keeps, UTF-8 bytes (WX_ROW_ERROR_MAX_BYTES, wx-row.h:57).
     public nonisolated static let errorTextMaxBytes = 200
+    /// The longest the alert wake-up sleeps while the window is visible, seconds: the display
+    /// clock's period, so the items follow a system sleep or a clock change offline as soon as
+    /// they would online (DECISIONS #43 a). A re-read, never a fetch.
+    static let alertWakeMaxS = RefreshEngine.clockTickS
+    /// The step of the alert re-reads within the second a current set's window ends in,
+    /// microseconds (10 ms): fetchedS is whole seconds, so that is as late as the item can turn
+    /// stale after the service did.
+    static let alertWindowStepUS: Int64 = 10_000
 
     // MARK: - Public types
 
@@ -109,14 +153,23 @@ public final class AppModel {
         public internal(set) var stale = false
         /// The network is unavailable ("Offline").
         public internal(set) var offline = false
-        /// The unit system the item is shown in.
+        /// The unit system the item is shown in: the place's saved units, else the default units
+        /// (set by syncItems only, from WxPlaces.units(forKey:)).
         public internal(set) var units: WxUnits = .imperial
         /// The item's "now", UTC unix seconds (the rain hint and the ages are derived from it).
         public internal(set) var nowS: Int64
         /// The sanitised reason of the latest failed refresh (at most errorTextMaxBytes bytes),
         /// nil after a success or before any failure.
         public internal(set) var errorText: String?
+        /// The place's official alerts as the alerts service reports them now (not fetched,
+        /// current, stale, unavailable or not covered; the alerts still current and when they
+        /// were fetched). Never invented here: always the service's result(for:) of the place.
+        public internal(set) var alerts = AppModel.alertsNotFetched
     }
+
+    /// The alert state of a place nothing has been asked about yet.
+    public nonisolated static let alertsNotFetched = WxAlertsResult(state: .notFetched, source: nil, alerts: [],
+                                                                    fetchedS: nil)
 
     /// The result of add(_:) (the reasons of refusal_message, wx-picker.c:559-575).
     public enum AddResult: Sendable, Equatable {
@@ -170,7 +223,12 @@ public final class AppModel {
     public private(set) var places: [Place] = []
     /// The key of the place the detail pane shows, nil for none (wx_app_get_selected).
     public private(set) var selectedKey: String?
-    /// The unit system (wx_app_get_units); imperial until the settings are loaded.
+    /// The unit system new places get (settings.json "units"; wx_app_get_units); imperial until
+    /// the settings are loaded. Saved places keep their own.
+    public private(set) var defaultUnits: WxUnits = .imperial
+    /// The selected place's unit system, else the default units (the toolbar's °F/°C, ⌘U). A
+    /// mirror written by syncUnits() only when its value changes, so its observers hear of a
+    /// units change and of nothing else (/window/app/properties).
     public private(set) var units: WxUnits = .imperial
     /// True while the network is unavailable (wx_app_get_offline).
     public private(set) var isOffline: Bool
@@ -197,6 +255,8 @@ public final class AppModel {
     @ObservationIgnored public let service: ServiceOrchestrator
     /// Where the three files live.
     @ObservationIgnored public let storage: AppEnvironment.StorageRoot
+    /// The places' official alerts (AlertsService in the app; inert when none was injected).
+    @ObservationIgnored public let alertsService: any WxAlertsServing
     @ObservationIgnored private let clock: any WxClock
     @ObservationIgnored private let log: LogSink
     @ObservationIgnored private var placeList: WxPlaces
@@ -209,6 +269,26 @@ public final class AppModel {
     @ObservationIgnored private var registryHandler: WxRegistry.ChangeHandlerID?
     @ObservationIgnored private var loading = false
     @ObservationIgnored private var focused = false
+    /// appendPlace(_:units:) is editing the list twice (the place, then its units):
+    /// placesChanged() only notes the change and runs once when the edit ends.
+    @ObservationIgnored private var placeEditOpen = false
+    @ObservationIgnored private var placesChangedPending = false
+    /// The window is on screen (setVisible): the alert wake-up runs only then.
+    @ObservationIgnored private var windowVisible = false
+
+    /// The alert kicks whose result has not landed, by kick id: the place and the task waiting
+    /// for the service (cancelled with the place or at shutdown).
+    @ObservationIgnored private var alertWaiters: [UInt64: (key: String, task: Task<Void, Never>)] = [:]
+    /// The newest kick of each place whose result has not landed: only its landing is read.
+    @ObservationIgnored private var alertNewest: [String: UInt64] = [:]
+    @ObservationIgnored private var alertKickID: UInt64 = 0
+    /// The armed alert wake-up: the next alert edge among the items (wall microseconds; nil:
+    /// none), when it fires (monotonic microseconds) and its task.
+    @ObservationIgnored private var alertWake: (edgeUS: Int64?, deadlineUS: Int64, task: Task<Void, Never>)?
+    @ObservationIgnored private var alertWakeToken: UInt64 = 0
+    /// Where the system clock's changes are posted, and the model's observer there.
+    @ObservationIgnored private let notificationCenter: NotificationCenter
+    @ObservationIgnored private var clockObserver: (any NSObjectProtocol)?
 
     /// One in-flight request (Request, wx-app.c:27-32).
     private struct Request {
@@ -277,8 +357,14 @@ public final class AppModel {
     ///   - clock: the only time source (save debounce, shutdown limit, ages, refresh policy).
     ///   - online: whether the network is available now.
     ///   - log: receives the log lines (default: os.Logger).
+    ///   - alerts: the places' alerts service (the app: AlertsService over the production
+    ///     fetchers, AppEnvironment); nil gives an inert one that never requests anything and
+    ///     reports every place not fetched (DECISIONS #41 A7).
+    ///   - notificationCenter: where the system posts NSSystemClockDidChange (tests post their
+    ///     own); a clock change re-reads every item's alerts at once.
     public init(registry: WxRegistry, storage: AppEnvironment.StorageRoot, clock: any WxClock = SystemClock(),
-                online: Bool = true, log: LogSink? = nil) {
+                online: Bool = true, log: LogSink? = nil, alerts: (any WxAlertsServing)? = nil,
+                notificationCenter: NotificationCenter = .default) {
         // wx_app_init (wx-app.c:2319-2326): the empty stores; nothing is read.
         guard let placeList = WxPlaces(path: storage.placesPath),
               let settings = WxSettings(path: storage.settingsPath),
@@ -293,6 +379,8 @@ public final class AppModel {
         self.registry = registry
         self.service = ServiceOrchestrator(registry: registry, clock: clock)
         self.storage = storage
+        self.alertsService = alerts ?? InertAlertsService()
+        self.notificationCenter = notificationCenter
         self.clock = clock
         self.log = log ?? Self.systemLog
         self.isOffline = !online
@@ -310,6 +398,16 @@ public final class AppModel {
         registryHandler = registry.addChangeHandler { [relay] in
             relay.model?.registryRevision &+= 1
         }
+        // A set's age and an alert's expiry are wall-clock times: when the clock is set, every
+        // item re-reads at once (DECISIONS #43 b). Posted on any thread; read on the main actor.
+        clockObserver = notificationCenter.addObserver(forName: .NSSystemClockDidChange, object: nil,
+                                                       queue: nil) { [relay] _ in
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { relay.model?.systemClockChanged() }
+            } else {
+                Task { @MainActor in relay.model?.systemClockChanged() }
+            }
+        }
     }
 
     isolated deinit {
@@ -321,6 +419,11 @@ public final class AppModel {
         }
         for request in requests.values {
             request.task?.cancel()
+        }
+        // The alert waiters hold the model weakly and end with the service's work.
+        alertWake?.task.cancel()
+        if let clockObserver {
+            notificationCenter.removeObserver(clockObserver)
         }
         engine.shutdown()
         if let registryHandler {
@@ -451,6 +554,7 @@ public final class AppModel {
         localBias = WxLocalBias.load(path: localBiasPath)
         stationSettings = WxStationSettings.load(path: stationSettingsPath)
         applySettings()
+        migratePlaceUnits()
         placeList.onChanged = { [relay] in
             MainActor.assumeIsolated { relay.model?.placesChanged() }
         }
@@ -467,12 +571,14 @@ public final class AppModel {
         if selectedKey == nil, let first = places.first {
             selectInternal(first.key)
         }
+        // The units of the restored selection, or the loaded default units.
+        syncUnits()
     }
 
     /// apply_settings (wx-app.c:1740-1755).
     private func applySettings() {
-        if settings.units != units {
-            units = settings.units
+        if settings.units != defaultUnits {
+            defaultUnits = settings.units
         }
         for provider in registry.listProviders() {
             registry.setEnabled(!settings.isProviderDisabled(provider.id), id: provider.id)
@@ -480,6 +586,22 @@ public final class AppModel {
         let loadedWeights = WxWeightMultipliers.load(fromPath: weightsPath)
         weightMultipliers = loadedWeights
         WxWeights.activeMultipliers = loadedWeights
+    }
+
+    /// Gives every place loaded without units (a places.json from before per-place units) the
+    /// settings' units - what the app showed it in - and schedules one save of the list. Runs
+    /// once, at the load and before the list announces changes; a relaunch finds every place
+    /// with units, changes nothing and saves nothing.
+    private func migratePlaceUnits() {
+        var migrated = false
+        for place in placeList.places where placeList.units(forKey: place.key) == nil {
+            if placeList.setUnits(settings.units, forKey: place.key) {
+                migrated = true
+            }
+        }
+        if migrated {
+            scheduleSave()
+        }
     }
 
     // MARK: - Local bias
@@ -533,7 +655,8 @@ public final class AppModel {
         public struct Hour: Sendable, Equatable {
             /// The local clock hour, 0...23.
             public let hour: Int
-            /// Its middle, UTC unix seconds.
+            /// Its middle, UTC unix seconds; 0 for an hour the clock skips that day (spring
+            /// forward), which has nothing learned and is never now.
             public let tS: Int64
             /// The correction applied at that time, °C (0 until enough is learned).
             public let correctionC: Double
@@ -570,6 +693,12 @@ public final class AppModel {
             let now = Date(timeIntervalSince1970: TimeInterval(nowS))
             let hours = (0..<24).map { h -> LocalCorrection.Hour in
                 let date = calendar.date(bySettingHour: h, minute: 30, second: 0, of: now) ?? now
+                // A skipped hour resolves to the next one (03:00 for 02:30 on a spring-forward
+                // day), whose solar bin and time the next row already shows - or, when it is the
+                // day's last hour (America/Nuuk 23:00), to the same hour of the next day.
+                guard calendar.component(.hour, from: date) == h, calendar.isDate(date, inSameDayAs: now) else {
+                    return LocalCorrection.Hour(hour: h, tS: 0, correctionC: 0, samples: 0)
+                }
                 let tS = Int64(date.timeIntervalSince1970)
                 return LocalCorrection.Hour(
                     hour: h, tS: tS,
@@ -628,7 +757,9 @@ public final class AppModel {
     }
 
     private func saveStationSettings() {
-        stationSettings.save(path: stationSettingsPath)
+        if !stationSettings.save(path: stationSettingsPath) {
+            log(.warning, "Could not save the station settings")
+        }
     }
 
     /// The learned correction (°C, added to the model temperature) of a place at `tS`; 0 until
@@ -674,22 +805,32 @@ public final class AppModel {
 
     /// sync_items (wx-app.c:682-734): one item per place in list order; a new item is
     /// painted from the cache; the items of removed places are dropped and their forecasts
-    /// leave the cache (which schedules a save).
+    /// leave the cache (which schedules a save). Every item's units are the place's saved
+    /// units, else the default units (a kept item keeps its forecast and request state). Every
+    /// item's alerts are what the alerts service reports for its place (a new item: at once, so
+    /// a place no source covers reads not covered); a removed place's alert work is cancelled
+    /// and the service forgets it, so a late result of it is dropped; the alert wake-up is armed
+    /// anew for what the items now show (DECISIONS #43 c).
     private func syncItems() {
         let old = Dictionary(places.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         var next: [Place] = []
         next.reserveCapacity(placeList.count)
         for place in placeList.places {
             let key = place.key
+            let units = placeList.units(forKey: key) ?? defaultUnits
             if var item = old[key] {
                 if item.place != place {
                     item = Place(
                         place: place, key: key, forecast: item.forecast, modelForecast: item.modelForecast,
                         fetchedS: item.fetchedS,
                         loading: item.loading, stale: item.stale, offline: item.offline,
-                        units: item.units, nowS: item.nowS, errorText: item.errorText
+                        units: item.units, nowS: item.nowS, errorText: item.errorText, alerts: item.alerts
                     )
                 }
+                if item.units != units {
+                    item.units = units
+                }
+                readAlerts(&item)
                 next.append(item)
                 continue
             }
@@ -697,11 +838,13 @@ public final class AppModel {
             item.units = units
             item.offline = isOffline
             applyCache(&item)
+            readAlerts(&item)
             next.append(item)
         }
         let kept = Set(next.map(\.key))
         places = next
         for key in old.keys where !kept.contains(key) {
+            forgetAlerts(key: key)
             if cache.remove(key: key) {
                 scheduleSave()
             }
@@ -711,6 +854,7 @@ public final class AppModel {
                 localBiasRevision &+= 1
             }
         }
+        syncAlertWake()
     }
 
     /// apply_cache (wx-app.c:600-607): the cached forecast with fetched time now minus its age.
@@ -726,6 +870,10 @@ public final class AppModel {
     /// on_places_changed (wx-app.c:1306-1318) with the window's selection rules.
     private func placesChanged() {
         guard isLoaded else {
+            return
+        }
+        if placeEditOpen {
+            placesChangedPending = true
             return
         }
         let oldKeys = places.map(\.key)
@@ -747,6 +895,9 @@ public final class AppModel {
         if selectedKey == nil, let first = places.first {
             selectInternal(first.key)
         }
+        // The selected item's units may have changed, or the selection (removal: the
+        // neighbour, or none).
+        syncUnits()
         scheduleSave()
     }
 
@@ -756,6 +907,7 @@ public final class AppModel {
         for i in places.indices where places[i].nowS != nowS {
             places[i].nowS = nowS
         }
+        refreshAlertStates()
     }
 
     /// The engine changed the loading or stale state of `key` (wx_row_item_set_loading/_stale).
@@ -785,26 +937,45 @@ public final class AppModel {
     }
 
     /// Saves `place` at the end of the list (WxPlaces.add: the 50-place cap and the 5 km rule)
-    /// and selects it (the picker's and the suggestion's add, wx-window.c:573-587, 646-654).
-    public func add(_ place: WxPlace) -> AddResult {
+    /// with `units` (nil: the default units) and selects it (the picker's and the suggestion's
+    /// add, wx-window.c:573-587, 646-654).
+    public func add(_ place: WxPlace, units: WxUnits? = nil) -> AddResult {
         guard isLoaded, !isShuttingDown else {
             return .failed
         }
-        guard placeList.add(place) else {
+        guard appendPlace(place, units: units) else {
             return refusal(for: place)
         }
         selectInternal(place.key)
         return .added
     }
 
+    /// WxPlaces.add then WxPlaces.setUnits (`units`, else the default units) as ONE change of
+    /// the list: the item appears once, already in its units. False when WxPlaces refuses it.
+    private func appendPlace(_ place: WxPlace, units: WxUnits?) -> Bool {
+        placeEditOpen = true
+        let added = placeList.add(place)
+        if added {
+            placeList.setUnits(units ?? defaultUnits, forKey: place.key)
+        }
+        placeEditOpen = false
+        if placesChangedPending {
+            placesChangedPending = false
+            placesChanged()
+        }
+        return added
+    }
+
     /// Saves a user-specified street address or custom-named location (e.g. "Home", "Work",
     /// "Friend's place") and selects it. Multiple named locations within the same city (< 5 km)
     /// are supported; if another location with a different name shares the exact 4-decimal
     /// coordinate key, the coordinate is nudged by 0.0001° (~10 m) so both keys remain distinct.
+    /// `units` (nil: the default units) are saved with the place.
     public func addCustomLocation(
         _ place: WxPlace,
         customName: String? = nil,
-        streetAddress: String? = nil
+        streetAddress: String? = nil,
+        units: WxUnits? = nil
     ) -> AddResult {
         guard isLoaded, !isShuttingDown else {
             return .failed
@@ -828,7 +999,7 @@ public final class AppModel {
         }
 
         if !candidate.isCustomLocation {
-            return add(candidate)
+            return add(candidate, units: units)
         }
 
         // Reject only if an identical custom place (same name and same rounded coordinate) is already saved.
@@ -851,7 +1022,7 @@ public final class AppModel {
             step += 1
         }
 
-        guard placeList.add(candidate) else {
+        guard appendPlace(candidate, units: units) else {
             return refusal(for: candidate)
         }
         selectInternal(candidate.key)
@@ -978,6 +1149,7 @@ public final class AppModel {
             return
         }
         selectedKey = newKey
+        syncUnits()
         log(.debug, "select \(newKey ?? "(none)")")
         if settings.setSelected(newKey) {
             scheduleSave()
@@ -987,22 +1159,52 @@ public final class AppModel {
 
     // MARK: - Units
 
-    /// wx_app_set_units (wx-app.c:1538-1553): every item gets the units, the settings store
-    /// them and a save is scheduled; nothing happens when unchanged, before the load or once
+    /// The selected place's units (setUnits(_:forKey:)), else, with no selection, the default
+    /// units (setDefaultUnits); nothing happens when unchanged, before the load or once
     /// shutting down.
     public func setUnits(_ units: WxUnits) {
-        guard !isShuttingDown, isLoaded, self.units != units else {
+        if let key = selectedPlace?.key {
+            setUnits(units, forKey: key)
+        } else {
+            setDefaultUnits(units)
+        }
+    }
+
+    /// Saves `units` with the place whose key is `key` (places.json): only that item changes,
+    /// it keeps its forecast and no request is started or cancelled. False (nothing changes)
+    /// for an unknown key, unchanged units, before the load or once shutting down.
+    @discardableResult
+    public func setUnits(_ units: WxUnits, forKey key: String?) -> Bool {
+        guard !isShuttingDown, isLoaded else {
+            return false
+        }
+        return placeList.setUnits(units, forKey: key)
+    }
+
+    /// wx_app_set_units (wx-app.c:1538-1553) for the default: the units new places get, stored
+    /// in settings.json (a save is scheduled); saved places keep theirs. Nothing happens when
+    /// unchanged, before the load or once shutting down.
+    public func setDefaultUnits(_ units: WxUnits) {
+        guard !isShuttingDown, isLoaded, defaultUnits != units else {
             return
         }
-        self.units = units
+        defaultUnits = units
+        syncUnits()
         settings.setUnits(units)
-        for i in places.indices {
-            places[i].units = units
-        }
         scheduleSave()
     }
 
-    /// The window's "toggle-units" action (Ctrl+U / ⌘U).
+    /// Writes the `units` mirror (the selected item's units, else the default units) only when
+    /// its value changes (U49 handoff, DECISIONS #41 A13).
+    private func syncUnits() {
+        let now = selectedPlace?.units ?? defaultUnits
+        if units != now {
+            units = now
+        }
+    }
+
+    /// The window's "toggle-units" action (Ctrl+U / ⌘U): flips the selected place's units,
+    /// else the default units.
     public func toggleUnits() {
         setUnits(units == .imperial ? .metric : .imperial)
     }
@@ -1128,12 +1330,20 @@ public final class AppModel {
     /// wx_app_set_window_visible (wx-app.c:1557-1571): the main window is on screen (mapped,
     /// not minimised, not hidden). Becoming visible starts a refresh round and the display
     /// clock (while online); becoming hidden cancels every request and stops the clock.
+    /// Becoming visible also re-reads every item's alerts at once and arms their wake-up;
+    /// becoming hidden disarms it (alert work in flight goes on, DECISIONS #41 A9).
     public func setVisible(_ visible: Bool) {
         guard !isShuttingDown else {
             return
         }
         log(.debug, "window visible=\(visible ? 1 : 0)")
+        windowVisible = visible
         engine.setVisible(visible)
+        if visible {
+            refreshAlertStates()
+        } else {
+            syncAlertWake()
+        }
     }
 
     /// The main window's active state (on_active_changed, wx-window.c:265-269): becoming the
@@ -1276,6 +1486,11 @@ public final class AppModel {
         }
         engine.requestFinished(id: id, result: completion)
         drainProgress()
+        // Only now, with the forecast path done: a completed request (a forecast or a failure,
+        // never a cancelled one) kicks the place's alerts.
+        if completion != .cancelled {
+            kickAlerts(key: key)
+        }
     }
 
     /// apply_forecast (wx-app.c:955-966): into the cache (saved, debounced; a forecast the
@@ -1301,6 +1516,187 @@ public final class AppModel {
         if places[i].errorText != text {
             places[i].errorText = text
         }
+    }
+
+    // MARK: - Alerts
+
+    /// Kicks the alerts of the place `key` after a completed request, without waiting: nothing
+    /// while offline, once shutting down or for a place no longer saved. The kick's result is
+    /// read when the service's work ends, if it is still the place's newest kick.
+    private func kickAlerts(key: String) {
+        guard !isShuttingDown, !isOffline, let i = itemIndex(key) else {
+            return
+        }
+        alertKickID &+= 1
+        let id = alertKickID
+        let work = alertsService.refresh(places[i].place)
+        let waiter = Task { @MainActor [weak self] in
+            await withTaskCancellationHandler {
+                await work.value
+            } onCancel: {
+                work.cancel()
+            }
+            self?.alertsLanded(key: key, id: id)
+        }
+        alertWaiters[id] = (key, waiter)
+        alertNewest[key] = id
+    }
+
+    /// The work of kick `id` of the place `key` ended: the items re-read their alerts unless a
+    /// newer kick of the place is pending, the place was removed or shutdown has begun.
+    private func alertsLanded(key: String, id: UInt64) {
+        alertWaiters[id] = nil
+        guard !isShuttingDown, alertNewest[key] == id else {
+            return
+        }
+        alertNewest[key] = nil
+        guard itemIndex(key) != nil else {
+            return
+        }
+        refreshAlertStates()
+    }
+
+    /// The item's alerts as the service reports them now, written only when they changed.
+    private func readAlerts(_ item: inout Place) {
+        guard !isShuttingDown else {
+            return
+        }
+        let now = alertsService.result(for: item.place)
+        if item.alerts != now {
+            item.alerts = now
+        }
+    }
+
+    /// Every item re-reads its alerts (expired alerts leave, a set past its window turns
+    /// stale), then the wake-up is armed for the next such change. Nothing is fetched.
+    private func refreshAlertStates() {
+        guard isLoaded, !isShuttingDown else {
+            return
+        }
+        for i in places.indices {
+            readAlerts(&places[i])
+        }
+        syncAlertWake()
+    }
+
+    /// The system clock was set (NSSystemClockDidChange): every item re-reads its alerts at
+    /// once and the wake-up is armed from the new wall time (DECISIONS #43 b).
+    private func systemClockChanged() {
+        refreshAlertStates()
+    }
+
+    /// The removed place `key`: its kicks are cancelled and dropped, the service forgets it.
+    private func forgetAlerts(key: String) {
+        alertNewest[key] = nil
+        for (id, waiter) in alertWaiters where waiter.key == key {
+            alertWaiters[id] = nil
+            waiter.task.cancel()
+        }
+        alertsService.remove(placeKey: key)
+    }
+
+    /// Shutdown: every kick and the wake-up are cancelled, the service's work too (its
+    /// cancelAll, which is for shutdown only: nothing is kicked after it).
+    private func stopAlerts() {
+        alertNewest = [:]
+        for waiter in alertWaiters.values {
+            waiter.task.cancel()
+        }
+        alertWaiters = [:]
+        syncAlertWake()
+        alertsService.cancelAll()
+    }
+
+    /// Arms the wake-up anew (after every re-read, DECISIONS #43 c): while the window is visible
+    /// it fires at the next alert edge among the items, or alertWakeMaxS from now when that is
+    /// sooner or there is none (#43 a): a wall-clock edge is turned into a monotonic deadline
+    /// here, and a system sleep or a clock change moves one against the other. Disarmed when
+    /// hidden or once shutdown has begun. It re-reads every item and fetches nothing.
+    private func syncAlertWake() {
+        alertWake?.task.cancel()
+        alertWake = nil
+        alertWakeToken &+= 1
+        guard windowVisible, isLoaded, !isShuttingDown else {
+            return
+        }
+        let token = alertWakeToken
+        let clock = self.clock
+        let edge = nextAlertEdgeUS()
+        let nowUS = clock.monotonicMicroseconds
+        let latest = Self.saturating(nowUS, plus: Self.saturating(Self.alertWakeMaxS, times: 1_000_000), minus: 0)
+        let deadline = edge.map { min(Self.saturating(nowUS, plus: $0, minus: clock.wallMicroseconds), latest) } ?? latest
+        let task = Task.immediate { @MainActor [weak self] in
+            do {
+                try await clock.sleep(until: deadline)
+            } catch {
+                return
+            }
+            guard let self, token == self.alertWakeToken else {
+                return
+            }
+            self.alertWake = nil
+            self.alertWakeToken &+= 1
+            self.refreshAlertStates()
+        }
+        // A wake-up that already fired (its deadline passed meanwhile) re-armed itself.
+        if token == alertWakeToken {
+            alertWake = (edge, deadline, task)
+        }
+    }
+
+    /// The earliest wall time after now, microseconds, at which an item's alerts read
+    /// differently: an alert's expiry or end (WxAlert.isCurrent), or the end of a current set's
+    /// source window. fetchedS is truncated to the second, so a window ends somewhere in
+    /// [fetchedS, fetchedS + 1 s) + window: its first instant, then, while the set still reads
+    /// current inside that second, the next alertWindowStepUS step (at most the second's end).
+    private func nextAlertEdgeUS() -> Int64? {
+        let nowUS = clock.wallMicroseconds
+        var next: Int64?
+        func consider(_ edgeUS: Int64) {
+            if edgeUS > nowUS, next.map({ edgeUS < $0 }) ?? true {
+                next = edgeUS
+            }
+        }
+        for item in places {
+            let r = item.alerts
+            guard r.state == .current || r.state == .stale else {
+                continue
+            }
+            for alert in r.alerts {
+                for edgeS in [alert.expiresS, alert.endsS].compactMap({ $0 }) {
+                    consider(Self.saturating(edgeS, times: 1_000_000))
+                }
+            }
+            if r.state == .current, let fetchedS = r.fetchedS, let source = r.source {
+                let windowUS = source == .meteoAlarm ? AlertsService.feedWindowUS : AlertsService.pointWindowUS
+                let first = Self.saturating(Self.saturating(fetchedS, times: 1_000_000), plus: windowUS, minus: 0)
+                if first > nowUS {
+                    consider(first)
+                } else {
+                    let steps = Self.saturating(nowUS, plus: 0, minus: first) / Self.alertWindowStepUS + 1
+                    let step = Self.saturating(first, plus: Self.saturating(steps, times: Self.alertWindowStepUS), minus: 0)
+                    consider(min(step, Self.saturating(first, plus: 1_000_000, minus: 0)))
+                }
+            }
+        }
+        return next
+    }
+
+    /// `a * b`, clamped to the Int64 range (alert times are parsed, untrusted values).
+    private nonisolated static func saturating(_ a: Int64, times b: Int64) -> Int64 {
+        let (r, overflow) = a.multipliedReportingOverflow(by: b)
+        return overflow ? ((a < 0) != (b < 0) ? .min : .max) : r
+    }
+
+    /// `a + b - c`, clamped to the Int64 range.
+    private nonisolated static func saturating(_ a: Int64, plus b: Int64, minus c: Int64) -> Int64 {
+        let d = c == .min ? Int64.max : -c
+        let (bd, o1) = b.addingReportingOverflow(d)
+        if o1 {
+            return b > 0 ? .max : .min
+        }
+        let (r, o2) = a.addingReportingOverflow(bd)
+        return o2 ? (bd > 0 ? .max : .min) : r
     }
 
     // MARK: - Persistence
@@ -1461,6 +1857,7 @@ public final class AppModel {
         log(.debug, "shutdown: saving and waiting for \(requests.count) request(s)")
         saveTask?.cancel()
         saveTask = nil
+        stopAlerts()
         engine.shutdown()
         if isLoaded {
             startSaves()
@@ -1488,5 +1885,55 @@ public final class AppModel {
     var savesInFlight: Int { saving.count }
     /// Whether the save debounce timer is armed.
     var saveTimerArmed: Bool { saveTask != nil }
+    /// Alert kicks whose result has not landed (cancelled ones until their task ends).
+    var alertKicksInFlight: Int { alertWaiters.count }
+    /// The tasks waiting for the alert kicks of the place `key` (each ends after its landing
+    /// was handled).
+    func alertKickTasks(forKey key: String) -> [Task<Void, Never>] {
+        alertWaiters.values.filter { $0.key == key }.map(\.task)
+    }
+    /// The next alert edge among the items when the wake-up was armed, wall microseconds (it
+    /// fires there or alertWakeMaxS after its arming, whichever is sooner); nil when disarmed or
+    /// when there is none.
+    var alertWakeEdgeUS: Int64? { alertWake?.edgeUS }
+    /// When the alert wake-up fires, monotonic microseconds; nil when disarmed.
+    var alertWakeDeadlineUS: Int64? { alertWake?.deadlineUS }
     #endif
+}
+
+// MARK: - Alerts service
+
+/// What AppModel asks of the places' alerts service: AlertsService in the app (see its file
+/// comment for the routing, the cadence and the currency rules), a fake in tests.
+@MainActor
+public protocol WxAlertsServing: AnyObject {
+    /// Starts updating the alerts of `place` in the background and returns at once; the task
+    /// ends once the result can be read (never awaited by the forecast path).
+    @discardableResult
+    func refresh(_ place: WxPlace) -> Task<Void, Never>
+    /// The alerts of `place` at the time of the call.
+    func result(for place: WxPlace) -> WxAlertsResult
+    /// Forgets a removed place (by WxPlace.key) and cancels its work.
+    func remove(placeKey: String)
+    /// Cancels all work (shutdown only).
+    func cancelAll()
+}
+
+extension AlertsService: WxAlertsServing {}
+
+/// The alerts service of a model given none (tests, previews): it never requests anything and
+/// reports every place not fetched (DECISIONS #41 A7).
+@MainActor
+final class InertAlertsService: WxAlertsServing {
+    func refresh(_ place: WxPlace) -> Task<Void, Never> {
+        Task {}
+    }
+
+    func result(for place: WxPlace) -> WxAlertsResult {
+        AppModel.alertsNotFetched
+    }
+
+    func remove(placeKey: String) {}
+
+    func cancelAll() {}
 }

@@ -29,12 +29,24 @@ struct PickerView: View {
     /// The keyboard cursor of the list (GtkListBox's focus row). It is not a selection the
     /// picker reports: only Return, Space or a double click add a row.
     @State private var cursor: Int?
+    /// The row under the mouse pointer (its "Add" button included), nil for none.
+    @State private var hoveredRow: Int?
+    /// Whether the pointer moved onto a row after the keyboard last chose one (the cursor, or
+    /// focus in the Location Name field): the units preselection then shows the hovered row.
+    @State private var unitsFollowPointer = false
     /// What the search field shows.
     @State private var draft = ""
     /// Optional custom name for the location (e.g. "Home", "Work", "Friend's place").
     @State private var locationName = ""
     /// Street-address & multi-provider geocoding results for the current query.
     @State private var addressCandidates: [WxAddressCandidate] = []
+    /// The query `addressCandidates` answer. While it is not the field's, they are an earlier
+    /// query's, kept on screen until the new search answers.
+    @State private var addressCandidatesQuery = ""
+    /// The query of the geocoding round in flight (not of one still in its debounce).
+    @State private var addressQueryInFlight: String? = nil
+    /// The query of the last answered round, and when it was answered.
+    @State private var addressQueryAnswered: (query: String, at: ContinuousClock.Instant)? = nil
     /// Whether an address search is currently in flight.
     @State private var isSearchingAddresses = false
     /// Custom status or error message when adding/searching addresses.
@@ -46,6 +58,8 @@ struct PickerView: View {
 
     /// The keypad's Enter key (U+0003), which AppKit reports apart from Return.
     private static let keypadEnter = KeyEquivalent("\u{3}")
+    /// The search field's placeholder, which also tells FieldAnchor the field apart.
+    static let searchFieldPlaceholder = "Street address, ZIP/postal code, coordinates, or city\u{2026}"
 
     private var trimmedQuery: String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -53,6 +67,10 @@ struct PickerView: View {
 
     private var trimmedLocationName: String {
         locationName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var addressCandidatesAreStale: Bool {
+        !addressCandidates.isEmpty && addressCandidatesQuery != trimmedQuery
     }
 
     private var isShowingAddressResults: Bool {
@@ -70,7 +88,7 @@ struct PickerView: View {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
                     TextField(
-                        "Street address, ZIP/postal code, coordinates, or city\u{2026}",
+                        Self.searchFieldPlaceholder,
                         text: Binding(get: { draft }, set: { edit($0) })
                     )
                     .textFieldStyle(.plain)
@@ -129,6 +147,10 @@ struct PickerView: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($focus, equals: .locationName)
                 .onSubmit {
+                    // Not an earlier query's address while the field's is searched.
+                    guard !addressCandidatesAreStale else {
+                        return
+                    }
                     if let cursor {
                         activateDisplayedRow(at: cursor)
                     } else if !displayedRows.isEmpty {
@@ -167,13 +189,25 @@ struct PickerView: View {
                 }
             }
 
+            // 2b. Units of the place being added: preselected by the country of the row the next
+            // add takes (syncUnitsHighlight) until the user picks, then saved with every place
+            // this picker adds. The label names that place: the pointer and the keyboard can point
+            // at different rows, and the one control shows the units of only one of them.
+            Picker(Self.unitsLabel(for: viewModel.highlightedPlace, fallback: "Units"), selection: Binding(get: { viewModel.units }, set: { viewModel.setUnits($0) })) {
+                ForEach(PickerViewModel.unitsChoices, id: \.self) { units in
+                    Text(PickerViewModel.unitsTitle(units)).tag(units)
+                }
+            }
+            .pickerStyle(.menu)
+            .fixedSize()
+
             // 3. Status line
             if let addressErrorText {
                 Text(addressErrorText)
                     .foregroundStyle(Color.red)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
-            } else if isSearchingAddresses && addressCandidates.isEmpty {
+            } else if isSearchingAddresses && (addressCandidates.isEmpty || addressCandidatesAreStale) {
                 HStack(spacing: 6) {
                     ProgressView()
                         .controlSize(.small)
@@ -200,6 +234,16 @@ struct PickerView: View {
                         onAdd: { activateDisplayedRow(at: item.id) }
                     )
                     .tag(item.id)
+                    .onHover { inside in
+                        // A click (the "Add" button, a double click) adds the row under the pointer.
+                        if inside {
+                            hoveredRow = item.id
+                            unitsFollowPointer = true
+                        } else if hoveredRow == item.id {
+                            hoveredRow = nil
+                        }
+                        syncUnitsHighlight()
+                    }
                 }
             }
             .focused($focus, equals: .results)
@@ -221,21 +265,43 @@ struct PickerView: View {
                     activateDisplayedRow(at: id)
                 }
             })
-            .onChange(of: displayedRows.count) {
-                if let cursor, cursor >= displayedRows.count {
-                    self.cursor = nil
+            .onChange(of: displayedRows.map(\.place.key)) {
+                // The cursor is a row position: new rows put it on another place.
+                cursor = nil
+                // Without a cursor only Return in Location Name adds row 0; anywhere else the next
+                // add is a click on the row under the pointer, so the units follow the pointer.
+                if focus != .locationName {
+                    unitsFollowPointer = true
                 }
+                // Nor may the units preselection outlive its row (an earlier or refused add's).
+                syncUnitsHighlight()
+            }
+            .onChange(of: cursor) {
+                // Return or Space adds the cursor row.
+                if cursor != nil {
+                    unitsFollowPointer = false
+                }
+                syncUnitsHighlight()
             }
         }
         .padding(12)
         .defaultFocus($focus, .search)
+        .onChange(of: focus) {
+            // Return in the Location Name field adds the cursor row, else row 0.
+            if focus == .locationName {
+                unitsFollowPointer = false
+                syncUnitsHighlight()
+            }
+        }
         .onAppear {
             draft = viewModel.text
             focus = .search
+            syncUnitsHighlight()
         }
         .onDisappear {
             addressSearchTask?.cancel()
             addressSearchTask = nil
+            addressQueryInFlight = nil
         }
         .onChange(of: viewModel.text) {
             Task { @MainActor in
@@ -305,13 +371,39 @@ struct PickerView: View {
         return defaultIsAdded || model.isSaved(key: place.key)
     }
 
+    /// The row the units preselection shows: the one the next add takes. A click adds the row
+    /// under the pointer, Return or Space the cursor row, Return in the Location Name field the
+    /// cursor row or else row 0; the latest of the pointer and the keyboard wins. Nil without rows.
+    nonisolated static func unitsRow(hovered: Int?, cursor: Int?, followPointer: Bool, rowCount: Int) -> Int? {
+        [followPointer ? hovered : nil, cursor, 0].lazy.compactMap { $0 }.first { (0..<rowCount).contains($0) }
+    }
+
+    /// The units picker's label: "Units for <name>, <region>" of the place whose preselection it
+    /// shows, `fallback` with none.
+    nonisolated static func unitsLabel(for place: WxPlace?, fallback: String) -> String {
+        guard let place else {
+            return fallback
+        }
+        let name = place.admin1.isEmpty ? place.name : place.name + ", " + place.admin1
+        return "Units for " + name
+    }
+
+    /// Shows in the units picker the preselection of the place the next add takes, so the units
+    /// the picker shows are the units the add saves (PickerViewModel.addPlace highlights it too).
+    private func syncUnitsHighlight() {
+        let rows = displayedRows
+        let row = Self.unitsRow(hovered: hoveredRow, cursor: cursor, followPointer: unitsFollowPointer,
+                                rowCount: rows.count)
+        viewModel.highlight(row.map { rows[$0].place })
+    }
+
     private func activateDisplayedRow(at index: Int) {
         let rows = displayedRows
         guard index >= 0, index < rows.count else { return }
         let row = rows[index]
         addressErrorText = nil
 
-        guard let model else {
+        guard model != nil else {
             viewModel.activateRow(at: index)
             return
         }
@@ -332,13 +424,13 @@ struct PickerView: View {
 
         let result: AppModel.AddResult
         if customName != nil || streetAddr != nil || row.place.isCustomLocation {
-            result = model.addCustomLocation(
+            result = viewModel.addCustomLocation(
                 row.place,
                 customName: customName,
                 streetAddress: streetAddr
             )
         } else {
-            result = model.add(row.place)
+            result = viewModel.addPlace(row.place)
         }
 
         switch result {
@@ -364,23 +456,52 @@ struct PickerView: View {
         triggerAddressSearch(immediate: false)
     }
 
+    /// PickerViewModel.repeatsLatestSearch for the address search: the same query (by UTF-8
+    /// bytes) as the latest search, which is in flight or was answered less than searchDelayMs
+    /// ago (a search still in its debounce is neither).
+    private func repeatsLatestAddressSearch(_ query: String) -> Bool {
+        if let inFlight = addressQueryInFlight, inFlight.utf8.elementsEqual(query.utf8) {
+            return true
+        }
+        guard let answered = addressQueryAnswered, answered.query.utf8.elementsEqual(query.utf8) else {
+            return false
+        }
+        return ContinuousClock.now - answered.at < .milliseconds(PickerViewModel.searchDelayMs)
+    }
+
     private func triggerAddressSearch(immediate: Bool) {
-        addressSearchTask?.cancel()
         let query = trimmedQuery
+        // Return (or a whitespace edit) does not restart the same search.
+        guard !repeatsLatestAddressSearch(query) else {
+            return
+        }
+        // A search cancelled here is not in flight, and the latest search is no longer the
+        // one answered.
+        addressSearchTask?.cancel()
+        addressQueryInFlight = nil
+        addressQueryAnswered = nil
         guard query.utf8.count >= PickerViewModel.minQueryBytes else {
             addressCandidates = []
+            addressCandidatesQuery = query
             isSearchingAddresses = false
             return
         }
         isSearchingAddresses = true
+        if immediate {
+            addressQueryInFlight = query
+        }
         addressSearchTask = Task { @MainActor in
             if !immediate {
                 try? await Task.sleep(nanoseconds: 280_000_000)
                 if Task.isCancelled { return }
+                self.addressQueryInFlight = query
             }
             let candidates = await WxAddressGeocoder.search(query: query)
             if Task.isCancelled { return }
             self.addressCandidates = candidates
+            self.addressCandidatesQuery = query
+            self.addressQueryInFlight = nil
+            self.addressQueryAnswered = (query, ContinuousClock.now)
             self.isSearchingAddresses = false
         }
     }
@@ -420,7 +541,7 @@ extension PickerView {
         private var editor: NSTextView? {
             guard let editor = view?.window?.firstResponder as? NSTextView, editor.isFieldEditor,
                   let field = editor.delegate as? NSTextField,
-                  field.placeholderString == PickerViewModel.searchPlaceholder
+                  field.placeholderString == PickerView.searchFieldPlaceholder
             else {
                 return nil
             }
@@ -616,13 +737,13 @@ private enum PickerViewPreview {
             vm.textChanged(to: "M")
         case .searching, .results, .noResults, .failed:
             if state == .results, let first = PickerViewModel.suggestedPlaces().first {
-                _ = model.add(first)
+                _ = model.add(first, units: vm.units)
             }
             vm.textChanged(to: "Miami")
             vm.submit()
         case .refused:
             if let first = PickerViewModel.suggestedPlaces().first {
-                _ = model.add(first)
+                _ = model.add(first, units: vm.units)
             }
             vm.activateRow(at: 0)
         }

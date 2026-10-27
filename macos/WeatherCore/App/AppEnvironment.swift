@@ -10,8 +10,12 @@
 // Production origins: every provider builds its HTTP client from its own fixed
 // https constant (NWSProvider.baseURL https://api.weather.gov, OpenMeteoShared
 // https://api.open-meteo.com and https://geocoding-api.open-meteo.com,
-// METNorwayParse.baseURL https://api.met.no); no other host is reachable from
-// what is built here, and nothing here makes a request.
+// METNorwayParse.baseURL https://api.met.no, BrightSkyProvider.baseURL
+// https://api.brightsky.dev, ECCCProvider.baseURL https://api.weather.gc.ca);
+// the alerts service fetches through one WxAlertsFetchers, whose five clients
+// are pinned to WxAlertsFetchers.origin(of:) (api.weather.gov, api.brightsky.dev,
+// api.met.no, api.weather.gc.ca and https://feeds.meteoalarm.org); no other host
+// is reachable from what is built here, and nothing here makes a request.
 //
 // Storage (DECISIONS #11, roots are passed in): the C app keeps places.json and
 // settings.json under g_get_user_config_dir()/weather and forecasts.json under
@@ -54,9 +58,10 @@ public enum AppEnvironment {
     }
 
     /// build_default_registry (wx-app.c:291-301): the registry of the production set, in this
-    /// order: the National Weather Service, Open-Meteo and MET Norway (all enabled), with the
-    /// Open-Meteo place search as its geocoder. A constructor or registration that fails would
-    /// be a wrong constant (C: a critical, nothing registered); it is logged and skipped.
+    /// order: the National Weather Service, Open-Meteo, MET Norway, Bright Sky (DWD) and ECCC
+    /// (all enabled), with the Open-Meteo place search as its geocoder. A constructor or
+    /// registration that fails would be a wrong constant (C: a critical, nothing registered); it
+    /// is logged and skipped.
     public static func makeRegistry(log: AppModel.LogSink? = nil) -> WxRegistry {
         let log = log ?? AppModel.systemLog
         let registry = WxRegistry()
@@ -90,10 +95,45 @@ public enum AppEnvironment {
     ///   - storageRoot: the container directories.
     ///   - online: the network state now (the monitor's first report).
     public static func make(storageRoot: StorageRoot, online: Bool = true) async -> AppModel {
-        let model = AppModel(registry: makeRegistry(), storage: storageRoot, clock: SystemClock(), online: online)
+        let clock = SystemClock()
+        let model = AppModel(registry: makeRegistry(), storage: storageRoot, clock: clock, online: online,
+                             alerts: makeAlerts(clock: clock)?.service)
         await model.load()
         return model
     }
+
+    /// The production alerts: one AlertsService fetching through one WxAlertsFetchers (the five
+    /// keyless issuers, each client pinned to its fixed https origin; one per app, as it keeps
+    /// MET Norway's Expires / Last-Modified), both timed on `clock`. Nothing is requested here.
+    /// WxAlertsFetchers' init throws only for an invalid base URL, never for its fixed origins;
+    /// were it to, the failure is logged and nil is returned (the model is then given the inert
+    /// service: no alerts, the forecast unaffected).
+    static func makeAlerts(clock: any WxClock, log: AppModel.LogSink? = nil)
+        -> (service: AlertsService, fetchers: WxAlertsFetchers)? {
+        do {
+            let fetchers = try WxAlertsFetchers(clock: clock)
+            let service = AlertsService(clock: clock, fetch: fetchers.fetcher)
+            #if DEBUG
+            builtAlerts.removeAll { $0.service == nil }
+            builtAlerts.append(BuiltAlerts(service: service, fetchers: fetchers))
+            #endif
+            return (service, fetchers)
+        } catch {
+            (log ?? AppModel.systemLog)(.warning, "Could not create the alert sources: \(error.message)")
+            return nil
+        }
+    }
+
+    #if DEBUG
+    /// What makeAlerts built, held weakly (tests: which service a model from make() holds and
+    /// which fetchers it fetches through).
+    struct BuiltAlerts {
+        weak var service: AlertsService?
+        weak var fetchers: WxAlertsFetchers?
+    }
+    /// Every makeAlerts result whose service is alive.
+    private(set) static var builtAlerts: [BuiltAlerts] = []
+    #endif
 
     /// `make(storageRoot:online:)` for the directories of `home` (StorageRoot(home:)).
     public static func make(storageRoot home: URL, online: Bool = true) async -> AppModel {

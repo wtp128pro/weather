@@ -21,6 +21,7 @@ SECTIONS = [
             {"id": "places", "href": "places.html", "title": "Adding & Managing Places"},
             {"id": "forecast-page", "href": "forecast-page.html", "title": "Reading the Forecast"},
             {"id": "rain-chart", "href": "rain-chart.html", "title": "Rain Graph & Bars Guide"},
+            {"id": "weather-alerts", "href": "weather-alerts.html", "title": "Weather Alerts"},
             {"id": "units-refresh", "href": "units-refresh.html", "title": "Units, Refreshing & Offline"},
             {"id": "shortcuts", "href": "shortcuts.html", "title": "Keyboard Shortcuts & Menus"},
         ],

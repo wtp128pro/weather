@@ -129,9 +129,9 @@ private final class ModelFx {
         try list.save()
     }
 
-    func start() async -> AppModel {
+    func start(alerts: (any WxAlertsServing)? = nil) async -> AppModel {
         let m = AppModel(registry: WxRegistry(), storage: storage, clock: clock, online: true,
-                         log: { _, _ in })
+                         log: { _, _ in }, alerts: alerts)
         await m.load()
         return m
     }
@@ -147,6 +147,34 @@ private func order(_ m: AppModel) -> String {
 @MainActor
 private func row(_ m: AppModel, _ name: String) throws -> RowViewModel {
     try #require(RowViewModel.rows(of: m).first { $0.name == name }, "no row \(name)")
+}
+
+// MARK: - Alerts (U52)
+
+/// An NWS alert named `event` at `level`, its message expiring at `expiresS` and its event ending
+/// at `endsS` (nil: not given).
+private func alertFx(_ id: String, _ event: String, _ level: WxAlert.Level, expiresS: Int64? = nil,
+                     endsS: Int64? = nil) -> WxAlert {
+    WxAlert(id: "nws:" + id, source: .nws, event: event, headline: event + " in effect", description: "",
+            instruction: "", level: level, issuerSeverity: "", onsetS: nil, expiresS: expiresS, endsS: endsS,
+            web: nil)
+}
+
+/// An answer of the alerts service for a place: `state`, the alerts it holds, fetched a minute
+/// before T_NOW.
+private func alertsResult(_ state: WxAlertsResult.State, _ alerts: [WxAlert] = []) -> WxAlertsResult {
+    WxAlertsResult(state: state, source: .nws, alerts: alerts, fetchedS: tNow - 60)
+}
+
+/// An alerts service that answers fixed results by place key and fetches nothing.
+@MainActor
+private final class RowFixedAlerts: WxAlertsServing {
+    var results: [String: WxAlertsResult] = [:]
+
+    func refresh(_ place: WxPlace) -> Task<Void, Never> { Task {} }
+    func result(for place: WxPlace) -> WxAlertsResult { results[place.key] ?? AppModel.alertsNotFetched }
+    func remove(placeKey: String) { results[placeKey] = nil }
+    func cancelAll() {}
 }
 
 // MARK: - Suite
@@ -346,13 +374,14 @@ struct RowViewModelTests {
         var row = RowViewModel(place: p, forecast: f, stale: true, nowS: tNow)
         #expect(row.tooltip == "Miami, Florida, United States")
         // "<label>: <temp>, <hint>[, <marker>]" (wx-row.c:724-725) of the literals of
-        // test-window.c:1264, 2537, 2538, 2543.
-        #expect(row.accessibilityLabel == "Miami, Florida, United States: 77\u{00B0}, Raining until 5:00 PM, Stale")
+        // test-window.c:1264, 2537, 2538, 2543; the temperature carries its units (U50: "77°F",
+        // "— °F"; the C label had none).
+        #expect(row.accessibilityLabel == "Miami, Florida, United States: 77\u{00B0}F, Raining until 5:00 PM, Stale")
         row = RowViewModel(place: p, forecast: f, nowS: tNow)
-        #expect(row.accessibilityLabel == "Miami, Florida, United States: 77\u{00B0}, Raining until 5:00 PM")
+        #expect(row.accessibilityLabel == "Miami, Florida, United States: 77\u{00B0}F, Raining until 5:00 PM")
         row = RowViewModel(place: p, forecast: nil, nowS: tNow)
         // test-window.c:1264, 2518, 2519: no marker without data.
-        #expect(row.accessibilityLabel == "Miami, Florida, United States: \u{2014}, No data yet")
+        #expect(row.accessibilityLabel == "Miami, Florida, United States: \u{2014} \u{00B0}F, No data yet")
         // The badge tooltips (test-detail.c:1764, 1773, 1776, 1778-1779, 1781).
         #expect(RowViewModel.offlineTooltip == "No network connection: showing the last forecast")
         #expect(RowViewModel.staleTooltip(errorText: nil) == "The last refresh failed")
@@ -395,6 +424,81 @@ struct RowViewModelTests {
 
     @Test func rainLater() throws {  // C: /window/rain/later (test-window.c:2202)
         try rainCase(.later, headlinePrefix: "Rain expected", hintPrefix: "Rain ", hasDetail: true)
+    }
+
+    // MARK: Per-place units (U50)
+
+    /// A loaded model over Miami and Orlando, the default units imperial, Orlando's own units
+    /// metric (AppModel.setUnits(_:forKey:)); the items of both with the 25 degC wet forecast
+    /// at T_NOW (the item's forecast and "now" are what a refresh would set).
+    private func unitsItems(_ label: String) async throws -> (AppModel, [AppModel.Place]) {
+        let fx = try ModelFx(label, [try miami(), try orlando()])
+        let m = await fx.start()
+        #expect(m.defaultUnits == .imperial)
+        #expect(m.setUnits(.metric, forKey: try orlando().key))
+        let items = try m.places.map { item in
+            var copy = item
+            copy.forecast = try makeForecast(item.place, wet: true)
+            copy.nowS = tNow
+            return copy
+        }
+        return (m, items)
+    }
+
+    @Test func unitLabelPerPlace() async throws {
+        #expect(RowViewModel.unitLabel(.imperial) == "\u{00B0}F")
+        #expect(RowViewModel.unitLabel(.metric) == "\u{00B0}C")
+        let (m, items) = try await unitsItems("unit-label")
+        // The rows of the model: each place's own units, whatever the default.
+        let rows = RowViewModel.rows(of: m)
+        #expect(rows.map(\.name) == ["Miami", "Orlando"])
+        #expect(rows.map(\.units) == [.imperial, .metric])
+        #expect(rows.map(\.unitLabel) == ["\u{00B0}F", "\u{00B0}C"])
+        #expect(items.map { RowViewModel($0).unitLabel } == ["\u{00B0}F", "\u{00B0}C"])
+        // The default changes nothing for a place with its own units.
+        m.setDefaultUnits(.metric)
+        #expect(RowViewModel.rows(of: m).map(\.unitLabel) == ["\u{00B0}F", "\u{00B0}C"])
+        // Live conditions keep the units they are given (the place's).
+        let live = try #require(items[1].forecast?.hours.first)
+        #expect(RowViewModel(items[1]).withLiveCurrent(live, units: items[1].units).unitLabel == "\u{00B0}C")
+        _ = await m.flush()
+    }
+
+    @Test func temperatureInPlaceUnits() async throws {
+        let (m, items) = try await unitsItems("temperature")
+        // 25 degC: 77 deg in Miami (imperial), 25 deg in Orlando (metric) (test-window.c:2537, 2541).
+        #expect(items.map { RowViewModel($0).temperature } == ["77\u{00B0}", "25\u{00B0}"])
+        // Live conditions, 10 degC: 50 deg F and 10 deg C.
+        var live = try #require(items[0].forecast?.hours.first)
+        live.tempC = 10
+        #expect(items.map { RowViewModel($0).withLiveCurrent(live, units: $0.units).temperature }
+            == ["50\u{00B0}", "10\u{00B0}"])
+        // Without current conditions: the em dash in either system.
+        #expect(RowViewModel.rows(of: m).map(\.temperature) == ["\u{2014}", "\u{2014}"])
+        _ = await m.flush()
+    }
+
+    @Test func accessibilityIncludesUnits() async throws {
+        let (m, items) = try await unitsItems("accessibility")
+        #expect(items.map { RowViewModel($0).accessibilityLabel } == [
+            "Miami, Florida, United States: 77\u{00B0}F, Raining until 5:00 PM",
+            "Orlando, Florida, United States: 25\u{00B0}C, Raining until 5:00 PM",
+        ])
+        // No temperature: the units are still spoken after the em dash.
+        #expect(RowViewModel.rows(of: m).map(\.accessibilityLabel) == [
+            "Miami, Florida, United States: \u{2014} \u{00B0}F, No data yet",
+            "Orlando, Florida, United States: \u{2014} \u{00B0}C, No data yet",
+        ])
+        // With a marker, and with live conditions in the place's units.
+        var stale = items[1]
+        stale.stale = true
+        #expect(RowViewModel(stale).accessibilityLabel
+            == "Orlando, Florida, United States: 25\u{00B0}C, Raining until 5:00 PM, Stale")
+        var live = try #require(items[1].forecast?.hours.first)
+        live.tempC = 10
+        #expect(RowViewModel(items[1]).withLiveCurrent(live, units: items[1].units).accessibilityLabel
+            == "Orlando, Florida, United States: 10\u{00B0}C, Raining until 5:00 PM")
+        _ = await m.flush()
     }
 
     @Test func rowsFollowTheItemClock() async throws {  // C: /window/rain/rows-follow-item-clock
@@ -508,5 +612,196 @@ struct RowViewModelTests {
         #expect(m.selectedKey == nil)  // test-window.c:2389
         #expect(RowViewModel.rows(of: m).isEmpty)
         _ = await m.flush()
+    }
+
+    // MARK: The unit suffix and the alert indicator (U52)
+
+    @Test func unitSuffixBothForms() async throws {
+        let (m, items) = try await unitsItems("unit-suffix")
+        // With a temperature: the unit letter after the degree sign, "77°F" / "25°C".
+        let rows = items.map(RowViewModel.init)
+        #expect(rows.map(\.unitSuffix) == ["F", "C"])
+        #expect(rows.map { $0.temperature + $0.unitSuffix } == ["77\u{00B0}F", "25\u{00B0}C"])
+        // The temperature and the unit label are unchanged (U50).
+        #expect(rows.map(\.temperature) == ["77\u{00B0}", "25\u{00B0}"])
+        #expect(rows.map(\.unitLabel) == ["\u{00B0}F", "\u{00B0}C"])
+        // Live conditions: the same form in the units given.
+        var live = try #require(items[0].forecast?.hours.first)
+        live.tempC = 10
+        #expect(items.map { r in
+            let row = RowViewModel(r).withLiveCurrent(live, units: r.units)
+            return row.temperature + row.unitSuffix
+        } == ["50\u{00B0}F", "10\u{00B0}C"])
+        // Without current conditions: the em dash, then the unit label, "— °F" / "— °C".
+        let empty = RowViewModel.rows(of: m)
+        #expect(empty.map(\.unitSuffix) == ["\u{00B0}F", "\u{00B0}C"])
+        #expect(empty.map { $0.temperature + " " + $0.unitSuffix } == ["\u{2014} \u{00B0}F", "\u{2014} \u{00B0}C"])
+        // The row reads as its accessible label says.
+        for row in rows + empty {
+            let shown = row.temperature + (row.temperature.hasSuffix("\u{00B0}") ? "" : " ") + row.unitSuffix
+            #expect(row.accessibilityLabel.contains(": " + shown + ", "), "\(row.accessibilityLabel)")
+        }
+        _ = await m.flush()
+    }
+
+    @Test func alertIndicatorHighestSeverity() async throws {
+        let (m, items) = try await unitsItems("alert-level")
+        var mia = items[0]
+        // One alert: its own level, whichever it is.
+        for level in WxAlert.Level.allCases {
+            mia.alerts = alertsResult(.current, [alertFx("1", "Alert", level, expiresS: tNow + 3600)])
+            #expect(RowViewModel(mia).alertIndicator == RowViewModel.AlertIndicator(level: level, count: 1))
+        }
+        // Several: the highest level, wherever it stands in the list (not the first one's).
+        mia.alerts = alertsResult(.current, [
+            alertFx("1", "Wind Advisory", .yellow, expiresS: tNow + 3600),
+            alertFx("2", "Special Statement", .unknown),
+            alertFx("3", "Tornado Warning", .red, expiresS: tNow + 3600),
+            alertFx("4", "Flood Watch", .orange, endsS: tNow + 7200),
+        ])
+        #expect(RowViewModel(mia).alertIndicator == RowViewModel.AlertIndicator(level: .red, count: 4))
+        // Live conditions keep the indicator.
+        let live = try #require(mia.forecast?.hours.first)
+        #expect(RowViewModel(mia).withLiveCurrent(live, units: mia.units).alertIndicator?.level == .red)
+        // An expired red alert is not the highest any more: orange is.
+        mia.alerts = alertsResult(.current, [
+            alertFx("1", "Wind Advisory", .yellow, expiresS: tNow + 3600),
+            alertFx("3", "Tornado Warning", .red, expiresS: tNow),
+            alertFx("4", "Flood Watch", .orange, endsS: tNow + 7200),
+        ])
+        #expect(RowViewModel(mia).alertIndicator == RowViewModel.AlertIndicator(level: .orange, count: 2))
+        #expect(RowViewModel.AlertIndicator.symbolName == "exclamationmark.triangle.fill")
+        _ = await m.flush()
+
+        // The rows of a model: the alerts service's result for the place reaches its row.
+        let fx = try ModelFx("alert-model", [try miami(), try orlando()])
+        let now = fx.clock.wallSeconds
+        let service = RowFixedAlerts()
+        service.results[try miami().key] = WxAlertsResult(state: .current, source: .nws, alerts: [
+            alertFx("a", "Flood Watch", .orange, expiresS: now + 3600),
+            alertFx("b", "Tornado Warning", .red, expiresS: now + 3600),
+        ], fetchedS: now)
+        let model = await fx.start(alerts: service)
+        let modelRows = RowViewModel.rows(of: model)
+        #expect(modelRows.map(\.name) == ["Miami", "Orlando"])
+        #expect(modelRows.map(\.alertIndicator) == [RowViewModel.AlertIndicator(level: .red, count: 2), nil])
+        _ = await model.flush()
+    }
+
+    @Test func alertIndicatorCount() async throws {
+        let (m, items) = try await unitsItems("alert-count")
+        var mia = items[0]
+        let gale = alertFx("1", "Gale Warning", .orange, expiresS: tNow + 3600)
+        let surf = alertFx("2", "High Surf Advisory", .yellow, expiresS: tNow + 3600)
+        let heat = alertFx("3", "Heat Advisory", .yellow)
+        // One alert: no number; two and three: their number.
+        for (list, count, text) in [([gale], 1, nil), ([gale, surf], 2, "2"), ([gale, surf, heat], 3, "3")]
+            as [([WxAlert], Int, String?)] {
+            mia.alerts = alertsResult(.current, list)
+            let indicator = RowViewModel(mia).alertIndicator
+            #expect(indicator?.count == count)
+            #expect(indicator?.countText == text)
+        }
+        // Expiry at the item's "now": an alert expiring or ending at nowS is gone, one a second
+        // later and an open-ended one count.
+        mia.alerts = alertsResult(.current, [
+            alertFx("x", "Expired Warning", .red, expiresS: tNow),
+            alertFx("y", "Ended Warning", .red, expiresS: tNow + 3600, endsS: tNow),
+            alertFx("z", "Wind Advisory", .yellow, expiresS: tNow + 1),
+            heat,
+        ])
+        var row = RowViewModel(mia)
+        #expect(row.alerts.map(\.id) == ["nws:z", "nws:3"])
+        #expect(row.alertIndicator == RowViewModel.AlertIndicator(level: .yellow, count: 2))
+        // One second on, the advisory has expired too: one alert, no number.
+        mia.nowS = tNow + 1
+        row = RowViewModel(mia)
+        #expect(row.alerts.map(\.id) == ["nws:3"])
+        #expect(row.alertIndicator == RowViewModel.AlertIndicator(level: .yellow, count: 1))
+        #expect(row.alertIndicator?.countText == nil)
+        _ = await m.flush()
+    }
+
+    @Test func noIndicatorWithoutAlerts() async throws {
+        let (m, items) = try await unitsItems("alert-none")
+        let label = "Miami, Florida, United States: 77\u{00B0}F, Raining until 5:00 PM"
+        let held = [alertFx("1", "Tornado Warning", .red, expiresS: tNow + 3600)]
+        // No service answer yet, the default, and a current answer without alerts.
+        var mia = items[0]
+        #expect(mia.alerts == AppModel.alertsNotFetched)
+        for row in [RowViewModel(mia), RowViewModel(place: mia.place, forecast: mia.forecast, nowS: tNow)] {
+            #expect(row.alertIndicator == nil)
+            #expect(row.alerts.isEmpty)
+            #expect(row.accessibilityLabel == label)
+        }
+        // Every state but current shows nothing, even with alerts held (a stale set is never current).
+        for state in WxAlertsResult.State.allCases where state != .current {
+            mia.alerts = alertsResult(state, held)
+            let row = RowViewModel(mia)
+            #expect(row.alertIndicator == nil, "\(state)")
+            #expect(row.alerts.isEmpty, "\(state)")
+            #expect(row.accessibilityLabel == label, "\(state)")
+        }
+        // Current without alerts, and current with only alerts expired at nowS.
+        for list in [[], [alertFx("1", "Tornado Warning", .red, expiresS: tNow)]] as [[WxAlert]] {
+            mia.alerts = alertsResult(.current, list)
+            #expect(RowViewModel(mia).alertIndicator == nil)
+            #expect(RowViewModel(mia).accessibilityLabel == label)
+        }
+        // The rows of a model with no alerts service: no indicator anywhere.
+        #expect(RowViewModel.rows(of: m).allSatisfy { $0.alertIndicator == nil && $0.alerts.isEmpty })
+        _ = await m.flush()
+    }
+
+    @Test func accessibilityNamesAlerts() async throws {
+        let (m, items) = try await unitsItems("alert-a11y")
+        var mia = items[0]
+        let tornado = alertFx("1", "Tornado Warning", .red, expiresS: tNow + 3600)
+        // One alert: named with its level.
+        mia.alerts = alertsResult(.current, [tornado])
+        #expect(RowViewModel(mia).accessibilityLabel
+            == "Miami, Florida, United States: 77\u{00B0}F, Raining until 5:00 PM, Alert: Tornado Warning (red)")
+        // Several, after the marker, in their order; an unknown level is not spoken and an alert
+        // without an event name is named by its headline.
+        let nameless = WxAlert(id: "nws:5", source: .nws, event: "", headline: "Coastal Flood Statement",
+                               description: "", instruction: "", level: .minor, issuerSeverity: "Minor", onsetS: nil,
+                               expiresS: nil, endsS: nil, web: nil)
+        mia.alerts = alertsResult(.current, [
+            tornado, alertFx("2", "Flood Watch", .orange), alertFx("3", "Special Statement", .unknown), nameless,
+        ])
+        mia.stale = true
+        #expect(RowViewModel(mia).accessibilityLabel
+            == "Miami, Florida, United States: 77\u{00B0}F, Raining until 5:00 PM, Stale, 4 alerts: "
+            + "Tornado Warning (red), Flood Watch (orange), Special Statement, Coastal Flood Statement (minor)")
+        // Metric, and live conditions: the units part is unchanged, the alerts follow it.
+        var orl = items[1]
+        orl.alerts = alertsResult(.current, [alertFx("4", "Wind Advisory", .yellow)])
+        var live = try #require(orl.forecast?.hours.first)
+        live.tempC = 10
+        #expect(RowViewModel(orl).withLiveCurrent(live, units: orl.units).accessibilityLabel
+            == "Orlando, Florida, United States: 10\u{00B0}C, Raining until 5:00 PM, Alert: Wind Advisory (yellow)")
+        // An expired alert and a stale set are not spoken.
+        orl.alerts = alertsResult(.current, [alertFx("4", "Wind Advisory", .yellow, expiresS: tNow)])
+        #expect(RowViewModel(orl).accessibilityLabel
+            == "Orlando, Florida, United States: 25\u{00B0}C, Raining until 5:00 PM")
+        orl.alerts = alertsResult(.stale, [alertFx("4", "Wind Advisory", .yellow)])
+        #expect(RowViewModel(orl).accessibilityLabel
+            == "Orlando, Florida, United States: 25\u{00B0}C, Raining until 5:00 PM")
+        _ = await m.flush()
+
+        // A model's row without a temperature: the em dash form, then the alerts.
+        let fx = try ModelFx("alert-a11y-model", [try miami()])
+        let now = fx.clock.wallSeconds
+        let service = RowFixedAlerts()
+        service.results[try miami().key] = WxAlertsResult(state: .current, source: .nws, alerts: [
+            alertFx("b", "Tornado Warning", .red, expiresS: now + 3600),
+            alertFx("a", "Flood Watch", .orange, expiresS: now + 3600),
+        ], fetchedS: now)
+        let model = await fx.start(alerts: service)
+        #expect(RowViewModel.rows(of: model).map(\.accessibilityLabel) == [
+            "Miami, Florida, United States: \u{2014} \u{00B0}F, No data yet, 2 alerts: Tornado Warning (red), "
+                + "Flood Watch (orange)",
+        ])
+        _ = await model.flush()
     }
 }

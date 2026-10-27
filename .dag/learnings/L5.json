@@ -1,0 +1,15 @@
+{
+  "id": "L5",
+  "trigger": "The U48 iteration-1 panel stood PASS/PASS/FAIL on a reproduced non-goal violation with every lens at verify_rounds 3, leaving no compliant record (DECISIONS #39).",
+  "lesson": "An I41 re-poll is legal only for a lens with rounds to spare and that never tested the disputed finding; at 3 rounds no re-poll is legal, and escalation needs a FAIL majority.",
+  "how_to_apply": "Before re-polling, read the lens's verify_rounds and tested scope; brief panel lenses to stop at 2 rounds when convergence allows, keeping one round for a possible re-poll.",
+  "scope": {
+    "applies_to": [
+      "tag:high-stakes"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: DECISIONS.md #39; units/U48/history/",
+  "since_wave": 11,
+  "promotable": true
+}

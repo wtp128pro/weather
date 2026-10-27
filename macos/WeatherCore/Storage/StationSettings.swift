@@ -60,13 +60,18 @@ public struct WxStationSettings: Sendable, Equatable, Codable {
         return value
     }
 
-    public func save(path: String) {
-        guard !path.isEmpty else { return }
+    /// Writes the settings atomically. Returns false when they could not be
+    /// written (e.g. a read-only or full disk; the old file survives), so the
+    /// caller can report it; an empty `path` (no configuration folder) saves
+    /// nothing and is not a failure.
+    @discardableResult
+    public func save(path: String) -> Bool {
+        guard !path.isEmpty else { return true }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(self) else { return }
+        guard let data = try? encoder.encode(self) else { return false }
         try? FileManager.default.createDirectory(
             at: URL(fileURLWithPath: path).deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? FileIO.writeAtomic(path: path, data: data)
+        return (try? FileIO.writeAtomic(path: path, data: data)) != nil
     }
 }

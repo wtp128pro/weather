@@ -1,0 +1,17 @@
+{
+  "id": "L6",
+  "trigger": "Merging a retry of an earlier-wave unit after a later-wave unit that wrote the same file produced validator I63-2 rows that cannot be accepted (DECISIONS #46(2), #48).",
+  "lesson": "The end-of-run check orders writers by graph wave, not by merge time; a later merge from an earlier wave reads as 'changed after the later unit was verified'.",
+  "how_to_apply": "Route a fix to a shared file through the LATER-wave unit that owns it (or merge the earlier unit's retry before the later unit merges), and when two units' frames share a file make the dependency explicit in the graph.",
+  "scope": {
+    "applies_to": [
+      "tag:ui",
+      "tag:tests",
+      "tag:integration"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: DECISIONS.md #46, #48",
+  "since_wave": 11,
+  "promotable": true
+}

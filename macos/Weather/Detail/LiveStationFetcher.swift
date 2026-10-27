@@ -14,15 +14,16 @@
 //    drizzle) and precipitation rate. A close, fresh blend also teaches the place's local
 //    forecast bias (WxLocalBias, through AppModel).
 // 2. US EPA AirNow / State DEP ArcGIS FeatureServer (services.arcgis.com/cJ9YHowT8TU7DUyn):
-//    discovers nearby physical ground air-quality monitors (PM2.5, PM10, O3) within
-//    45 km and computes an inverse-distance-weighted US AQI with 24h comparison,
-//    falling back to Open-Meteo's Air Quality API when outside station coverage.
+//    the nearest physical ground air-quality monitor within 45 km and its reported US AQI
+//    (ozone/PM, never interpolated between monitors) with its 24h comparison, falling back
+//    to the CAMS forecast of Open-Meteo's Air Quality API when outside station coverage.
 // 3. Calibrated Hourly Sky Cover & 15-Minute Radar Nowcast:
 //    fetches NWS meteorologist-calibrated hourly sky forecasts (US) and Open-Meteo
 //    multi-altitude cloud layers (cloud_cover_low / mid / high) + 15-minute radar
 //    precipitation so upper-tropospheric cirrus never falsely shows 100% Overcast
 //    in the 48-hour strip or Clouds card.
 
+import AppKit
 import Foundation
 import Observation
 import WeatherCore
@@ -46,7 +47,8 @@ nonisolated struct LiveStationSnapshot: Sendable, Equatable {
     var condition: WxCondition?
     /// Observed hourly precipitation rate in mm/h.
     var precipMmH: Double?
-    /// 15-minute radar precipitation samples (tS, mm/h) for the next 2 hours.
+    /// 15-minute radar precipitation for the next 2 hours: the amount over [tS, tS + 900), mm
+    /// (WxQuarter).
     var radarQuarters: [WxQuarter] = []
     /// Calibrated effective visual cloud cover (%) by hour timestamp (UTC unix seconds).
     var calibratedHourlyCloudPct: [Int64: Double] = [:]
@@ -252,10 +254,12 @@ nonisolated struct LiveStationSnapshot: Sendable, Equatable {
                     hourly: page.rain.hourly
                 )
             }
+            // Quarters are labelled by their start: the one in progress (tS <= now < tS + 900) counts,
+            // and rain in it starts now (1 minute).
             if page.rain.headline.hasPrefix("No rain"),
-               let firstWet = radarQuarters.first(where: { $0.tS > nowS && $0.precipMm >= 0.1 })
+               let firstWet = radarQuarters.first(where: { $0.tS + 900 > nowS && $0.precipMm * 4.0 >= 0.1 })
             {
-                let minutes = max(1, (firstWet.tS - nowS + 59) / 60)
+                let minutes = max(1, (max(firstWet.tS, nowS) - nowS + 59) / 60)
                 if minutes <= 90 {
                     return DetailViewModel.RainCard(
                         headline: "Rain starting in \(minutes) minute\(minutes == 1 ? "" : "s")",
@@ -580,6 +584,8 @@ final class LiveStationStore {
     @ObservationIgnored private var configRevision: UInt64 = 0
     @ObservationIgnored private var lastFetchedAt: [String: (fetchedS: Int64, units: WxUnits, config: UInt64)] = [:]
     @ObservationIgnored private var inFlight: Set<String> = []
+    /// The place of a refresh asked for while its key was in flight (fetched again after it).
+    @ObservationIgnored private var pendingRefresh: [String: AppModel.Place] = [:]
     @ObservationIgnored private weak var model: AppModel?
     @ObservationIgnored private(set) var catalog = WxStationCatalog()
     @ObservationIgnored private var catalogLoaded = false
@@ -587,6 +593,16 @@ final class LiveStationStore {
     @ObservationIgnored private var catalogSaveTask: Task<Void, Never>?
     /// The catalog is written at most this often, s.
     private static let catalogSaveDelayS = 60
+
+    init() {
+        // Every quit path replies to applicationShouldTerminate, then AppKit posts willTerminate
+        // on the main thread before the process exits: the debounced catalog save is written then.
+        _ = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: nil
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.flushCatalog() }
+        }
+    }
 
     /// Connects the store to the app model: the catalog file lives next to its settings, and the
     /// fused observations teach it the places' local forecast bias.
@@ -616,21 +632,38 @@ final class LiveStationStore {
         {
             return
         }
-        guard !inFlight.contains(key) else { return }
+        guard !inFlight.contains(key) else {
+            // The units or the configuration may have changed since the flight started: fetch
+            // again when it ends.
+            pendingRefresh[key] = place
+            return
+        }
         inFlight.insert(key)
-        defer { inFlight.remove(key) }
 
         let config = configRevision
         if var fetched = await LiveStationFetcher.fetch(place: place, store: self) {
             // An air-quality source that did not answer this time: the last reading while it is
-            // recent (the card says when it was measured).
-            if fetched.airQuality == nil, let last = snapshots[key]?.airQuality, let validS = last.validS,
+            // recent (the card says when it was measured) and in the same units (its text has them).
+            if fetched.airQuality == nil, lastFetchedAt[key]?.units == place.units,
+               let last = snapshots[key]?.airQuality, let validS = last.validS,
                Int64(Date().timeIntervalSince1970) - validS <= WxAirQuality.maxAgeS
             {
                 fetched.airQuality = last
             }
             snapshots[key] = fetched
             lastFetchedAt[key] = (place.fetchedS, place.units, config)
+        } else {
+            // No live source answered: the previous snapshot is no longer shown as current.
+            snapshots[key] = nil
+        }
+        inFlight.remove(key)
+        if let asked = pendingRefresh.removeValue(forKey: key) {
+            // With the place as it is now (the model's, once attached), in a new task: the caller
+            // of this flight may be a cancelled .task(id:). A no-op when nothing changed.
+            let current = model.map { m in m.places.first { $0.key == key } } ?? asked
+            if let current {
+                Task { await refreshIfNeeded(for: current) }
+            }
         }
     }
 
@@ -738,11 +771,19 @@ final class LiveStationStore {
         keyExpiries = keys.compactMapValues { WxStationKeyInfo.expiry(ofKey: $0) }
     }
 
+    /// Writes a pending catalog save now (the app is quitting).
+    private func flushCatalog() {
+        guard let task = catalogSaveTask else { return }
+        task.cancel()
+        catalogSaveTask = nil
+        catalog.save(path: catalogPath)
+    }
+
     private func scheduleCatalogSave() {
         guard !catalogPath.isEmpty, catalogSaveTask == nil else { return }
         catalogSaveTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(Self.catalogSaveDelayS))
-            guard let self else { return }
+            guard let self, !Task.isCancelled else { return }
             let snapshot = self.catalog
             let path = self.catalogPath
             self.catalogSaveTask = nil
@@ -969,6 +1010,8 @@ nonisolated enum LiveStationFetcher {
 
     private struct OpenMeteoForecastResponse: Decodable {
         struct Current: Decodable {
+            /// The period the aggregated values (precipitation) cover, s (900: the last 15 minutes).
+            let interval: Int?
             let temperature_2m: Double?
             let relative_humidity_2m: Double?
             let apparent_temperature: Double?
@@ -1003,15 +1046,24 @@ nonisolated enum LiveStationFetcher {
 
     private static func fetchOpenMeteoCurrent(lat: Double, lon: Double) async -> OpenMeteoCurrentSnapshot? {
         let urlStr = String(
-            format: "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation&minutely_15=precipitation&forecast_days=2&forecast_minutely_15=8&timeformat=unixtime",
+            format: "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation&minutely_15=precipitation&forecast_days=2&forecast_minutely_15=9&timeformat=unixtime",
             lat, lon
         )
-        guard let url = URL(string: urlStr) else { return nil }
+        // Through StationHTTP like every live request: a bounded wait, a short cache, the app's
+        // User-Agent, and a request that outlives the cancellation of the caller's task. The 300 s
+        // TTL absorbs repeated triggers (units/config changes, focus rounds every >= 120 s) and stays
+        // below the 540 s between periodic rounds (RefreshScheduler.periodicFreshUS), so a periodic
+        // round never gets the previous periodic round's answer. A units or station-config change
+        // (or a focus round) also starts a live fetch outside the periodic rounds, and a periodic
+        // round within 300 s after it reuses that answer: a round's data is at most 300 s old.
+        guard case .ok(let data) = await StationHTTP.shared.fetch(urlStr, ttlS: 300, timeoutS: 10) else {
+            return nil
+        }
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { return nil }
             let decoded = try JSONDecoder().decode(OpenMeteoForecastResponse.self, from: data)
             guard let cur = decoded.current else { return nil }
+            // "current" precipitation is the sum over the last `interval` seconds: as a rate, mm/h.
+            let precipMmH = cur.precipitation.map { $0 * 3600.0 / Double(max(cur.interval ?? 900, 1)) }
 
             let effectiveCloud: Double? = {
                 if let low = cur.cloud_cover_low, let mid = cur.cloud_cover_mid, let high = cur.cloud_cover_high {
@@ -1019,7 +1071,7 @@ nonisolated enum LiveStationFetcher {
                         low: low,
                         mid: mid,
                         high: high,
-                        precipMm: cur.precipitation ?? 0.0
+                        precipMm: precipMmH ?? 0.0
                     )
                 }
                 return cur.cloud_cover
@@ -1031,13 +1083,13 @@ nonisolated enum LiveStationFetcher {
                         low: 0.0,
                         mid: mid,
                         high: high,
-                        precipMm: cur.precipitation ?? 0.0
+                        precipMm: precipMmH ?? 0.0
                     )
                 }
                 return nil
             }()
 
-            let precipRate = cur.precipitation ?? 0.0
+            let precipRate = precipMmH ?? 0.0
             let wmoVotes = cur.weather_code.map { [$0] } ?? []
             let derivedCond = WxConditionRules.derive(
                 WxConditionInput(
@@ -1055,12 +1107,15 @@ nonisolated enum LiveStationFetcher {
             {
                 let count = min(times.count, precips.count)
                 for i in 0..<count {
-                    let tS = times[i]
+                    // Each value is the sum over the 15 minutes BEFORE its time (as OpenMeteoParse
+                    // maps it); a WxQuarter starts at tS. One more than the 8 nowcast slots is
+                    // asked for, since the first one ends now.
+                    let tS = times[i] - 900
                     guard tS >= WxLimits.timeMinS, tS < WxLimits.timeMaxS, tS % 900 == 0 else {
                         continue
                     }
                     let mm15 = precips[i] ?? 0.0
-                    quarters.append(WxQuarter(tS: tS, precipMm: max(0.0, mm15 * 4.0)))
+                    quarters.append(WxQuarter(tS: tS, precipMm: max(0.0, mm15)))
                 }
             }
 
@@ -1089,7 +1144,7 @@ nonisolated enum LiveStationFetcher {
                 gustKmh: cur.wind_gusts_10m,
                 cloudPct: effectiveCloud,
                 upperCloudPct: upperCloud,
-                precipMmH: cur.precipitation,
+                precipMmH: precipMmH,
                 condition: derivedCond,
                 radarQuarters: quarters,
                 calibratedHourlyCloudPct: hourlyClouds

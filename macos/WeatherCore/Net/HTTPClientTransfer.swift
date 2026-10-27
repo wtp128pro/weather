@@ -83,7 +83,8 @@ extension HTTPClient {
 
     /// Content-Length, read as a list (parse_content_length,
     /// wx-http.c:1149-1190): every element 1*DIGIT after trimming blanks and
-    /// tabs, equal values are one value, a value above the cap is too large.
+    /// tabs, equal values are one value, a value above `limit` (the client's
+    /// decoded-body cap, HTTPClient.maxBodyBytes) is too large.
     enum ContentLength: Equatable {
         case value(Int)
         case invalid
@@ -91,7 +92,7 @@ extension HTTPClient {
         case tooLarge
     }
 
-    static func contentLength(_ list: String) -> ContentLength {
+    static func contentLength(_ list: String, limit: Int) -> ContentLength {
         var first: [UInt8]?
         var conflict = false
         for part in list.utf8.split(separator: UInt8(ascii: ","), omittingEmptySubsequences: false) {
@@ -108,9 +109,9 @@ extension HTTPClient {
         }
         guard let first else { return .invalid }
         if conflict { return .conflicting }
-        if first.count > 9 { return .tooLarge }  // above 999999999 > the cap
+        if first.count > 9 { return .tooLarge }  // above 999999999 > every cap (HTTPPolicy.maxBodyBytes(host:))
         let n = first.reduce(0) { $0 * 10 + Int($1 - 0x30) }
-        return n > HTTPPolicy.maxBodyBytes ? .tooLarge : .value(n)
+        return n > limit ? .tooLarge : .value(n)
     }
 
     /// Transfer-Encoding as CFNetwork reports it. C requires the raw (joined) list to be
@@ -259,6 +260,10 @@ extension HTTPClient {
             var bodyFirst: WxError?
             var bodyFirstDeclared: Int?
             var bodyFirstClose = false
+            /// The Content-Length of a status the caller declared (HTTPClient.get `answering`),
+            /// which CFNetwork completes without an error when its body is cut short (see
+            /// finalOutcome).
+            var answeredDeclared: Int?
             var body = Data()
             var received = 0
             var expiresS: Int64 = 0
@@ -284,12 +289,23 @@ extension HTTPClient {
         /// deadline comes first (normalize_error, wx-http.c:701-704).
         private let deadline: Int64
         private let deadlineOutcome: AttemptOutcome
+        /// The client's decoded-body cap (HTTPClient.maxBodyBytes), applied on every path that
+        /// measures the body: the declared Content-Length, the bytes handed over (CFNetwork's
+        /// own gzip inflation included) and the strict gzip decoder.
+        private let maxBodyBytes: Int
+        /// Non-2xx statuses the caller reads as answers (HTTPClient.get `answering`).
+        private let answering: Set<Int>
         private let state = Mutex(State())
 
-        init(sentIfModifiedSince: Bool, clock: any WxClock, deadline: Int64, totalFirst: Bool) {
+        init(
+            sentIfModifiedSince: Bool, clock: any WxClock, deadline: Int64, totalFirst: Bool, maxBodyBytes: Int,
+            answering: Set<Int>
+        ) {
             self.sentIfModifiedSince = sentIfModifiedSince
             self.clock = clock
             self.deadline = deadline
+            self.maxBodyBytes = maxBodyBytes
+            self.answering = answering
             deadlineOutcome = .failure(
                 WxError(.timeout, totalFirst ? HTTPPolicy.Message.deadlineExceeded : HTTPPolicy.Message.requestTimedOut),
                 status: 0, totalExpired: totalFirst)
@@ -454,7 +470,16 @@ extension HTTPClient {
                 return .decided(.failure(Transfer.malformedResponse, status: 0, totalExpired: false))
             }
             let bodiless = status == 204 || status == 205 || (status == 304 && sentIfModifiedSince)
-            if !bodiless && !(200...299).contains(status) {
+            // A status the caller declared (HTTPClient.get `answering`, e.g. NWS's 400 "out of
+            // bounds") is an answer: read below exactly like a 2xx - validators, framing, coding,
+            // the body under the client's cap, a body cut short (finalOutcome) - and returned with
+            // its status; a body that fails those rules gets the 2xx's error and retries. Every
+            // other non-2xx status is the status error, as in C. (An authentication challenge has
+            // already decided its 401/407 before this, see didReceive challenge; and CFNetwork
+            // completes a 401's chunked body cut inside a chunk, which no count measures, so a
+            // declared 401 is answered with the bytes before the cut: NEW U13-N17.)
+            let answered = !bodiless && answering.contains(status)
+            if !bodiless && !answered && !(200...299).contains(status) {
                 // A 401, 407 or 421 counts only once its body has ended, as in C (bodyFirstStatuses),
                 // when CFNetwork hands that body over as sent: without a Content-Encoding (or with
                 // identity only). One it would decode itself can fail in its decoder (-1015) where C,
@@ -464,7 +489,7 @@ extension HTTPClient {
                 let coding = http.value(forHTTPHeaderField: "Content-Encoding")
                 if Transfer.bodyFirstStatuses.contains(status), HTTPClient.contentCoding(coding) == .none {
                     let declared: Int? = http.value(forHTTPHeaderField: "Content-Length").flatMap {
-                        if case .value(let n) = HTTPClient.contentLength($0) { n } else { nil }
+                        if case .value(let n) = HTTPClient.contentLength($0, limit: maxBodyBytes) { n } else { nil }
                     }
                     let close = (http.value(forHTTPHeaderField: "Connection") ?? "").split(separator: ",")
                         .contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == "close" }
@@ -501,7 +526,7 @@ extension HTTPClient {
                 lengthBesideIdentity = http.value(forHTTPHeaderField: "Content-Length")
                     .map { !HTTPClient.chunkedMayCarry(contentLength: $0) } ?? false
             } else if let list = http.value(forHTTPHeaderField: "Content-Length") {
-                switch HTTPClient.contentLength(list) {
+                switch HTTPClient.contentLength(list, limit: maxBodyBytes) {
                 case .value(let n): declared = n
                 case .invalid: return parse("invalid Content-Length")
                 case .conflicting: return parse("conflicting Content-Length values")
@@ -519,10 +544,11 @@ extension HTTPClient {
             let systemGzip = coding == .gzip && HTTPClient.systemInflates(list ?? "")
             state.withLock { s in
                 s.systemGzip = systemGzip
-                s.decoder = coding == .gzip && !systemGzip ? GzipMemberDecoder(limit: HTTPPolicy.maxBodyBytes) : nil
+                s.decoder = coding == .gzip && !systemGzip ? GzipMemberDecoder(limit: maxBodyBytes) : nil
                 s.lengthUnknown = declared == nil
                 s.chunked = chunked
                 s.lengthBesideIdentity = lengthBesideIdentity
+                s.answeredDeclared = answered ? declared : nil
             }
             return .proceed
         }
@@ -552,9 +578,15 @@ extension HTTPClient {
         /// C's "Header too big" (wx-http.h:199), NETWORK and retried.
         static let headTooLarge = WxError(.network, HTTPPolicy.Message.network("response head too large"))
 
+        /// The client's error for a 2xx Content-Length body cut short, which CFNetwork fails with
+        /// NSURLErrorNetworkConnectionLost (-1005; C: libsoup's "Connection terminated
+        /// unexpectedly", NETWORK, retried); a declared status's cut body gets it too (finalOutcome).
+        static let connectionLost = WxError(
+            .network, HTTPPolicy.Message.network(HTTPClient.transportMessage(URLError(.networkConnectionLost))))
+
         func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-            // The cap counts DECODED bytes: what URLSession hands over, or what the strict decoder
-            // made of the raw member (inflate_chunk, wx-http.c:918-934).
+            // The client's cap counts DECODED bytes: what URLSession hands over, or what the strict
+            // decoder made of the raw member (inflate_chunk, wx-http.c:918-934).
             let now = clock.monotonicMicroseconds
             let stop = state.withLock { s -> Bool in
                 if s.decided != nil { return false }
@@ -570,7 +602,7 @@ extension HTTPClient {
                     }
                     return false
                 }
-                if s.received > HTTPPolicy.maxBodyBytes {
+                if s.received > maxBodyBytes {
                     s.decided = .failure(
                         WxError(.parse, HTTPPolicy.Message.responseTooLarge), status: s.status, totalExpired: false)
                     s.decidedAt = now
@@ -677,7 +709,8 @@ extension HTTPClient {
         /// deadline's outcome, then the rules C applies to the head as it arrives (head size and
         /// syntax, framing), then a verdict C reached before the deadline (verdictTime), then the
         /// deadline itself (`late`: it cancelled the transfer, or the task completed after it),
-        /// then on_read's end-of-body rules and the strict gzip path.
+        /// then the transport's error and a declared status's body cut short, then on_read's
+        /// end-of-body rules and the strict gzip path.
         private func finalOutcome(_ s: inout State, _ error: (any Error)?, late: Bool) -> AttemptOutcome {
             s.task = nil
             if s.cancelled && s.decided == nil { return .cancelled }
@@ -722,6 +755,17 @@ extension HTTPClient {
                 return .failure(
                     WxError(.network, HTTPPolicy.Message.network(HTTPClient.transportMessage(error))), status: s.status,
                     totalExpired: false)
+            }
+            if let declared = s.answeredDeclared, s.transactions > 0, s.wireBodyBytes < Int64(declared) {
+                // A declared status's Content-Length body cut short, the connection closed or kept
+                // alive: CFNetwork fails the same 2xx body (-1005, the transport error above) but
+                // completes a non-2xx one without an error (as for a body-first status below), so the
+                // cut is read from the metrics' wire count and given the 2xx's outcome: NETWORK "the
+                // connection was lost", retried, before any coding rule below, as the 2xx's transport
+                // error is. The count is the encoded bytes on HTTP/1.1; on h2 it adds 9 bytes per DATA
+                // frame header (V1-P7-D5, below), so a whole body never reads as cut there, while a
+                // cut within those bytes would pass (h2 not probed; not testable on loopback).
+                return .failure(Transfer.connectionLost, status: s.status, totalExpired: false)
             }
             if let statusError = s.bodyFirst {
                 // The body of a 401/407/421 has ended: C reports the status, after 1 request (a 421
@@ -792,7 +836,7 @@ extension HTTPClient {
             let magic = body.starts(with: [0x1F, 0x8B, 0x08])
             let undecoded = magic && (s.lengthUnknown || (s.transactions > 0 && s.wireBodyBytes == s.decodedBodyBytes))
             if s.systemGzip && undecoded {
-                switch HTTPClient.inflateGzipMember(body, limit: HTTPPolicy.maxBodyBytes) {
+                switch HTTPClient.inflateGzipMember(body, limit: maxBodyBytes) {
                 case .success(let decoded): body = decoded
                 case .failure(let error): return .failure(error, status: s.status, totalExpired: false)
                 }
@@ -892,7 +936,10 @@ extension HTTPClient {
         private var remaining = 0
         private var headerCRC: UInt32 = 0xFFFF_FFFF
         private var storedHeaderCRC: [UInt8] = []
+        /// The DEFLATE bytes of the read being decoded, consumed from `pendingStart` on (by
+        /// index: removing each slice from the front would cost O(n) per slice).
         private var pending: [UInt8] = []
+        private var pendingStart = 0
         /// `leading` reached the end in an earlier slice, but `exact` has not yet (not observed;
         /// kept so a later end is still found byte by byte).
         private var exactSearching = false
@@ -920,9 +967,16 @@ extension HTTPClient {
                     } else {
                         pending.append(contentsOf: bytes[i...])
                         i = bytes.count
-                        while failure == nil, phase == .deflate, !exactSearching, pending.count >= Self.sliceSize {
-                            processSlice(Self.sliceSize, sameRead: true)
+                        // The whole read is decoded now, its tail shorter than a slice too, as C
+                        // inflates each read (on_read, wx-http.c:999-1001): the end of the DEFLATE
+                        // data and the trailer are found in the read that holds them, so a byte in
+                        // a later read "continues after its end marker" (:913-916), and a verdict
+                        // on this read is not deferred until the body ends.
+                        while failure == nil, phase == .deflate, !exactSearching, pending.count > pendingStart {
+                            processSlice(min(Self.sliceSize, pending.count - pendingStart), sameRead: true)
                         }
+                        pending.removeFirst(pendingStart)
+                        pendingStart = 0
                     }
                 }
                 if failure == nil, phase == .trailer, i < bytes.count {
@@ -934,9 +988,6 @@ extension HTTPClient {
 
         /// The body ended: the decoded bytes, or why the member is not one complete, correct member.
         func finish() -> Result<Data, Failure> {
-            if failure == nil, phase == .deflate, !exactSearching, !pending.isEmpty {
-                processSlice(pending.count, sameRead: true)
-            }
             if let failure { return .failure(failure) }
             guard phase == .trailer, trailer.count == 8 else { return .failure(.cut) }
             return .success(output)
@@ -1010,11 +1061,11 @@ extension HTTPClient {
 
         // MARK: DEFLATE data
 
-        /// Decodes the first `count` pending bytes: `leading` in bulk, then `exact` in bulk, or
+        /// Decodes the next `count` pending bytes: `leading` in bulk, then `exact` in bulk, or
         /// byte by byte when `leading` reached the end in this slice.
         private func processSlice(_ count: Int, sameRead: Bool) {
-            let slice = Array(pending.prefix(count))
-            pending.removeFirst(count)
+            let slice = Array(pending[pendingStart..<(pendingStart + count)])
+            pendingStart += count
             let limit = self.limit
             // zlib refuses the data at a point where `decodedBefore` bytes have been decoded. C
             // reports the first problem in stream order: zlib's error when at most `limit` bytes came
@@ -1041,8 +1092,9 @@ extension HTTPClient {
                 let replay = slice.withUnsafeBufferPointer { exact.process($0) { _ in true } }
                 if case .more = replay {} else { failure = .corrupt }
             case .end:
-                let rest = pending
+                let rest = Array(pending[pendingStart...])
                 pending = []
+                pendingStart = 0
                 exactSearching = true
                 var whole = slice
                 whole.append(contentsOf: rest)

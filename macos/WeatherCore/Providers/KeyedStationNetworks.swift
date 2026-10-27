@@ -43,7 +43,9 @@ extension WxStationNetworks {
     /// without a key with HTTP 200 and an empty body.
     public static func parseAEMETEnvelope(_ data: Data) -> AEMETEnvelope {
         guard !data.isEmpty else { return .refused(status: 401, message: nil) }
-        guard let root = json(latin9Tolerant(data)) as? [String: Any], let estado = num(root["estado"]).map({ Int($0) })
+        // a code beyond Int's range (a broken answer) is no code rather than a trap
+        guard let root = json(latin9Tolerant(data)) as? [String: Any],
+              let estado = num(root["estado"]).flatMap({ Int(exactly: $0.rounded(.towardZero)) })
         else {
             return .refused(status: 0, message: nil)
         }
@@ -202,11 +204,14 @@ extension WxStationNetworks {
             guard let site = sites[id], let temp = values["air_temperature"], temp.v >= -60, temp.v <= 50 else {
                 return nil
             }
-            let v = { (k: String) in values[k]?.v }
+            // an element more than 90 min older than the temperature is no longer current (an hourly
+            // value plus its latency)
+            let current = { (k: String) in values[k].flatMap { temp.t - $0.t <= 90 * 60 ? $0 : nil } }
+            let v = { (k: String) in current(k)?.v }
             let firstClass = site.kind?.uppercased().contains("MET.NO") ?? false
             // a 10-minute value is used when it is not older than the hourly one
             func newer(_ a: String, _ b: String) -> (key: String, pick: Pick)? {
-                switch (values[a], values[b]) {
+                switch (current(a), current(b)) {
                 case let (x?, y?): x.t >= y.t ? (a, x) : (b, y)
                 case let (x?, nil): (a, x)
                 case let (nil, y?): (b, y)
@@ -305,7 +310,7 @@ extension WxStationNetworks {
             guard let temp = newest("ta") ?? newest("t10"), temp.v >= -50, temp.v <= 50 else { return nil }
             let rh = (newest("rh") ?? newest("rh10"))?.v
             let td = (newest("td") ?? newest("td10"))?.v
-            let ww = newest("ww").map { Int($0.v) }
+            let ww = newest("ww").flatMap { Int(exactly: $0.v.rounded(.towardZero)) }
             let cloud = (newest("n") ?? newest("nc")).flatMap { $0.v >= 0 && $0.v <= 8 ? $0.v / 8.0 * 100.0 : nil }
             return WxStationObservation(
                 network: .knmi, id: id ?? String(format: "%.4f,%.4f", lat, lon), name: site?.name, lat: lat, lon: lon,
@@ -476,7 +481,7 @@ extension WxStationNetworks {
             newest = (t, r)
         }
         guard let (t, r) = newest, let temp = num(r["temperature"]), temp >= -40, temp <= 45 else { return nil }
-        let weather = num(r["weather_code"]).map { metOfficeWeather(Int($0)) }
+        let weather = num(r["weather_code"]).flatMap { Int(exactly: $0.rounded(.towardZero)) }.map(metOfficeWeather)
         let kmh = { (k: String) in num(r[k]).flatMap { $0 >= 0 ? $0 * 3.6 : nil } }
         return WxStationObservation(
             network: .metOffice, id: geohash, name: area, lat: position.lat, lon: position.lon, obsTimeS: t,

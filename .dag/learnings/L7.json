@@ -1,0 +1,17 @@
+{
+  "id": "L7",
+  "trigger": "No NWS alert card showed a source link: NWS sends http://www.weather.gov, the card kept only https links, and the tests used a synthetic https NWS link (whole-run verification, DECISIONS #47).",
+  "lesson": "Tests of URL/link handling that use made-up vendor values pass while real vendor payloads fail.",
+  "how_to_apply": "Pin link and URL behaviour with RECORDED vendor payloads through the real parser, and add a red-first test for each issuer's actual link shape.",
+  "scope": {
+    "applies_to": [
+      "tag:alerts",
+      "tag:parser",
+      "tag:viewmodel"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: RUN/history/whole-run-verify-iter1.json; units/U52 iteration 2",
+  "since_wave": 11,
+  "promotable": true
+}

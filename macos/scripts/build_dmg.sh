@@ -322,6 +322,9 @@ hdiutil detach "$MOUNT_POINT"
 
 # ─── Convert to read-only compressed DMG ──────────────────────────────────────
 echo "==> Converting to read-only DMG"
+# convert will not replace an existing output, so a re-run into the same directory
+# would fail here, after notarization; build.sh:55 pre-deletes it the same way.
+rm -f "$DMG_OUTPUT"
 hdiutil convert \
     "$TEMP_DMG" \
     -format UDZO \

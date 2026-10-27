@@ -94,7 +94,12 @@ actor StationHTTP {
             if cache.count >= Self.maxCacheEntries {
                 cache = cache.filter { $0.value.expiresS > now }
                 if cache.count >= Self.maxCacheEntries {
-                    cache.removeAll()
+                    // Still full: drop the entries closest to expiry, not the day-long ones with them.
+                    let soonest = cache.sorted { $0.value.expiresS < $1.value.expiresS }
+                        .prefix(cache.count - Self.maxCacheEntries + 1)
+                    for (key, _) in soonest {
+                        cache[key] = nil
+                    }
                 }
             }
             cache[cacheKey] = (data, Date().timeIntervalSince1970 + ttlS)
@@ -324,6 +329,10 @@ nonisolated enum StationNetworkFetcher {
                 }
             }
         }
+        // No airport answered: not a fetch of 0 reports (the catalog's recent ones stand in).
+        if answered.isEmpty, !airports.isEmpty {
+            return Fetch(network: .nwsASOS, observations: nil, coverage: WxStationCoverage(network: .nwsASOS))
+        }
         return Fetch(
             network: .nwsASOS, observations: upgrades,
             coverage: WxStationCoverage(network: .nwsASOS, stationIDs: answered))
@@ -373,6 +382,10 @@ nonisolated enum StationNetworkFetcher {
                     await http.markNoData("brightsky:\(source.id)", forS: 6 * 3600)
                 }
             }
+        }
+        // No station answered (the list may come from the cache): not a fetch of 0 reports.
+        if answered.isEmpty, !sources.isEmpty {
+            return Fetch(network: .dwdSYNOP, observations: nil, coverage: WxStationCoverage(network: .dwdSYNOP))
         }
         return Fetch(
             network: .dwdSYNOP, observations: observations,
@@ -460,6 +473,10 @@ nonisolated enum StationNetworkFetcher {
                     observations.append(obs)
                 }
             }
+        }
+        // No station answered (the list may come from the cache): not a fetch of 0 reports.
+        if answered.isEmpty, !nearest.isEmpty {
+            return Fetch(network: .meteoSwiss, observations: nil, coverage: WxStationCoverage(network: .meteoSwiss))
         }
         return Fetch(
             network: .meteoSwiss, observations: observations,

@@ -13,10 +13,11 @@
 import Foundation
 import Synchronization
 
-/// User-configurable weight multipliers per provider (`nws`, `open-meteo`, `met-no`)
-/// and per NWP model (`nws:nws`, `open-meteo:hrrr`, `open-meteo:nbm`, `open-meteo:ecmwf`,
-/// `open-meteo:gfs`, `open-meteo:icon`, `open-meteo:gem`, `open-meteo:ukmo`,
-/// `open-meteo:meteofrance`, `met-no:ecmwf`).
+/// User-configurable weight multipliers per provider (`nws`, `open-meteo`, `met-no`,
+/// `dwd-brightsky`, `eccc`) and per NWP model (`nws:nws`, `open-meteo:hrrr`, `open-meteo:nbm`,
+/// `open-meteo:ecmwf`, `open-meteo:gfs`, `open-meteo:icon`, `open-meteo:gem`, `open-meteo:ukmo`,
+/// `open-meteo:meteofrance`, `met-no:ecmwf`, `open-meteo:knmi`, `dwd-brightsky:mosmix`,
+/// `eccc:hrdps`).
 ///
 /// A multiplier of `1.0` preserves the exact heuristic baseline weight table.
 /// Multipliers are clamped to `[0.0, 3.0]`.
@@ -438,7 +439,7 @@ public enum WxWeights {
         }
     }
 
-    /// Descriptive metadata for all 10 table rows so the Settings UI can inspect and tune them.
+    /// Descriptive metadata for all 13 table rows so the Settings UI can inspect and tune them.
     public static var modelDescriptors: [WxModelWeightDescriptor] {
         [
             WxModelWeightDescriptor(
@@ -678,6 +679,21 @@ public enum WxWeights {
             }
         }
         return nil
+    }
+
+    /// The number of classes of `horizonClass` (0..<horizonClassCount).
+    static let horizonClassCount = 9
+
+    /// What a weight takes of its horizon: both `weight(...)` overloads read
+    /// `horizonH` only through its NaN test, `bandOf` and `> hrrrMaxHorizonH`,
+    /// so two horizons of one class give the same weight for the same pair,
+    /// variable, region and multipliers. 2 * band + (beyond 48 h), NaN is 8.
+    /// Lets the blend look a member's weight up once per class.
+    static func horizonClass(_ horizonH: Double) -> Int {
+        if horizonH.isNaN {
+            return 8
+        }
+        return bandOf(horizonH) * 2 + (horizonH > hrrrMaxHorizonH ? 1 : 0)
     }
 
     /// band_of (wx-weights.c:134-144): 0..3 for H0 [0,3), H1 [3,18), H2

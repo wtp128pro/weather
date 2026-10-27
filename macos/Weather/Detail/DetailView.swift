@@ -2,19 +2,28 @@
 // Copyright (C) 2026 wtp128pro
 //
 // DetailView.swift - the detail pane (WxDetail, src/ui/wx-detail.{h,c}) in
-// SwiftUI, drawn from DetailViewModel only: it never formats or composes a text.
+// SwiftUI, drawn from DetailViewModel only: it never formats or composes a text,
+// except the view-local strings listed below.
 //
 // DetailView owns one DetailViewModel and calls show(place:) whenever the
-// selected place changes; DetailPage renders DetailViewModel.Page:
+// selected place, or anything of it the pane reads (its alerts included), changes;
+// DetailPage renders DetailViewModel.Page:
 // - .placeholder: the title, the text and, iff showsSpinner, a spinner whose
-//   accessibility label is Placeholder.spinnerAccessibilityLabel;
+//   accessibility label is Placeholder.spinnerAccessibilityLabel, with the alerts
+//   below it; it scrolls when they do not fit;
 // - .forecast, in the order of ForecastPage.sections (wx-detail.c:939-1069):
 //   header, now, Rain card, Air Quality + Clouds cards, "Next 48 hours" + hour strip,
 //   "Next days" + day list, footer row (text, refresh spinner, Offline / Stale
 //   badges), attribution line, partial line.
 // Card and section titles carry the header trait; tooltips (.help) and
-// accessibility labels come only from view-model strings. Styled with high-contrast
-// Apple Weather dark-slate Liquid Glass cards and crisp white typography.
+// accessibility labels come only from view-model strings. The exceptions are written
+// here: the rename button's labels and tooltips ("Name Location" / "Edit Name") and
+// the Rain card's interval subtitle ("15-min bars" / "Hourly bars & curve") and
+// legend ("Bars: Rain rate (<unit>, left)", "Line: Rain chance (%, right)"), and the
+// alert card's prefixes ("Effective ", "Expires ", "Source: ") and disclosure title
+// ("Details").
+// Styled with high-contrast Apple Weather dark-slate Liquid Glass cards and crisp
+// white typography.
 
 import Foundation
 import SwiftUI
@@ -26,17 +35,32 @@ struct DetailView: View {
     var onRename: ((String?, String?) -> Void)? = nil
 
     @State private var detail = DetailViewModel()
+    /// False until onChange(initial:) has shown the place. The first pass would otherwise draw the
+    /// view model's own "Select a place" page and redraw the place's page in the same frame, and a
+    /// glass card in a GlassEffectContainer updated twice in one frame logs the SwiftUI fault
+    /// "glassEffect() tried to update multiple times per frame" (U63). Nothing reaches the screen
+    /// in between, so the pane looks the same.
+    @State private var isShown = false
     private let liveStore = LiveStationStore.shared
 
     var body: some View {
-        DetailPage(
-            page: effectivePage,
-            liveAirQuality: liveStore.snapshot(for: place)?.airQuality,
-            wxPlace: place?.place,
-            onRename: onRename
-        )
+        Group {
+            if isShown {
+                DetailPage(
+                    page: effectivePage,
+                    alerts: detail.alerts,
+                    liveAirQuality: liveStore.snapshot(for: place)?.airQuality,
+                    wxPlace: place?.place,
+                    units: place?.units,
+                    onRename: onRename
+                )
+            } else {
+                Color.clear
+            }
+        }
         .onChange(of: ShowKey(place), initial: true) {
             detail.show(place: place)
+            isShown = true
         }
         .task(id: LiveFetchKey(place)) {
             guard let p = place, !p.offline else { return }
@@ -71,8 +95,12 @@ struct DetailView: View {
     /// What of the place the pane reads (DetailViewModel.Item), as NaN-free values: a change
     /// re-runs show(place:), which assigns the page only when something visible changed. The
     /// forecast is keyed by its generation time and fetch time (AppModel replaces both together,
-    /// AppModel.swift:498-499, :922-923) and the bit patterns of its numbers, so an unchanged
-    /// place compares equal even though its forecast stores NaN (synthesized == is false then).
+    /// in applyCache and applyForecast, AppModel.swift:728-729, :1298-1299) and the bit patterns
+    /// of its numbers, so an unchanged place compares equal even though its forecast stores NaN
+    /// (synthesized == is false then). The alerts are keyed by their whole result (no Double in
+    /// it): AppModel replaces Place.alerts alone when they land and at each expiry or source-window
+    /// wake-up, which also runs offline while nowS stands still, so without it the pane would keep
+    /// "Checking for alerts…" beside a row that shows them, or an expired or stale set as current.
     private struct ShowKey: Equatable {
         let key: String?
         let place: WxPlace?
@@ -86,6 +114,7 @@ struct DetailView: View {
         let units: WxUnits?
         let nowS: Int64
         let errorText: String?
+        let alerts: WxAlertsResult?
 
         init(_ p: AppModel.Place?) {
             key = p?.key
@@ -100,6 +129,7 @@ struct DetailView: View {
             units = p?.units
             nowS = p?.nowS ?? 0
             errorText = p?.errorText
+            alerts = p?.alerts
         }
 
         /// The generation time, the counts and the bit patterns of every hour, quarter and day
@@ -132,8 +162,13 @@ struct DetailView: View {
 /// One page of the pane (wx-detail.h:7-11): the placeholder or the forecast.
 struct DetailPage: View {
     let page: DetailViewModel.Page
+    /// The place's alerts (DetailViewModel.alerts, beside the page, not one of its sections).
+    var alerts: DetailViewModel.AlertsSection? = nil
     var liveAirQuality: DetailViewModel.AirQualityCard? = nil
     var wxPlace: WxPlace? = nil
+    /// The place's unit system: the day bars' colour scale reads °C or °F from it (nil, with no
+    /// place: °F). No default, so a caller cannot drop it (the previews pass .imperial).
+    let units: WxUnits?
     var onRename: ((String?, String?) -> Void)? = nil
 
     var body: some View {
@@ -141,7 +176,7 @@ struct DetailPage: View {
         case .placeholder(let placeholder):
             ZStack {
                 WeatherSkyBackground(condition: .partlyCloudy, isDay: true)
-                PlaceholderPage(placeholder: placeholder)
+                PlaceholderPage(placeholder: placeholder, alerts: alerts)
             }
             .environment(\.colorScheme, .dark)
         case .forecast(let forecast):
@@ -154,8 +189,10 @@ struct DetailPage: View {
                     GlassEffectContainer(spacing: 18) {
                         ForecastPageView(
                             page: forecast,
+                            alerts: alerts,
                             airQuality: liveAirQuality ?? forecast.airQuality,
                             wxPlace: wxPlace,
+                            units: units,
                             onRename: onRename
                         )
                         .padding(24)
@@ -172,39 +209,56 @@ struct DetailPage: View {
 
 private struct PlaceholderPage: View {
     let placeholder: DetailViewModel.Placeholder
+    /// The place's alerts: shown below the card, so a failed forecast never hides an alert.
+    var alerts: DetailViewModel.AlertsSection? = nil
 
     var body: some View {
         // C order: spinner, title, text (wx-detail.c:906-908), centred inside a dark-slate glass card.
-        GlassEffectContainer {
-            VStack(spacing: 12) {
-                WeatherIconView(
-                    assetName: "wx-partly-cloudy-day",
-                    symbolName: "cloud.sun.fill",
-                    size: 68,
-                    shadowRadius: 6
-                )
-                .accessibilityHidden(true)
+        // The alert cards below it can be taller than the pane, so the page scrolls; at least as
+        // tall as the pane, it stays centred and still (no bounce) when everything fits. The pane's
+        // height comes from a GeometryReader, not from state, so the first frame lays out once.
+        GeometryReader { pane in
+            ScrollView(.vertical) {
+                GlassEffectContainer {
+                    VStack(spacing: 18) {
+                        VStack(spacing: 12) {
+                            WeatherIconView(
+                                assetName: "wx-partly-cloudy-day",
+                                symbolName: "cloud.sun.fill",
+                                size: 68,
+                                shadowRadius: 6
+                            )
+                            .accessibilityHidden(true)
 
-                if placeholder.showsSpinner {
-                    ProgressView()
-                        .tint(.white)
-                        .accessibilityLabel(Text(DetailViewModel.Placeholder.spinnerAccessibilityLabel))
+                            if placeholder.showsSpinner {
+                                ProgressView()
+                                    .tint(.white)
+                                    .accessibilityLabel(Text(DetailViewModel.Placeholder.spinnerAccessibilityLabel))
+                            }
+                            Text(placeholder.title)
+                                .font(.title2.bold())
+                                .foregroundStyle(WeatherTheme.primaryText)
+                            if !placeholder.text.isEmpty {
+                                Text(placeholder.text)
+                                    .foregroundStyle(WeatherTheme.secondaryText)
+                            }
+                        }
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 28)
+                        .padding(.horizontal, 36)
+                        .weatherGlassCard(cornerRadius: 24)
+                        if let alerts {
+                            AlertsSectionView(alerts: alerts)
+                                .frame(maxWidth: 480)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
-                Text(placeholder.title)
-                    .font(.title2.bold())
-                    .foregroundStyle(WeatherTheme.primaryText)
-                if !placeholder.text.isEmpty {
-                    Text(placeholder.text)
-                        .foregroundStyle(WeatherTheme.secondaryText)
-                }
+                .padding(24)
+                .frame(maxWidth: .infinity, minHeight: pane.size.height)
             }
-            .multilineTextAlignment(.center)
-            .padding(.vertical, 28)
-            .padding(.horizontal, 36)
-            .weatherGlassCard(cornerRadius: 24)
+            .scrollBounceBehavior(.basedOnSize)
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -212,8 +266,11 @@ private struct PlaceholderPage: View {
 
 private struct ForecastPageView: View {
     let page: DetailViewModel.ForecastPage
+    /// The alerts, right after the Now block (not a ForecastPage section).
+    var alerts: DetailViewModel.AlertsSection? = nil
     let airQuality: DetailViewModel.AirQualityCard
     var wxPlace: WxPlace? = nil
+    let units: WxUnits?
     var onRename: ((String?, String?) -> Void)? = nil
 
     @State private var showRenameSheet = false
@@ -222,6 +279,9 @@ private struct ForecastPageView: View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach(DetailViewModel.ForecastPage.sections, id: \.self) { section in
                 self.section(section)
+                if section == .now, let alerts {
+                    AlertsSectionView(alerts: alerts)
+                }
             }
         }
         .sheet(isPresented: $showRenameSheet) {
@@ -260,7 +320,7 @@ private struct ForecastPageView: View {
                 DayList(
                     rows: page.days,
                     currentTemperature: page.now.temperatureValue,
-                    isMetric: WeatherTheme.isMetric(temperatureText: page.now.temperature)
+                    isMetric: units == .metric
                 )
             }
         case .footer:
@@ -400,11 +460,14 @@ private struct DetailCard<Content: View>: View {
     let title: String
     var iconAsset: String? = nil
     var fallbackSymbol: String = "circle.fill"
+    /// False hides the title from VoiceOver (an alert card: its group names the section once).
+    var isTitleAccessible = true
     @ViewBuilder let content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionTitle(text: title, iconAsset: iconAsset, fallbackSymbol: fallbackSymbol, isCardHeader: true)
+                .accessibilityHidden(!isTitleAccessible)
             content
         }
         .padding(16)
@@ -696,6 +759,146 @@ private struct AirQualityCardView: View {
     }
 }
 
+// MARK: - Alerts (DetailViewModel.alerts; not in the C pane)
+
+/// The alerts section: one card per current alert, else one card with the state's text, verbatim
+/// from the view model (never "no alerts" for a result that was not fetched, failed or is stale),
+/// with a spinner while checking.
+private struct AlertsSectionView: View {
+    let alerts: DetailViewModel.AlertsSection
+
+    var body: some View {
+        if alerts.cards.isEmpty {
+            DetailCard(title: DetailViewModel.AlertsSection.title, fallbackSymbol: "exclamationmark.triangle") {
+                HStack(spacing: 8) {
+                    if alerts.showsSpinner {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    }
+                    Text(alerts.text ?? "")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(WeatherTheme.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let source = alerts.sourceName {
+                    Text(AlertCardView.sourcePrefix + source)
+                        .font(.caption)
+                        .foregroundStyle(WeatherTheme.secondaryText)
+                }
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            // VoiceOver names the section once, on this group; each card's heading is its event.
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(alerts.cards) { card in
+                    AlertCardView(card: card)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(Text(DetailViewModel.AlertsSection.title))
+        }
+    }
+}
+
+/// One alert: the event, then a badge with the warning symbol and the level (shape, colour and
+/// text, in the level's colour on AlertLevelStyle.plate so that every level reads at more than
+/// 3:1), the headline, when it starts and ends in the place's zone, the recommended actions, the
+/// description behind a disclosure, and the issuer, read once (as the link to its page when it
+/// gave one). VoiceOver hears the event line as the card's heading, not the repeated "Alerts".
+private struct AlertCardView: View {
+    let card: DetailViewModel.AlertCard
+    @State private var isExpanded = false
+
+    static let sourcePrefix = "Source: "
+    static let effectivePrefix = "Effective "
+    static let expiresPrefix = "Expires "
+    static let descriptionTitle = "Details"
+
+    var body: some View {
+        DetailCard(title: DetailViewModel.AlertsSection.title, fallbackSymbol: "exclamationmark.triangle",
+                   isTitleAccessible: false) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(card.event)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(WeatherTheme.primaryText)
+                HStack(alignment: .firstTextBaseline, spacing: 3) {
+                    Image(systemName: RowViewModel.AlertIndicator.symbolName)
+                        .accessibilityHidden(true)
+                    Text(card.severity)
+                }
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AlertLevelStyle.color(card.level))
+                .padding(.horizontal, 6)
+                .background {
+                    // 2 pt above and below the text without taking layout: the event line keeps
+                    // its height.
+                    Capsule()
+                        .fill(AlertLevelStyle.plate)
+                        .padding(.vertical, -2)
+                }
+                .fixedSize()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            if !card.headline.isEmpty {
+                Text(card.headline)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(WeatherTheme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let effective = card.effective {
+                Text(Self.effectivePrefix + effective)
+                    .font(.caption)
+                    .foregroundStyle(WeatherTheme.secondaryText)
+            }
+            if let expires = card.expires {
+                Text(Self.expiresPrefix + expires)
+                    .font(.caption)
+                    .foregroundStyle(WeatherTheme.secondaryText)
+            }
+            if !card.instruction.isEmpty {
+                Text(card.instruction)
+                    .font(.subheadline)
+                    .foregroundStyle(WeatherTheme.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !card.description.isEmpty {
+                DisclosureGroup(isExpanded: $isExpanded) {
+                    Text(card.description)
+                        .font(.subheadline)
+                        .foregroundStyle(WeatherTheme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } label: {
+                    Text(Self.descriptionTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(WeatherTheme.primaryText)
+                }
+                .tint(WeatherTheme.primaryText)
+            }
+            HStack(spacing: 8) {
+                let url = card.link.flatMap { URL(string: $0) }
+                Text(Self.sourcePrefix + card.sourceName)
+                    .font(.caption)
+                    .foregroundStyle(WeatherTheme.secondaryText)
+                    .accessibilityHidden(url != nil)
+                if let link = card.link, let url {
+                    Link(destination: url) {
+                        Label(card.sourceName, systemImage: "arrow.up.right.square")
+                            .labelStyle(.iconOnly)
+                    }
+                    .font(.caption)
+                    .help(link)
+                    .accessibilityLabel(Text(Self.sourcePrefix + card.sourceName))
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+}
+
 /// The AQI scale: six equal bands in the EPA category colours, with a white-ringed dot inside the
 /// value's band.
 private struct AQIScaleBar: View {
@@ -938,8 +1141,9 @@ private struct DayTemperatureBar: View {
                 if let low, let high {
                     let startFrac = max(0, min(1, CGFloat(low - overallLow) / span))
                     let endFrac = max(startFrac, min(1, CGFloat(high - overallLow) / span))
-                    let xOffset = width * startFrac
                     let barWidth = max(6, width * (endFrac - startFrac))
+                    // The 6-pt floor must not push the fill past the track's trailing end.
+                    let xOffset = min(width * startFrac, max(0, width - barWidth))
 
                     Capsule()
                         .fill(WeatherTheme.temperatureGradient(low: low, high: high, isMetric: isMetric))
@@ -1106,69 +1310,72 @@ private struct AttributionFlow: Layout {
 }
 
 #Preview("Placeholder - no place") {
-    DetailPage(page: DetailPreviewData.page(nil))
+    DetailPage(page: DetailPreviewData.page(nil), units: .imperial)
         .frame(width: 640, height: 480)
 }
 
 #Preview("Placeholder - loading") {
-    DetailPage(page: DetailPreviewData.page(loading: true))
+    DetailPage(page: DetailPreviewData.page(loading: true), units: .imperial)
         .frame(width: 640, height: 480)
 }
 
 #Preview("Placeholder - error") {
-    DetailPage(page: DetailPreviewData.page(error: "Could not reach the server"))
+    DetailPage(page: DetailPreviewData.page(error: "Could not reach the server"), units: .imperial)
         .frame(width: 640, height: 480)
 }
 
 #Preview("Placeholder - offline") {
-    DetailPage(page: DetailPreviewData.page(offline: true))
+    DetailPage(page: DetailPreviewData.page(offline: true), units: .imperial)
         .frame(width: 640, height: 480)
 }
 
 #Preview("Placeholder - no forecast yet") {
-    DetailPage(page: DetailPreviewData.page())
+    DetailPage(page: DetailPreviewData.page(), units: .imperial)
         .frame(width: 640, height: 480)
 }
 
 #Preview("Forecast - nowcast, partial, attribution") {
-    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast()))
+    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast()), units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - no nowcast, all sources") {
-    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(nowcast: false, partial: false)))
+    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(nowcast: false, partial: false)),
+               units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - offline badge, refreshing") {
-    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(), loading: true, offline: true))
+    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(), loading: true, offline: true),
+               units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - stale badge") {
     DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(), stale: true,
-                                            error: "HTTP 503"))
+                                            error: "HTTP 503"), units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - stale badge, no error text") {
-    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(), stale: true))
+    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(), stale: true), units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - attribution entry without a link") {
-    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(partial: false, unlinked: true)))
+    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(partial: false, unlinked: true)),
+               units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - no current conditions") {
     DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast(),
-                                            nowS: DetailPreviewData.hour0 + 200 * 3600))
+                                            nowS: DetailPreviewData.hour0 + 200 * 3600), units: .imperial)
         .frame(width: 760, height: 900)
 }
 
 #Preview("Forecast - dark") {
-    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast()))
+    DetailPage(page: DetailPreviewData.page(forecast: DetailPreviewData.forecast()), units: .imperial)
         .frame(width: 760, height: 900)
         .preferredColorScheme(.dark)
 }

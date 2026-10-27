@@ -432,8 +432,8 @@ extension OpenMeteoParseTests {
         let bsResult = try BrightSkyProvider.parseForecast(Array(bsJSON.utf8), fetchedS: 1_776_686_400)
         #expect(bsResult.members.count == 1)
         #expect(bsResult.members[0].modelID == "mosmix")
-        #expect(bsResult.members[0].hours.count == 1)
-        #expect(bsResult.members[0].hours[0].tempC == 16.5)
+        try #require(bsResult.members[0].hours.count == 2) // precipitation in T - 3600, the rest in T (U09-F5)
+        #expect(bsResult.members[0].hours[1].tempC == 16.5)
         #expect(bsResult.members[0].hours[0].precipProb == 35.0)
 
         // ECCCProvider parser test

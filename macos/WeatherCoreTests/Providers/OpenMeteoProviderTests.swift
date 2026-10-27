@@ -623,8 +623,11 @@ struct OpenMeteoProviderTests {
             weakOM = om
             let place = try Self.miami()
             let task = Task { await Fake.fetch(om, place) }
+            // U28-F7: wait for A's request to reach the fake (aAnswer is set then, before the client
+            // holds A's result), then the REQUIRED 500 ms (test-openmeteo.c:3178) so the client has
+            // finished A and the cancel lands inside B's grace window, not during A.
+            #expect(await Self.waitFor { fake.aAnswer != nil })  // A was answered before the cancellation
             try await Task.sleep(for: .milliseconds(500))                          // test-openmeteo.c:3178
-            #expect(fake.aAnswer != nil)  // A was answered before the cancellation
             task.cancel()
             op = await task.value
         }
@@ -645,8 +648,10 @@ struct OpenMeteoProviderTests {
         let om = try Fake.provider(fake, timeoutMs: 5000, backoffMs: 10)
         let place = try Self.miami()
         let task = Task { await Fake.fetch(om, place) }
-        try await Task.sleep(for: .milliseconds(150))
-        #expect(fake.aAnswer != nil)
+        // U28-F8: wait for A's request to reach the fake, then a 50 ms positioning wait so the
+        // client has A's members when the cancel lands (B answers 400 ms after its request).
+        #expect(await Self.waitFor { fake.aAnswer != nil })
+        try await Task.sleep(for: .milliseconds(50))
         task.cancel()
         let op = await task.value
         #expect(op.isCancelled, "\(op.outcome)")                                   // test-openmeteo.c:3204
@@ -698,7 +703,13 @@ struct OpenMeteoProviderTests {
         }
         var op = await task.value
         #expect(op.value?.members.count == 7, "\(op.outcome)")                     // test-openmeteo.c:3301
-        task = Task { [om = try Fake.provider(fake, timeoutMs: 5000, backoffMs: 10)] in
+        // U28-F9: the cancelled half runs against its own fake whose A hangs, so the cancel can only
+        // land while the fetch is in flight; the 50 ms only positions it (no completion race).
+        var hangScript = try Fake.Script.ok()
+        hangScript.a = Fake.Reply(.hang)
+        let hangFake = try Fake.Server(hangScript)
+        defer { hangFake.stop() }
+        task = Task { [om = try Fake.provider(hangFake, timeoutMs: 5000, backoffMs: 10)] in
             await Fake.fetch(om, place)
         }
         try await Task.sleep(for: .milliseconds(50))

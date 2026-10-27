@@ -1,0 +1,17 @@
+{
+  "id": "L2",
+  "trigger": "U67's verifier found a Swift Testing macro-expansion warning that every '0 Swift warnings' check since merge-d had missed (DECISIONS #37).",
+  "lesson": "Swift compiler warnings raised inside a macro expansion print as 'macro expansion #expect:L:C: warning:', not '<file>.swift:L:C: warning:', so a grep on the file pattern under-counts; and an incremental build prints warnings only for files it recompiles.",
+  "how_to_apply": "Count warnings with a pattern that also matches '^macro expansion …:N:N: warning:' and prove any zero-warning claim with a FRESH derived-data build (or after touching the files).",
+  "scope": {
+    "applies_to": [
+      "tag:tests",
+      "tag:integration",
+      "tag:fix"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: DECISIONS.md #37; units/U67/verify.json; gen/checks/no_swift_warnings.sh",
+  "since_wave": 11,
+  "promotable": true
+}

@@ -196,6 +196,45 @@ public enum FileIO {
         syncDirectory(dir, syscalls: syscalls)
     }
 
+    // MARK: - Keeping an unreadable file
+
+    /// Infix of the name `moveAside` gives a file: "<path>" + keptInfix + six
+    /// ASCII letters/digits (never matched by `removeStaleTemps`).
+    static let keptInfix = ".unreadable-"
+
+    /// Renames `path` to a fresh "<path>.unreadable-XXXXXX" in the same
+    /// directory, so that the save after a failed load (a damaged file, a
+    /// foreign version, a read error) writes a new file instead of destroying
+    /// the one it could not read. No C counterpart: wx-places.c and
+    /// wx-settings.c overwrite it. Returns the new name, or nil when `path`
+    /// (or its directory) does not exist: there is nothing to keep. On
+    /// failure `path` is unchanged.
+    @discardableResult
+    static func moveAside(path: String) throws(FileIOError) -> String? {
+        var template = Array((path + keptInfix + "XXXXXX").utf8CString)
+        let fd = template.withUnsafeMutableBufferPointer { buffer in
+            mkostemp(buffer.baseAddress!, O_CLOEXEC) // reserves the unique name
+        }
+        if fd < 0 {
+            let e = errno
+            if e == ENOENT {
+                return nil
+            }
+            throw errnoError(e, "cannot create a name to keep", path)
+        }
+        _ = close(fd)
+        let kept = template.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        if rename(path, kept) != 0 {
+            let e = errno
+            _ = unlink(kept)
+            if e == ENOENT {
+                return nil
+            }
+            throw errnoError(e, "cannot move aside", path)
+        }
+        return kept
+    }
+
     // MARK: - Bounded read
 
     /// Reads the whole regular file at `path` (symbolic links are followed),

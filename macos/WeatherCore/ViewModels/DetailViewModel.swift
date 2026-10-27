@@ -18,6 +18,13 @@
 // 48-hour strip, the day list, the footer row (updated + sources, refresh
 // spinner, Offline / Stale badges), the attribution line and the partial line.
 //
+// Alerts (not in the GTK pane): `alerts` is the alerts section of the shown
+// item (DetailLists.swift: the cards of its current alerts, else the text of
+// the state of its WxAlertsResult), nil without an item. It is held beside
+// `page`, not in it: it does not depend on the forecast (a place without one
+// has alerts too) and it changes on its own (compare before set as well; a
+// change of the alerts alone does not touch `page` or `revision`).
+//
 // Compare before set (wx-detail.h:98-101): show(_:) assigns `page` only when
 // the new page differs from the shown one, so an unchanged refresh notifies no
 // observer and leaves `revision` alone.
@@ -54,10 +61,12 @@ public final class DetailViewModel {
         /// The error text: sanitised like wx_row_item_set_error (wx-row.c:504-516) to at most
         /// AppModel.errorTextMaxBytes bytes; nil when none or empty after sanitising.
         public let errorText: String?
+        /// The place's alerts as the alerts service reports them (AppModel.Place.alerts).
+        public let alerts: WxAlertsResult
 
         public init(place: WxPlace, forecast: WxForecast? = nil, fetchedS: Int64 = 0, loading: Bool = false,
                     stale: Bool = false, offline: Bool = false, units: WxUnits = .imperial, nowS: Int64,
-                    errorText: String? = nil) {
+                    errorText: String? = nil, alerts: WxAlertsResult = AppModel.alertsNotFetched) {
             self.place = place
             self.forecast = forecast
             self.fetchedS = fetchedS
@@ -68,12 +77,14 @@ public final class DetailViewModel {
             self.nowS = nowS
             let clean = errorText.map { WxText.sanitize($0, maxBytes: AppModel.errorTextMaxBytes) }
             self.errorText = clean?.isEmpty == false ? clean : nil
+            self.alerts = alerts
         }
 
         /// The item of a place of the application model (selectedPlace).
         public init(_ p: AppModel.Place) {
             self.init(place: p.place, forecast: p.forecast, fetchedS: p.fetchedS, loading: p.loading,
-                      stale: p.stale, offline: p.offline, units: p.units, nowS: p.nowS, errorText: p.errorText)
+                      stale: p.stale, offline: p.offline, units: p.units, nowS: p.nowS, errorText: p.errorText,
+                      alerts: p.alerts)
         }
     }
 
@@ -375,6 +386,8 @@ public final class DetailViewModel {
     public private(set) var page: Page
     /// Incremented each time `page` changes.
     public private(set) var revision: UInt64 = 0
+    /// The alerts section of the shown item (only assigned when it changes); nil without an item.
+    public private(set) var alerts: AlertsSection?
 
     @ObservationIgnored private var placeZone = WxFormat.HeldZone()
     @ObservationIgnored private var forecastZone = WxFormat.HeldZone()
@@ -393,6 +406,10 @@ public final class DetailViewModel {
         if next != page {
             page = next
             revision &+= 1
+        }
+        let nextAlerts = item.map { AlertsSection.section($0.alerts, nowS: $0.nowS, zone: placeZone.zone) }
+        if nextAlerts != alerts {
+            alerts = nextAlerts
         }
     }
 
@@ -614,7 +631,10 @@ public final class DetailViewModel {
         let wind = "Wind " + WxFormat.wind(windKmh, units: units) + gust + separator + "Humidity "
             + WxFormat.percent(cur?.humidityPct ?? .nan)
         let effectiveCond = cur.map(WxConditionSymbol.effectiveHourlyCondition(for:)) ?? condition
-        return Now(symbolName: entry.symbolName, gtkIconName: entry.gtkIconName, iconAccessibilityLabel: label,
+        // The icon is drawn from effectiveCond (iconAssetName), so its accessible label names
+        // that condition; the visible condition text stays the C label.
+        return Now(symbolName: entry.symbolName, gtkIconName: entry.gtkIconName,
+                   iconAccessibilityLabel: WxConditionRules.label(effectiveCond),
                    temperature: WxFormat.temp(cur?.tempC ?? .nan, units: units, withUnit: true), condition: label,
                    feelsLike: "Feels like " + WxFormat.temp(cur?.feelsC ?? .nan, units: units, withUnit: false),
                    highLow: highLow, wind: wind, conditionCode: effectiveCond, isDay: cur?.isDay ?? true)

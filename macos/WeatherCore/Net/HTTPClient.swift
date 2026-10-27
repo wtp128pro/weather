@@ -31,8 +31,17 @@
 //  - Retries (at most HTTPPolicy.maxRetries) only after NETWORK, a per-attempt
 //    TIMEOUT or HTTP 500...599, waiting backoffBaseMs << attempt on the
 //    injected WxClock.
-//  - Body: at most HTTPPolicy.maxBodyBytes DECODED bytes (counted in
-//    didReceive data); a declared Content-Length above the cap, an invalid or
+//  - Statuses: 2xx, and 304 to an If-Modified-Since, are answers; every other
+//    status is its error (HTTPPolicy.statusError), unless the caller declared
+//    it in get's `answering` (an alert source's "not covered" 400 / 404): that
+//    answer is read exactly like a 2xx (a body failing the 2xx's rules, a cut
+//    one included, gets the 2xx's error and retries; a 401's / 407's two
+//    exceptions are at get) and returned with its status and body, never
+//    retried itself. Without a declaration (every provider) nothing changes.
+//  - Body: at most maxBodyBytes DECODED bytes, the client's own cap
+//    (HTTPPolicy.maxBodyBytes(host:): 16 MiB for the MeteoAlarm feed host,
+//    HTTPPolicy.maxBodyBytes, 4 MiB, for every other; counted in didReceive
+//    data); a declared Content-Length above the cap, an invalid or
 //    conflicting Content-Length, a Transfer-Encoding other than chunked and a
 //    Content-Encoding list other than nothing / one gzip are PARSE, decided
 //    from the response head before any body byte is read.
@@ -159,11 +168,12 @@ public final class HTTPClient: Sendable {
 
     /// A successful response (C: WxHttpResponse).
     public struct Response: Sendable, Equatable {
-        /// HTTP status of the final attempt: 200...299, or 304 when
-        /// If-Modified-Since was sent.
+        /// HTTP status of the final attempt: 200...299, 304 when
+        /// If-Modified-Since was sent, or a status the caller declared in
+        /// get's `answering`.
         public let status: Int
-        /// The decoded body, at most HTTPPolicy.maxBodyBytes bytes; empty for
-        /// 204, 205 and 304.
+        /// The decoded body, at most the client's maxBodyBytes bytes; empty
+        /// for 204, 205 and 304.
         public let body: Data
         /// UTC unix seconds from Expires, 0 if absent or implausible.
         public let expiresS: Int64
@@ -194,6 +204,12 @@ public final class HTTPClient: Sendable {
     /// The whole-operation deadline, ms (HTTPPolicy.totalDeadlineMs; tests
     /// inject a shorter one through the internal initialiser).
     let totalDeadlineMs: Int
+    /// The decoded-body cap HTTPPolicy allows this client's pinned host
+    /// (HTTPPolicy.maxBodyBytes(host:): 16 MiB for the MeteoAlarm feed host,
+    /// 4 MiB for every other; tests inject one through the internal
+    /// initialiser). Every attempt's Transfer enforces it on the declared
+    /// Content-Length, the bytes handed over and the gzip decoder alike.
+    public let maxBodyBytes: Int
 
     private let session: URLSession
     private let origin: Origin
@@ -237,14 +253,19 @@ public final class HTTPClient: Sendable {
     }
 
     /// Internal: lets tests shorten the whole-operation deadline (C has none:
-    /// its test waits 45 s of wall time, test-http.c test_net_total_deadline).
-    init(policy: HTTPClientPolicy, clock: any WxClock, totalDeadlineMs: Int) throws(WxError) {
+    /// its test waits 45 s of wall time, test-http.c test_net_total_deadline)
+    /// and give a loopback client the body cap of a production host
+    /// (`maxBodyBytes`, nil: the cap of the pinned host).
+    init(policy: HTTPClientPolicy, clock: any WxClock, totalDeadlineMs: Int, maxBodyBytes: Int? = nil)
+        throws(WxError)
+    {
         guard totalDeadlineMs > 0, let origin = Self.components(of: policy.schemeNormalisedOrigin + "/") else {
             throw WxError(.invalidArg, HTTPPolicy.Message.unacceptableBaseURL)
         }
         self.policy = policy
         self.clock = clock
         self.totalDeadlineMs = totalDeadlineMs
+        self.maxBodyBytes = maxBodyBytes ?? HTTPPolicy.maxBodyBytes(host: origin.host)
         self.origin = origin
         session = URLSession(
             configuration: Self.makeConfiguration(), delegate: SessionDelegate(), delegateQueue: nil)
@@ -322,16 +343,26 @@ public final class HTTPClient: Sendable {
     // MARK: Operation
 
     /// wx_http_get_async + wx_http_get_finish: GET `pathAndQuery` of the
-    /// pinned origin with the policy of the file comment.
+    /// pinned origin with the policy of the file comment. `answering` lists
+    /// non-2xx statuses this caller reads as answers (an alert source's "not
+    /// covered" 400 or 404): such a response is read exactly like a 2xx (the
+    /// same cap, framing and coding rules, and the same error and retries when
+    /// its body fails them, a Content-Length body cut short included) and
+    /// returned with its status and body instead of thrown; the answer itself
+    /// is never retried. Two exceptions, where CFNetwork reads a 401 or 407
+    /// apart: an authentication challenge keeps its status error, and a
+    /// chunked 401 body cut inside a chunk is answered with the bytes before
+    /// the cut (NEW U13-N17). Empty (the default, every provider): C's status
+    /// errors.
     ///
     /// - Throws: `WxError` (INVALID_ARG before anything else, RATE_LIMITED
     ///   when HTTPPolicy.maxInflight operations are outstanding, NETWORK,
     ///   TIMEOUT, HTTP, NOT_FOUND, PARSE), or `CancellationError` when the
     ///   calling task is cancelled before the call returns. Messages never
     ///   contain body text.
-    public func get(_ pathAndQuery: String, accept: String, ifModifiedSince: String? = nil) async throws
-        -> Response
-    {
+    public func get(
+        _ pathAndQuery: String, accept: String, ifModifiedSince: String? = nil, answering: Set<Int> = []
+    ) async throws -> Response {
         let plan = try policy.plan(pathAndQuery: pathAndQuery, accept: accept, ifModifiedSince: ifModifiedSince)
         let request = try makeRequest(plan)
         try Task.checkCancellation()  // a cancelled caller sends nothing (wx-http.c:2054, 2080: before the cap)
@@ -356,7 +387,7 @@ public final class HTTPClient: Sendable {
         var atHead = false
         while true {
             try await enterWire(atHead: atHead, totalDeadline: totalDeadline)
-            let (outcome, sent) = await runAttempt(request, plan, totalDeadline: totalDeadline)
+            let (outcome, sent) = await runAttempt(request, plan, answering: answering, totalDeadline: totalDeadline)
             leaveWire()
             requests += sent
             // The caller's cancellation wins over every outcome (normalize_error).
@@ -377,6 +408,11 @@ public final class HTTPClient: Sendable {
                     throw WxError(.timeout, HTTPPolicy.Message.deadlineExceeded)
                 }
                 try await clock.sleep(until: resume)
+                // A late wake-up (the clock's leeway, see the file comment) can come after the
+                // whole-operation deadline: then no further attempt is begun.
+                if clock.monotonicMicroseconds >= totalDeadline {
+                    throw WxError(.timeout, HTTPPolicy.Message.deadlineExceeded)
+                }
                 atHead = true
             }
         }
@@ -401,19 +437,24 @@ public final class HTTPClient: Sendable {
     /// transfer that completes after the deadline (the clock's wake-up comes late) is judged the
     /// same way: a verdict on the head counts when the head's first byte arrived within the
     /// deadline (Transfer.verdictTime), anything else is the deadline's TIMEOUT. The caller's
-    /// cancellation is never judged.
-    private func runAttempt(_ request: URLRequest, _ plan: HTTPRequestPlan, totalDeadline: Int64) async
-        -> (AttemptOutcome, Int)
+    /// cancellation is never judged. The transfer applies this client's maxBodyBytes and reads the
+    /// caller's `answering` statuses as answers.
+    private func runAttempt(_ request: URLRequest, _ plan: HTTPRequestPlan, answering: Set<Int>, totalDeadline: Int64)
+        async -> (AttemptOutcome, Int)
     {
         let attemptDeadline = clock.monotonicMicroseconds + Int64(policy.timeoutMs) * 1000
         let totalFirst = totalDeadline <= attemptDeadline
         let wake = min(attemptDeadline, totalDeadline)
         let clock = self.clock
         let session = self.session
-        // The request goes on the wire now, not when a child task gets a thread: the attempt's
-        // deadline then measures the transfer, not the scheduling of this task group.
+        // The request is handed to URLSession now, not when a child task gets a thread: the
+        // attempt's deadline then measures the transfer, not the scheduling of this task group.
+        // On HTTP/1.1 with more than connectionsPerHost attempts at once, it also covers the wait
+        // in URLSession's per-host connection queue (as libsoup's max-conns-per-host queue did in
+        // C); h2 multiplexes the attempts on one connection, without that queue.
         let transfer = Transfer(
-            sentIfModifiedSince: plan.sendsIfModifiedSince, clock: clock, deadline: wake, totalFirst: totalFirst)
+            sentIfModifiedSince: plan.sendsIfModifiedSince, clock: clock, deadline: wake, totalFirst: totalFirst,
+            maxBodyBytes: maxBodyBytes, answering: answering)
         transfer.begin(session: session, request: request)
         let outcome = await withTaskGroup(of: Void.self) { group in
             group.addTask {
@@ -456,11 +497,14 @@ public final class HTTPClient: Sendable {
         }
         do {
             while true {
-                enum Next { case go, sleep(Int64), park(UInt64) }
+                enum Next { case go, sleep(Int64), park(UInt64), expired }
                 let now = clock.monotonicMicroseconds
                 let next = state.withLock { s -> Next in
                     guard s.queue.first == ticket, s.onWire == 0 else { return .park(s.generation) }
                     guard now >= s.nextStartUs else { return .sleep(s.nextStartUs) }
+                    // A pacing sleep or a park that returned after the whole-operation deadline (a
+                    // late wake-up) begins no attempt and takes no pacing slot from the next one.
+                    guard now < totalDeadline else { return .expired }
                     s.queue.removeFirst()
                     s.onWire += 1
                     s.nextStartUs = now + gapUs
@@ -469,6 +513,8 @@ public final class HTTPClient: Sendable {
                 switch next {
                 case .go:
                     return
+                case .expired:
+                    throw WxError(.timeout, HTTPPolicy.Message.deadlineExceeded)
                 case .sleep(let until):
                     if until >= totalDeadline {
                         try await clock.sleep(until: totalDeadline)

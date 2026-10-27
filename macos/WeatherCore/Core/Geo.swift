@@ -101,6 +101,25 @@ public enum WxGeo {
         return inUSNWS(lat: place.lat, lon: place.lon)
     }
 
+    /// Default display units for a new place from its ISO 3166-1 alpha-2
+    /// country code (any case): imperial for the United States, its
+    /// territories (PR, GU, VI, AS, MP, UM), Liberia (LR) and Myanmar (MM),
+    /// metric for every other code. `fallback` when the code is empty or is
+    /// not exactly two ASCII letters (the geocoder left it unset or garbled).
+    public static func defaultUnits(countryCode: String, fallback: WxUnits) -> WxUnits {
+        // The ASCII check precedes uppercased(), which can fold a non-ASCII
+        // letter into an ASCII one ("u\u{17F}" -> "US").
+        guard countryCode.count == 2, countryCode.allSatisfy({ $0.isASCII && $0.isLetter }) else {
+            return fallback
+        }
+        switch countryCode.uppercased() {
+        case "US", "PR", "GU", "VI", "AS", "MP", "UM", "LR", "MM":
+            return .imperial
+        default:
+            return .metric
+        }
+    }
+
     /// True when coordinates or country code lie in Canada.
     public static func inCanada(lat: Double, lon: Double, countryCode: String = "") -> Bool {
         if !isValid(lat: lat, lon: lon) {
@@ -113,9 +132,10 @@ public enum WxGeo {
         if !code.isEmpty && code != "US" {
             return false
         }
-        // North of 49N between -141W and -52W (excluding Alaska west of -130W / north of 54.5N)
+        // North of 49N between -141W and -52W (excluding the Alaska panhandle west of -130W,
+        // 54.5N...60N; north of 60N the Yukon border is the 141st meridian, so Whitehorse stays in)
         if inBox(lat, lon, 49.0, 84.0, -141.0, -52.0) {
-            if lon < -130.0 && lat >= 54.5 {
+            if lon < -130.0 && lat >= 54.5 && lat < 60.0 {
                 return false
             }
             if lon < -141.0 {

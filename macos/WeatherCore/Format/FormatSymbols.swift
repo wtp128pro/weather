@@ -133,8 +133,9 @@ public enum WxConditionSymbol {
     }
 
     /// Resolves the visual condition for an hourly slot so that sub-freezing wet hours display
-    /// snow/sleet and high-probability wet hours (>= 30% chance with non-zero model precipitation)
-    /// display a rain/snow icon rather than a dry cloud icon.
+    /// snow/sleet and probable wet hours display a rain/snow icon rather than a dry cloud icon:
+    /// a dry-sky hour is overridden at >= 30% chance with model precipitation (precipMm >= 0.05 mm
+    /// or precipMmMax >= 0.1 mm), or at >= 40% chance on probability alone.
     public static func effectiveHourlyCondition(for h: WxBlendHour) -> WxCondition {
         let base = h.condition
         let isRainClass: Bool = switch base {
@@ -181,9 +182,9 @@ public enum WxConditionSymbol {
     }
 
     /// Resolves the visual condition for a daily forecast row so that any day whose hourly
-    /// forecast (or 15-minute nowcast, or daily precipitation probability >= 30%) includes
-    /// rain, snow, sleet, or thunderstorms displays a clear precipitation icon rather than a
-    /// dry cloud icon.
+    /// forecast (or 15-minute nowcast of >= 0.1 mm, or daily precipitation probability >= 30%
+    /// with >= 0.1 mm, or >= 35% on probability alone) includes rain, snow, sleet, or
+    /// thunderstorms displays a clear precipitation icon rather than a dry cloud icon.
     public static func effectiveDailyCondition(
         for d: WxDay,
         hours: [WxBlendHour],

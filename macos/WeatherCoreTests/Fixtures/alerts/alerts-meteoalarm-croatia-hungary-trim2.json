@@ -1,0 +1,204 @@
+{
+ "warnings": [
+  {
+   "alert": {
+    "identifier": "2.49.0.0.191.0.HR.261026133311_0_001_yellow_HR023",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Zadarska",
+        "geocode": [
+         {
+          "value": "HR023",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "HR033",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Jaka bura s olujnim udarima.",
+      "effective": "2026-10-26T13:33:11+01:00",
+      "event": "Žuto upozorenje za vjetar",
+      "expires": "2026-10-29T23:59:59+01:00",
+      "instruction": "BUDITE NA OPREZU zbog krhotina koje lete nošene jakim vjetrom. Mogući su lokalizirani prekidi u aktivnostima na otvorenom.",
+      "language": "hr-HR",
+      "onset": "2026-10-28T16:00:00+01:00",
+      "parameter": [
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "DHMZ - Državni hidrometeorološki zavod",
+      "severity": "Moderate",
+      "urgency": "Future"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Zadarska",
+        "geocode": [
+         {
+          "value": "HR023",
+          "valueName": "EMMA_ID"
+         },
+         {
+          "value": "HR033",
+          "valueName": "NUTS3"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Strong bura (NE wind) with gale force gusts.",
+      "effective": "2026-10-26T13:33:11+01:00",
+      "event": "Yellow wind warning",
+      "expires": "2026-10-29T23:59:59+01:00",
+      "instruction": "STAY ALERT for debris carried by strong winds. Debris and tree branches carried by the wind may cause localised interruptions in outdoor activities.",
+      "language": "en-GB",
+      "onset": "2026-10-28T16:00:00+01:00",
+      "parameter": [
+       {
+        "value": "1; Wind",
+        "valueName": "awareness_type"
+       },
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       }
+      ],
+      "responseType": [
+       "Monitor"
+      ],
+      "senderName": "DHMZ - Croatian Meteorological and Hydrological Service",
+      "severity": "Moderate",
+      "urgency": "Future"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "https://meteo.hr",
+    "sent": "2026-10-26T13:33:11+01:00",
+    "status": "Actual"
+   },
+   "uuid": "e2568aab-a74e-42c6-832e-cc6681c6c49b"
+  },
+  {
+   "alert": {
+    "identifier": "2.49.0.0.348.0.HU.261025084016.710_9513_109300",
+    "incidents": "Alert",
+    "info": [
+     {
+      "area": [
+       {
+        "areaDesc": "Dél-Alföld",
+        "geocode": [
+         {
+          "value": "HU33",
+          "valueName": "NUTS2"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Figyelem! Zivatar alakulhat ki. Elsődleges veszélyforrást a villámlás jelent, emellett esetenként szélerősödés, jégeső előfordulhat!",
+      "effective": "2026-10-25T09:40:16+01:00",
+      "event": "sárga heves zivatar figyelmeztetés",
+      "expires": "2026-10-26T23:59:59+01:00",
+      "headline": "sárga heves zivatar figyelmeztetés Magyarországra",
+      "instruction": "Közeli zivatartevékenység esetén kerüljük az időjárásnak, villámlásnak jobban kitett kimagasló helyeket, keressünk fedett helyet. Kisebb területen számítani lehet nagy erejű, hirtelen szélrohamokra, melyek ágakat törnek le, akár fákat is kitörnek. A zivatarfelhők centrumában előforduló nagy méretű jég szintén károkat okozhat és balesetveszélyt is hordoz. A közutakon alkalmazkodjunk az egyes szakaszokon hirtelen megváltozó látási és útviszonyokra. Az elektromos hálózatban károk keletkezhetnek, így a szolgáltatásban zavarok lehetnek.",
+      "language": "hu-HU",
+      "onset": "2026-10-26T00:00:00+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "3; Thunderstorm",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "None"
+      ],
+      "senderName": "Hungarian Meteorologial Service",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://www.met.hu/idojaras/veszelyjelzes/"
+     },
+     {
+      "area": [
+       {
+        "areaDesc": "Southern Great Plain",
+        "geocode": [
+         {
+          "value": "HU33",
+          "valueName": "NUTS2"
+         }
+        ]
+       }
+      ],
+      "category": [
+       "Met"
+      ],
+      "certainty": "Likely",
+      "description": "Attention! Thunderstorm (lightning) is expected, possibly accompanied by stormy gusts and hail.",
+      "effective": "2026-10-25T09:40:16+01:00",
+      "event": "yellow thunderstorm warning",
+      "expires": "2026-10-26T23:59:59+01:00",
+      "headline": "yellow thunderstorm warning for Hungary",
+      "instruction": "Be especially careful in highly exposed places (mountains, forests, open areas).",
+      "language": "en-GB",
+      "onset": "2026-10-26T00:00:00+01:00",
+      "parameter": [
+       {
+        "value": "2; yellow; Moderate",
+        "valueName": "awareness_level"
+       },
+       {
+        "value": "3; Thunderstorm",
+        "valueName": "awareness_type"
+       }
+      ],
+      "responseType": [
+       "None"
+      ],
+      "senderName": "Hungarian Meteorologial Service",
+      "severity": "Moderate",
+      "urgency": "Future",
+      "web": "https://www.met.hu/idojaras/veszelyjelzes/"
+     }
+    ],
+    "msgType": "Alert",
+    "scope": "Public",
+    "sender": "riaszt@met.hu",
+    "sent": "2026-10-25T09:40:16+01:00",
+    "status": "Actual"
+   },
+   "uuid": "a4e5a34a-464b-4caa-9a92-fac5eb93027a"
+  }
+ ]
+}

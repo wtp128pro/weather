@@ -22,14 +22,16 @@
 10. [Rain Graph & Bars Visual Encoding (`ChartData.swift`, `DetailRainChart.swift`, `DetailView.swift`)](#10-rain-graph--bars-visual-encoding)
 11. [Multi-Source Street-Address Geocoding & Proximity Deduplication (`AddressGeocoder.swift`, `Places.swift`)](#11-multi-source-street-address-geocoding--proximity-deduplication)
 12. [Refresh Scheduler, Provider Rate-Limiting & Atomic Storage (`Scheduler.swift`, `RefreshEngine.swift`, `FileIO.swift`)](#12-refresh-scheduler-provider-rate-limiting--atomic-storage)
-13. [Architectural Decision Records (ADRs)](#13-architectural-decision-records-adrs)
-14. [Academic, Institutional & Standard Citations](#14-academic-institutional--standard-citations)
+13. [Per-Place Units & Migration (`Places.swift`, `AppModel.swift`, `Geo.swift`)](#13-per-place-units--migration)
+14. [Official Weather Alerts (`AlertsService.swift`, `AlertRegions.swift`, `AlertsFetchers.swift`)](#14-official-weather-alerts)
+15. [Architectural Decision Records (ADRs)](#15-architectural-decision-records-adrs)
+16. [Academic, Institutional & Standard Citations](#16-academic-institutional--standard-citations)
 
 ---
 
 ## 1. Executive Overview & Architectural Philosophy
 
-**Neginato Mezora** is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes numerical weather prediction (NWP) guidance from up to **10 distinct forecast models across 3 independent upstream providers** (`Open-Meteo`, `NOAA National Weather Service`, and `MET Norway`), fuses them with **real-time physical surface observations** from up to 10 keyless station networks (`NOAA AviationWeather METAR` worldwide, `NWS ASOS` and the `Iowa Environmental Mesonet` in the US, `ECCC SWOB` in Canada, `DWD`, `DMI`, `FMI`, `SMHI`, `GeoSphere Austria` and `MeteoSwiss` in Europe) plus the `Open-Meteo 90m DEM surface analysis` and `US EPA AirNow`, and renders high-contrast Apple Weather–inspired visual cards.
+**Neginato Mezora** is a native macOS meteorological workstation and hyper-local precipitation nowcasting application. It synthesizes numerical weather prediction (NWP) guidance from up to **10 distinct forecast models across 3 independent upstream providers** (`Open-Meteo`, `NOAA National Weather Service`, and `MET Norway`), fuses them with **real-time physical surface observations** from up to 10 keyless station networks (`NOAA AviationWeather METAR` worldwide, `NWS ASOS` and the `Iowa Environmental Mesonet` in the US, `ECCC SWOB` in Canada, `DWD`, `DMI`, `FMI`, `SMHI`, `GeoSphere Austria` and `MeteoSwiss` in Europe) plus the `Open-Meteo 90m DEM surface analysis` and `US EPA AirNow`, and renders high-contrast Apple Weather–inspired visual cards. Each place keeps its own display units (§13) and shows the official weather alerts of the one keyless issuer that covers it — NWS, DWD via Bright Sky, MET Norway, Environment Canada or MeteoAlarm (§14).
 
 The system is split into two strict layers:
 
@@ -373,7 +375,7 @@ National networks are queried inside boxes with a ~50 km margin beyond the borde
 
 ### 6.1 Same-Site Merge and the 3D Anisotropic Spatial Kernel
 
-Reports closer than $1.5\text{ km}$ are one site (an airport METAR and its ASOS/SYNOP/SWOB twin): the freshest report wins and older ones only fill variables it lacks; the site's trust is the best of its sensors.
+Reports older than the age limit are dropped **before** the same-site merge. Reports closer than $1.5\text{ km}$ are then one site (an airport METAR and its ASOS/SYNOP/SWOB twin): the freshest report wins and older ones only fill variables it lacks — present weather is borrowed from a twin only when that report is at most $90\text{ min}$ old; the site's trust is the best of its sensors.
 
 Station $i$ at great-circle distance $d_i$ (km) and elevation difference $\Delta z_i = z_{\text{target}} - z_i$ (m, clamped to $\pm 1800$) receives
 
@@ -467,10 +469,10 @@ Every station ever retrieved is kept in `<config>/weather/stations.json` (at mos
 - **Health.** After 3 tests, with $E = \sqrt{\text{bias}^2 + \text{scatter}^2}$ (the bias of the current day/night half once it has 3 tests, else the overall mean bias; the scatter from the mean squared error):
 
 ```math
-\text{health} = \underbrace{\min\!\left(1,\; 0.6 + 0.4\,\frac{n_{\text{tests}}}{6}\right)}_{\text{probation}} \cdot \begin{cases} 1 & E \le 1.5\,^\circ\text{C} \\[2pt] \dfrac{1}{1 + \left(\frac{E - 1.5}{1.5}\right)^{2}} & 1.5 < E < 8 \\[6pt] 0 & E \ge 8\,^\circ\text{C} \end{cases} \cdot \underbrace{[\text{not stuck}]}_{\text{non-METAR, unchanged} \ge 8\text{ h} \Rightarrow 0}
+\text{health} = \underbrace{\min\!\left(1,\; 0.6 + 0.4\,\frac{n_{\text{tests}}}{6}\right)}_{\text{probation}} \cdot \begin{cases} 1 & E \le 1.5\,^\circ\text{C} \\[2pt] \dfrac{1}{1 + \left(\frac{E - 1.5}{1.5}\right)^{2}} & 1.5 < E < 8 \\[6pt] 0 & E \ge 8\,^\circ\text{C} \end{cases} \cdot \underbrace{[\text{not stuck}]}_{\text{not METAR/ASOS, unchanged} \ge 8\text{ h} \Rightarrow 0}
 ```
 
-METARs (whole degrees, often steady overnight) are exempt from the stuck test. Health multiplies the prior weight (§6.1) in both the blend and the cross-validation.
+METARs and NWS ASOS 5-minute reports (whole degrees, often steady overnight) are exempt from the stuck test. Health multiplies the prior weight (§6.1) in both the blend and the cross-validation.
 
 ### 6.8 Station Credits
 
@@ -706,27 +708,88 @@ When a user searches for a street address, postal code, landmark, or city in the
 - **Service Orchestrator (`ServiceOrchestrator`):** Enforces a `cooldownUs = 60,000,000 µs` ($60\text{ s}$) per-place rate-limit cooldown if all providers return `.rateLimited`.
 
 ### 12.3 Crash-Safe Atomic Persistence (`FileIO.swift`)
-All JSON stores (`places.json`, `settings.json`, `forecasts.json`, `weights.json`, `stations.json`, `local-bias.json`, `station-settings.json`) are written via a temporary sibling file (`<name>.tmp.<pid>.<counter>`) with mode `0600`, flushed to physical non-volatile media via `fcntl(fd, F_FULLFSYNC)` (falling back to `fsync`), atomically renamed over the target path via POSIX `rename(2)`, and followed by `fsync` on the parent directory descriptor.
+All JSON stores (`places.json`, `settings.json`, `forecasts.json`, `weights.json`, `stations.json`, `local-bias.json`, `station-settings.json`) are written via a temporary sibling file (`<name>.tmp.<pid>.<counter>`) with mode `0600`, flushed to physical non-volatile media via `fcntl(fd, F_FULLFSYNC)` (falling back to `fsync`), atomically renamed over the target path via POSIX `rename(2)`, and followed by `fsync` on the parent directory descriptor. An unreadable `places.json` or `settings.json` (damaged, a foreign version, a read error) is not overwritten: the first save after the failed load renames it aside to `<name>.unreadable-XXXXXX` and writes a new file. The `places.json` format, including the per-place `units` member, is described in §13.1.
 
 ---
 
-## 13. Architectural Decision Records (ADRs)
+## 13. Per-Place Units & Migration
+
+**Implementation:** [`WeatherCore/Storage/Places.swift`](WeatherCore/Storage/Places.swift), [`WeatherCore/App/AppModel.swift`](WeatherCore/App/AppModel.swift), [`WeatherCore/Core/Geo.swift`](WeatherCore/Core/Geo.swift) (`WxGeo.defaultUnits`)
+
+Units are a property of each saved place, not of the app. The units live in the place list beside each `WxPlace` (not in `WxPlace` itself), so they never change a place's key, its forecast, its requests or its alerts; a units change only re-renders.
+
+### 13.1 Storage (`places.json`, `settings.json`)
+- **`places.json`** keeps `"version": 1` and adds an optional per-place member `"units": "imperial"` or `"metric"`, written last in the place's object and only when set. An unknown or malformed value reads as unset and never drops the place. An older build reads the file, ignores the member and drops it on its next save.
+- **`settings.json`** keeps its `units` member (the C schema, ADR-04); it now means the **default units for new places** (`AppModel.defaultUnits`, Settings › General › *Default Units for New Places*). Changing it never changes a saved place.
+
+### 13.2 Choosing and Changing Units
+- **Country default (`WxGeo.defaultUnits(countryCode:fallback:)`):** Imperial for `US`, `PR`, `GU`, `VI`, `AS`, `MP`, `UM`, `LR` and `MM`; Metric for every other two-letter ASCII code (either case); the fallback (the default units for new places) for an empty or malformed code. `AppModel` applies no country rule itself: the add window's units picker (labelled *Units for* plus the highlighted place's name and region, *Units* with no results) is preselected from the highlighted place's country, and the first-run page's picker (labelled with the highlighted city the same way; *Units for these cities* only when no city is highlighted) from the highlighted city's country; in either, a choice the user makes holds for every place added there. Both pass the chosen units to `add(_:units:)` / `addCustomLocation(_:customName:streetAddress:units:)` (nil means the default).
+- **Switching:** `AppModel.toggleUnits()` / `setUnits(_:)` — the toolbar button and `⌘U` — act on the selected place (*Switch Selected Place to Celsius* / *Fahrenheit*); with no place selected they change the default (*Set Default Units to Celsius* / *Fahrenheit*). `AppModel.units` is the selected place's units, else the default; each item's units are its saved units, else the default.
+
+### 13.3 Migration
+At load, before the list announces changes, every place saved without units (a `places.json` from before per-place units) is given the `settings.json` units — what the app showed it in — and one save of the list is scheduled (3 s debounce). A relaunch finds every place with units, changes nothing and saves nothing.
+
+---
+
+## 14. Official Weather Alerts
+
+**Implementation:** [`WeatherCore/Alerts/AlertsService.swift`](WeatherCore/Alerts/AlertsService.swift), [`WeatherCore/Alerts/AlertRegions.swift`](WeatherCore/Alerts/AlertRegions.swift), [`WeatherCore/Alerts/AlertsFetchers.swift`](WeatherCore/Alerts/AlertsFetchers.swift), [`WeatherCore/Alerts/WxAlert.swift`](WeatherCore/Alerts/WxAlert.swift), [`WeatherCore/App/AppModel.swift`](WeatherCore/App/AppModel.swift), [`WeatherCore/Net/HTTPClient.swift`](WeatherCore/Net/HTTPClient.swift)
+
+### 14.1 Routing (`AlertsService.source(countryCode:lat:lon:)`)
+Exactly one source per place, by ISO 3166-1 country code (two ASCII letters, either case; the ASCII check comes before upper-casing, so no non-ASCII letter can fold into a covered code):
+- `US`, `PR`, `VI`, `GU`, `AS`, `MP`, `UM` → **NOAA NWS** (`api.weather.gov`, point query); an empty code → NWS when the point lies in the NWS area (`WxGeo.inUSNWS`), else not covered.
+- `DE` → **DWD via Bright Sky** (point query); `NO` → **MET Norway MetAlerts** (point query); `CA` → **Environment Canada** (point query).
+- A country with a MeteoAlarm feed (`WxAlertRegions.feedSlug`, the only country-to-feed table: `AT`, `BA`, `BE`, `BG`, `CH`, `CY`, `CZ`, `DK`, `EE`, `ES`, `FI`, `FR`, `GB`, `GR`, `HR`, `HU`, `IE`, `IL`, `IS`, `IT`, `LT`, `LU`, `LV`, `MD`, `ME`, `MK`, `MT`, `NL`, `PL`, `PT`, `RO`, `RS`, `SE`, `SI`, `SK`, `UA` — 35 European countries and Israel) → **MeteoAlarm** (`feeds.meteoalarm.org`, the country's whole feed). Germany and Norway are never merged with MeteoAlarm.
+- Anything else, including a code that is not two ASCII letters, is **not covered**; no request is sent.
+
+### 14.2 MeteoAlarm Region Matching (`WxAlertRegions`)
+The app bundles a region table (`WeatherCore/Resources/MeteoAlarmRegions.json`, built by `scripts/alerts/build_meteoalarm_regions.py`; MeteoAlarm geocodes and NUTS geometry). For each CAP area of a warning: an area with its own polygons is decided by them alone; otherwise its geocodes are looked up by type (`EMMA_ID`, `NUTS3`, `NUTS2`) and code. The one alias: Met Éireann files Irish land warnings under FIPS 10-4 county codes, which are looked up as the `EMMA_ID` region of the same county. A code the table does not carry never matches — there is no nearest-region, country-wide or area-name fallback — and a warning that cannot be placed is dropped. A warning matches a place when any of its areas contains the place (even-odd ray casting over all rings).
+
+**Coverage:** in a country with bundled regions a place is covered only inside a region whose geocode type and code the country's feed actually files; elsewhere the result is *not covered*, never "no alerts", and no feed is downloaded for it. The polygon-only feeds (EE, LU, SE, CH, UA, GB, IL) are covered by country code and match by the warnings' polygons only.
+
+**Known limitation:** alert areas follow each issuer's published region shapes, which can differ from local boundaries near borders and coasts. MeteoAlarm's own Irish county outlines put a few border towns in a neighbouring county (Waterford city centre falls in County Kilkenny's polygon; also Youghal, Carrick-on-Shannon and Killaloe — 8 of 369 towns over 1,000 people), so a warning for their own county may not reach them while a neighbour's does; some coastal places (Howth, Bray, Greystones, Malahide; islands such as Tory and Cape Clear) are reached only by marine warnings or read *not covered*. The table's 0.004° simplification can also move a coast or border by a few hundred metres.
+
+### 14.3 Cadence and Reuse (`AlertsService`)
+- **No timer:** nothing fetches except `refresh(_:)`, so an issuer is never asked more often than the forecast is refreshed.
+- **MeteoAlarm feed window (`feedWindowUS`, 30 min):** a successful country feed answer is reused for $30\text{ min}$ however many places and refreshes ask, so while downloads succeed a feed is downloaded at most once per $30\text{ min}$; concurrent requests join the one in flight, later ones reuse its answer. A failed answer is reused only for the failure hold below.
+- **Failure hold (`failedFeedHoldUS` = `RefreshScheduler.freshUS`, 120 s):** a failed feed answer (thrown error, deadline, non-2xx, unreadable or oversized body) is shared per feed URL by every place of that country — including refreshes whose coverage check was still running when it arrived — for $120\text{ s}$ of the answer's age. The hold is by time, not by refresh round: any refresh that asks within $120\text{ s}$ of the failure, an event round included (for example when the network comes back), takes the held failure without downloading, and a refresh after $120\text{ s}$ tries again. A round longer than 120 s can cost one more download of a failing feed per further 120 s. An attempt ended by `cancelAll()` is never held.
+- **Point reuse (`pointReuseUS`, 5 min):** an NWS, Bright Sky, MET Norway or ECCC answer younger than $5\text{ min}$ is reused, also for another place at the same rounded point; a moved place is asked again; a failed point answer is not reused.
+
+### 14.4 Currency, States and Failure Isolation
+- **Expiry and windows:** a result is computed when read (`result(for:)`) against the injected clock: alerts whose message expired or whose event ended are left out (`WxAlert.isCurrent`), and an answer as old as its source's window or older (30 min for a feed, the forecast period `RefreshScheduler.periodUS`, 10 min, for a point source) is **stale**, never current. Ages are wall-clock time (a system sleep makes an answer stale), floored by the monotonic time elapsed.
+- **States (`WxAlertsResult.State`):** `notFetched` → *Checking for alerts…*; `current` → the alert cards, or *No active alerts*; `unavailable` → *Alerts could not be checked right now.*; `stale` → *Alerts could not be checked recently.* plus the time last checked, with no cards and no sidebar indicator; `notCovered` → *Alerts not available*. Not-fetched and unavailable are never shown as "no alerts".
+- **Failure isolation:** the service never touches the forecast and never throws. Each fetch races a deadline (`fetchTimeoutUS`, 120 s, above the transport's own) and cancellation; a thrown error, timeout, cancellation, over-cap body or unreadable answer is *unavailable* — except that a place whose previous alert set is still within its source window keeps it (current until the window passes, then stale) rather than lose a valid warning to one failed refetch.
+
+### 14.5 The AppModel Hook
+Each item carries exactly what `AlertsService.result(for:)` reports for its place. When a forecast request of a place **completes** (a forecast or a failure, never a cancelled request) and only after it was applied and reported to the `RefreshEngine`, `AppModel` kicks `refresh(place)` and never awaits it — unless the network is down or shutdown has begun. An item's alert state is re-read from the service when a kick's result lands (only the place's newest kick counts), on every display tick, at once when the window becomes visible, at once on a system clock change (`NSSystemClockDidChange`), and by a wake-up on the injected clock. While the window is visible (online or offline; offline the display tick stops), the wake-up fires at the earliest upcoming alert expiry or source-window end among the items, but never sleeps longer than $60\text{ s}$ (the display tick's period), so a system sleep or a clock change that moves wall time against monotonic time is caught up within a minute; every re-read re-arms it. **The wake-up only re-reads: it never fetches and never kicks.** A removed place's alert work is cancelled and its late result dropped; shutdown cancels all alert work and writes no alert state afterwards; a units change touches none of it. Alerts are shown only in the window (sidebar triangle by level with a count; detail-pane cards); the app posts no system notifications.
+
+### 14.6 Transport (`WxAlertsFetchers`, `HTTPClient`)
+- **One host-pinned `HTTPClient` per source**, with the project User-Agent and no key, token or credential; a URL is sent only when it starts with its source's origin.
+- **Per-client body cap (`HTTPPolicy.maxBodyBytes(host:)`):** 16 MiB for `feeds.meteoalarm.org` (country feeds exceed 4 MiB), 4 MiB for the four point hosts.
+- **Declared statuses (`get(_:accept:ifModifiedSince:answering:)`):** NWS's `400` (point out of bounds) and Bright Sky's `404` are returned with their body under the client's cap and parsed as *not covered*; every other non-2xx is a thrown error (*unavailable*).
+- **MET Norway terms:** coordinates rounded to 4 decimals; `Expires` honoured (the answer is reused without a request until then), then `If-Modified-Since` with the kept `Last-Modified`, a `304` answered with the kept body.
+
+---
+
+## 15. Architectural Decision Records (ADRs)
 
 | ADR | Decision | Rationale |
 | :--- | :--- | :--- |
 | **ADR-01** | **Preserve Bundle ID `io.github.wtp128pro.Weather` while renaming display name to `Neginato Mezora`** | Keeps Apple Developer ID provisioning profiles, notarization tickets, Keychain / UserDefaults domains, and macOS sandbox container paths (`~/Library/Containers/io.github.wtp128pro.Weather/`) 100% compatible without data migration loss. |
 | **ADR-02** | **Weighted Median for Continuous Variables, Weighted Mean for Probability** | Eliminates single-model outlier contamination ("ensemble drizzle bias") on physical quantities while preserving calibrated probability expectations. |
 | **ADR-03** | **Native macOS Settings (`⌘,`) Replacing Hamburger Popover** | Aligns with macOS Human Interface Guidelines and `Neginato` (`../../music`), providing dedicated grouped tabs (`Sources`, `Weights`, `Stations`, `General`) with interactive sliders for both provider and per-model weights. |
-| **ADR-04** | **Persist Custom Weights in `weights.json` Separate from `settings.json`** | Guarantees byte-for-byte backward compatibility with the strict C `settings.json` schema (`version`, `units`, `disabled_providers`, `selected`) and its fuzz/roundtrip test suite. |
+| **ADR-04** | **Persist Custom Weights in `weights.json` Separate from `settings.json`** | Guarantees byte-for-byte backward compatibility with the strict C `settings.json` schema (`version`, `units`, `disabled_providers`, `selected`) and its fuzz/roundtrip test suite. Since per-place units, `units` is the default units for new places; each place's units live in `places.json` (§13). |
 | **ADR-05** | **Dual-Series Labeled Rain Charts with Direct Peak Callouts & Hover Inspection** | Resolves ambiguity between bars (Rain rate in `in/h` or `mm/h`, left Y-axis) and curve (Rain chance in `%`, right Y-axis) via explicit pill legends, color-matched axis labels (`Rate · <max>/h`, `<mid>/h`, `0`, `100%`, `50%`, `0%`), peak badges, and live hover inspection. |
 | **ADR-06** | **One station pool and one algorithm for every country, from every keyless network** | Airports alone leave most places 20–60 km from the nearest report; national, road-weather and research networks are denser. Trust priors and a measured per-station health record (leave-one-out cross-validation, persisted in `stations.json`) let lower-grade sites help without letting a bad sensor hurt. Networks that need a key join the same pool when the user supplies one (ADR-08). |
-| **ADR-07** | **Learned local bias corrects the shown forecast; the raw blend is kept** | `Place.modelForecast` stays the pure model blend, so learning compares observations with the uncorrected model and never feeds on its own corrections; `Place.forecast` is the corrected one. Silence and staleness clocks advance only while the app runs, so closing the app never ages the station catalog or the learned bias. |
+| **ADR-07** | **Learned local bias corrects the shown forecast; the raw blend is kept** | `Place.modelForecast` stays the pure model blend, so learning compares observations with the uncorrected model and never feeds on its own corrections; `Place.forecast` is the corrected one. The station catalog's silence clock advances only while the app runs (at most 1 h per check), so closing the app never ages the catalog; the learned bias fades on wall-clock idle time (`WxLocalBias.strength`, after 30 days without updates), whether or not the app was running. |
 | **ADR-08** | **Keyed national networks use the user's own free key, kept in the Keychain** | The Met Office, KNMI, MET Norway Frost, Météo-France and AEMET publish real-time station data only to registered users, free. The app cannot ship a shared key (each service's terms tie a key to its registrant, and quotas are per key), so the user registers and pastes their key; Settings gives each service's exact steps and limits. Keys never touch a file or a log, and requests stay well inside the free quotas. |
 | **ADR-09** | **Air quality: a real reading or nothing** | A number estimated from wind, rain and heat looked like a measurement and could not be checked. The card shows the nearest AirNow monitor as reported (AirNow's guidelines: as received, preliminary, credited) or the CAMS forecast, says which, and compares with the same source 24 h earlier; without either it shows the dash. |
+| **ADR-10** | **Units belong to each place; `settings.json` keeps only the default** | A user with places in several countries reads each in its own units. Keeping the member in `places.json` at version 1 lets older builds still read the file; a one-time migration gives every existing place the units it was shown in, so nothing visibly changes on upgrade. |
+| **ADR-11** | **Official alerts from one keyless issuer per place, on the forecast's cadence, isolated from it** | Each issuer is authoritative for its area and needs no key. Kicking alerts only after a completed forecast refresh (no timer; a successful MeteoAlarm feed shared per country for 30 min, a failed one for 120 s) keeps the request rate bounded by the forecast's; a separate, never-awaited path means a failing or hanging issuer cannot delay or change the forecast; a stale or failed check is never shown as "no alerts". |
 
 ---
 
-## 14. Academic, Institutional & Standard Citations
+## 16. Academic, Institutional & Standard Citations
 
 1. **Alduchov, O. A., & Eskridge, R. E. (1996).** *Improved Magnus Form Approximation of Saturation Vapor Pressure.* Journal of Applied Meteorology, 35(4), 601–609. `https://doi.org/10.1175/1520-0450(1996)035<0601:IMFAOS>2.0.CO;2`
 2. **Benjamin, S. G., et al. (2016).** *A North American Hourly Assimilation and Model Forecast Cycle: The Rapid Refresh.* Monthly Weather Review, 144(4), 1669–1694 (NOAA HRRR 3 km architecture). `https://doi.org/10.1175/MWR-D-15-0242.1`

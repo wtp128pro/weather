@@ -25,6 +25,11 @@
           "title": "Rain Graph & Bars Guide"
         },
         {
+          "id": "weather-alerts",
+          "href": "weather-alerts.html",
+          "title": "Weather Alerts"
+        },
+        {
           "id": "units-refresh",
           "href": "units-refresh.html",
           "title": "Units, Refreshing & Offline"

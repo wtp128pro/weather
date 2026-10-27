@@ -245,8 +245,11 @@ public struct WxStationCatalog: Sendable, Equatable, Codable {
 
     public func assessment(_ key: String, nowS: Int64) -> Assessment {
         guard let r = records[key] else { return Assessment(health: 1.0, state: .unknown, errorC: nil, biasC: nil) }
-        if let since = r.steadySinceS, r.network != .metar, r.lastReportS - since >= Self.stuckAfterS {
-            // METARs report whole degrees, so a steady METAR is not suspicious
+        if let since = r.steadySinceS, r.network != .metar, r.network != .nwsASOS,
+           r.lastReportS - since >= Self.stuckAfterS
+        {
+            // METARs (and api.weather.gov's reports of the same sensors) report whole degrees, so a
+            // steady one is not suspicious
             return Assessment(health: 0.0, state: .stuck, errorC: nil, biasC: nil)
         }
         let probation = min(1.0, 0.6 + 0.4 * Double(r.tests) / Double(Self.probationTests))

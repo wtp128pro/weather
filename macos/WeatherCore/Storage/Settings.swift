@@ -48,6 +48,9 @@ public final class WxSettings {
     private var savedGeneration: UInt64 = 0
     /// True while `saveAsync` (or a job from `beginSave`) is running.
     private(set) var isSaveInFlight = false
+    /// True after a load failed on a file that may exist (any failure but
+    /// `isNotFound`) until a save has moved that file aside.
+    private var keepsUnreadableFile = false
 
     /// New default settings stored at `path`; nil if `path` is empty
     /// (wx_settings_new, wx-settings.c:240-250; C: critical + NULL).
@@ -66,7 +69,9 @@ public final class WxSettings {
 
     // MARK: - Units
 
-    /// The display units (default imperial).
+    /// The default units (default imperial): what places added from now on get, and what a
+    /// place saved without units takes once at the load (AppModel). Each saved place keeps
+    /// its own units in places.json.
     public var units: WxUnits { v.units }
 
     /// Sets the units; false (nothing announced) if unchanged
@@ -219,7 +224,9 @@ public final class WxSettings {
     /// While a save runs it throws `.pending` and changes nothing. Every
     /// other outcome - success or failure (`.file`, e.g. `isNotFound`, or
     /// `.parse`) - leaves the object clean, with the DEFAULTS after a failure,
-    /// and announces the change once, even when nothing changed.
+    /// and announces the change once, even when nothing changed. A failure
+    /// leaves the file as it is, and unless it was missing the next save
+    /// moves it aside (`FileIO.moveAside`) instead of overwriting it.
     public func load() throws(WxStoreError) {
         if isSaveInFlight {
             throw StoreJSON.pendingError("settings")
@@ -233,6 +240,7 @@ public final class WxSettings {
         } catch {
             failure = error
         }
+        keepsUnreadableFile = failure.map { !$0.isNotFound } ?? false
         v = loaded
         savedGeneration = generation
         onChanged?()
@@ -284,11 +292,17 @@ public final class WxSettings {
     /// 0700) and marks them clean (wx_settings_save, wx-settings.c:456-473).
     /// Blocking. Throws `.pending` while an asynchronous save runs, `.file`
     /// on an I/O failure (the object stays dirty, the old file survives).
+    /// After a load that could not read the file, the file is first moved
+    /// aside (see `load`).
     public func save() throws(WxStoreError) {
         if isSaveInFlight {
             throw StoreJSON.pendingError("settings")
         }
         do {
+            if keepsUnreadableFile {
+                try FileIO.moveAside(path: path)
+                keepsUnreadableFile = false
+            }
             try FileIO.writeAtomic(path: path, data: Data(Self.serialize(v).utf8))
         } catch {
             throw .file(error)
@@ -311,7 +325,9 @@ public final class WxSettings {
             throw StoreJSON.pendingError("settings")
         }
         isSaveInFlight = true
-        return StoreJSON.SaveJob(path: path, data: Data(Self.serialize(v).utf8), generation: generation)
+        return StoreJSON.SaveJob(
+            path: path, data: Data(Self.serialize(v).utf8), generation: generation,
+            keepsExistingFile: keepsUnreadableFile)
     }
 
     /// The completion half of `saveAsync` (save_done, wx-settings.c:567-586).
@@ -320,6 +336,7 @@ public final class WxSettings {
         switch outcome {
         case .success:
             savedGeneration = job.generation
+            keepsUnreadableFile = false
         case .failure(let error):
             throw error
         }

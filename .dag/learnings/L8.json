@@ -1,0 +1,17 @@
+{
+  "id": "L8",
+  "trigger": "Ruling #41 A2 (a one-shot wake-up at the next wall-time edge) let a stale alert set read current for hours after a system sleep or a clock change while offline (DECISIONS #43).",
+  "lesson": "A deadline computed once from wall time and slept on a monotonic/uptime clock drifts whenever the two diverge (sleep, NTP, manual clock change).",
+  "how_to_apply": "For anything that must change state at a wall-clock moment, cap each sleep (e.g. ≤60 s while visible), re-evaluate on NSSystemClockDidChange, and test with independent wall and monotonic advances.",
+  "scope": {
+    "applies_to": [
+      "tag:alerts",
+      "tag:core",
+      "tag:high-stakes"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-26_100802_units-alerts-audit: DECISIONS.md #43; units/U51 iteration 2",
+  "since_wave": 11,
+  "promotable": true
+}
