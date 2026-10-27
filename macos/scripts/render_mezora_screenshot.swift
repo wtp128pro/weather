@@ -495,6 +495,162 @@ struct SidebarPlaceItem: View {
     }
 }
 
+/// The 0.5.0 wind compass of the Now card, ported from Weather/Detail/WindCompassView.swift
+/// (the "side" layout: a 72 pt dial with the two-line caption to its left).
+struct MockWindCompass: View {
+    let speed: String
+    let unit: String
+    let caption: String
+    let bearing: Double
+    var diameter: CGFloat = 72
+
+    private static let primaryText = Color.white
+    private static let secondaryText = Color(red: 0.92, green: 0.95, blue: 0.99)
+
+    var body: some View {
+        let s = diameter / 92
+        HStack(spacing: 8) {
+            Text(caption)
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(Self.secondaryText)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+                .fixedSize()
+            ZStack {
+                MockCompassFace(scale: s)
+                MockCompassLetters(scale: s, vaneBearing: bearing, tint: Self.secondaryText)
+                VStack(spacing: -2 * s) {
+                    Text(speed)
+                        .font(.system(size: 27 * s, weight: .light, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(Self.primaryText)
+                    Text(unit)
+                        .font(.system(size: 9 * s, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Self.secondaryText.opacity(0.9))
+                }
+                .frame(width: 44 * s)
+                .offset(y: -1 * s)
+                MockWindVane(scale: s)
+                    .rotationEffect(.degrees(bearing))
+            }
+            .frame(width: diameter, height: diameter)
+        }
+    }
+}
+
+private enum MockCompassMetrics {
+    static let ringInset: CGFloat = 4
+    static let tickGap: CGFloat = 3
+    static let letterInset: CGFloat = 14.5
+    static let hubRadius: CGFloat = 21
+}
+
+struct MockCompassFace: View {
+    let scale: CGFloat
+
+    var body: some View {
+        let s = scale
+        ZStack {
+            Circle()
+                .inset(by: MockCompassMetrics.ringInset * s)
+                .fill(RadialGradient(colors: [Color.white.opacity(0.07), Color.black.opacity(0.10)],
+                                     center: .center, startRadius: 0, endRadius: 44 * s))
+            Circle()
+                .inset(by: MockCompassMetrics.ringInset * s)
+                .stroke(LinearGradient(colors: [Color.white.opacity(0.42), Color.white.opacity(0.12)],
+                                       startPoint: .top, endPoint: .bottom),
+                        lineWidth: 0.8)
+            Canvas { ctx, size in
+                let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                let rOut = size.width / 2 - (MockCompassMetrics.ringInset + MockCompassMetrics.tickGap) * s
+                for i in 0..<24 {
+                    let major = i % 6 == 0
+                    let len = (major ? 3.8 : 2.4) * s
+                    let a = Double(i) * .pi / 12
+                    let dx = CGFloat(sin(a)), dy = CGFloat(-cos(a))
+                    var p = Path()
+                    p.move(to: CGPoint(x: c.x + dx * rOut, y: c.y + dy * rOut))
+                    p.addLine(to: CGPoint(x: c.x + dx * (rOut - len), y: c.y + dy * (rOut - len)))
+                    let alpha = major ? (i == 0 ? 0.95 : 0.7) : 0.24
+                    ctx.stroke(p, with: .color(.white.opacity(alpha)),
+                               style: StrokeStyle(lineWidth: major ? 1.5 : 0.8, lineCap: .round))
+                }
+            }
+        }
+    }
+}
+
+struct MockCompassLetters: View {
+    let scale: CGFloat
+    let vaneBearing: Double
+    let tint: Color
+
+    private func clearance(_ letterDeg: Double) -> Double {
+        let d = abs((letterDeg - vaneBearing).truncatingRemainder(dividingBy: 180))
+        return min(1, min(d, 180 - d) / 20)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let r = geo.size.width / 2 - (MockCompassMetrics.ringInset + MockCompassMetrics.letterInset) * scale
+            let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            ForEach(Array(["N", "E", "S", "W"].enumerated()), id: \.offset) { i, letter in
+                let a = Double(i) * .pi / 2
+                Text(letter)
+                    .font(.system(size: 8.5 * scale, weight: i == 0 ? .bold : .semibold, design: .rounded))
+                    .foregroundStyle(tint.opacity((i == 0 ? 1.0 : 0.72) * clearance(Double(i) * 90)))
+                    .position(x: c.x + CGFloat(sin(a)) * r, y: c.y - CGFloat(cos(a)) * r)
+            }
+        }
+    }
+}
+
+/// Drawn for a wind FROM north (dot at the top, arrowhead pointing south), rotated by the bearing.
+struct MockWindVane: View {
+    let scale: CGFloat
+
+    var body: some View {
+        let s = scale
+        Canvas { ctx, size in
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let ring = size.width / 2 - MockCompassMetrics.ringInset * s
+            let hub = MockCompassMetrics.hubRadius * s
+            let tipY = c.y + ring - 6 * s
+            var tail = Path()
+            tail.move(to: CGPoint(x: c.x - 0.3 * s, y: c.y - ring + 4 * s))
+            tail.addLine(to: CGPoint(x: c.x + 0.3 * s, y: c.y - ring + 4 * s))
+            tail.addLine(to: CGPoint(x: c.x + 0.6 * s, y: c.y - hub))
+            tail.addLine(to: CGPoint(x: c.x - 0.6 * s, y: c.y - hub))
+            tail.closeSubpath()
+            ctx.fill(tail, with: .linearGradient(Gradient(colors: [.white.opacity(0.75), .white.opacity(0.25)]),
+                                                 startPoint: CGPoint(x: c.x, y: c.y - ring),
+                                                 endPoint: CGPoint(x: c.x, y: c.y - hub)))
+            let headLen = 11 * s, headHalf = 4.6 * s, notch = 3.2 * s
+            var head = Path()
+            head.move(to: CGPoint(x: c.x - 0.5 * s, y: c.y + hub))
+            head.addLine(to: CGPoint(x: c.x + 0.5 * s, y: c.y + hub))
+            head.addLine(to: CGPoint(x: c.x + 1.0 * s, y: tipY - headLen + notch))
+            head.addLine(to: CGPoint(x: c.x + headHalf, y: tipY - headLen))
+            head.addLine(to: CGPoint(x: c.x, y: tipY))
+            head.addLine(to: CGPoint(x: c.x - headHalf, y: tipY - headLen))
+            head.addLine(to: CGPoint(x: c.x - 1.0 * s, y: tipY - headLen + notch))
+            head.closeSubpath()
+            ctx.drawLayer { layer in
+                layer.addFilter(.shadow(color: .white.opacity(0.55), radius: 3 * s))
+                layer.fill(head, with: .linearGradient(Gradient(colors: [.white.opacity(0.35), .white]),
+                                                       startPoint: CGPoint(x: c.x, y: c.y + hub),
+                                                       endPoint: CGPoint(x: c.x, y: tipY)))
+                let d = 7 * s
+                layer.fill(Path(ellipseIn: CGRect(x: c.x - d / 2, y: c.y - ring - d / 2, width: d, height: d)),
+                           with: .color(.white))
+            }
+            let d = 7 * s
+            let halo = Path(ellipseIn: CGRect(x: c.x - d / 2, y: c.y - ring - d / 2, width: d, height: d))
+            ctx.stroke(halo, with: .color(Color(red: 0.24, green: 0.30, blue: 0.38).opacity(0.9)), lineWidth: 1.2 * s)
+        }
+    }
+}
+
 struct MezoraWindowView: View {
     var body: some View {
         ZStack {
@@ -667,16 +823,20 @@ struct MezoraWindowView: View {
                                     Text("New York")
                                         .font(.system(size: 28, weight: .bold, design: .rounded))
                                         .foregroundStyle(.white)
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
                                     Text("350 5th Ave, Manhattan, NY · 42m DEM")
                                         .font(.system(size: 12.5, weight: .medium))
                                         .foregroundStyle(Color.white.opacity(0.84))
+                                        .lineLimit(1)
+                                        .fixedSize(horizontal: true, vertical: false)
                                 }
 
                                 HStack(spacing: 8) {
                                     ForEach([
-                                        ("thermometer.medium", "Feels like 62°F · Dew point 58°F"),
+                                        ("thermometer.medium", "Feels like 62°F"),
                                         ("arrow.up.and.down", "High 68° · Low 54°"),
-                                        ("wind", "Wind 11 mph · gusts 19"),
+                                        ("humidity", "Humidity 78%"),
                                         ("antenna.radiowaves.left.and.right", "12 stations · −1.2°F bias")
                                     ], id: \.1) { (sym, label) in
                                         HStack(spacing: 5) {
@@ -686,6 +846,8 @@ struct MezoraWindowView: View {
                                             Text(label)
                                                 .font(.system(size: 11.5, weight: .medium))
                                                 .foregroundStyle(Color.white.opacity(0.94))
+                                                .lineLimit(1)
+                                                .fixedSize(horizontal: true, vertical: false)
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 4.5)
@@ -708,6 +870,7 @@ struct MezoraWindowView: View {
                                         .foregroundStyle(Color(red: 0.88, green: 0.94, blue: 1.0))
                                 }
                             }
+                            MockWindCompass(speed: "11", unit: "mph", caption: "Gusts 19 mph\nfrom NE 52°", bearing: 52)
                         }
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
@@ -871,7 +1034,7 @@ struct RenderMain {
                 MezoraWindowView(),
                 width: 1308,
                 height: 902,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261027.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-20261027b.png"
             )
             savePNG(
                 RainCardShowcase(showHoverBanner: true)
@@ -879,7 +1042,7 @@ struct RenderMain {
                     .background(Color(red: 0.20, green: 0.26, blue: 0.35)),
                 width: 1308,
                 height: 312,
-                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261027.png"
+                to: "/Users/mborodia/Developer/neginato.app/assets/screenshot-mezora-rain-20261027b.png"
             )
         }
     }
