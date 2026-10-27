@@ -343,7 +343,12 @@ import Testing
         #expect(p.now.condition == "Partly cloudy")  // test-detail.c:1028
         #expect(p.now.feelsLike == "Feels like 75\(Self.deg)")  // test-detail.c:1029
         #expect(p.now.highLow == "High 81\(Self.deg)" + Self.dot + "Low 61\(Self.deg) (from 2 PM)")  // test-detail.c:1031
-        #expect(p.now.wind == "Wind 12 mph, gusts 20 mph" + Self.dot + "Humidity 40%")  // test-detail.c:1032
+        #expect(p.now.wind == "Wind 12 mph, gusts 20 mph")  // test-detail.c:1032 (humidity moved out)
+        #expect(p.now.humidity == "Humidity 40%")  // test-detail.c:1032
+        #expect(p.now.windDial.speedText == "12" && p.now.windDial.unitText == "mph")
+        #expect(p.now.windDial.gustText == "20 mph")
+        #expect(p.now.windDial.directionDeg == nil && p.now.windDial.directionText == nil)
+        #expect(p.now.windDial.accessibilityLabel == "Wind 12 miles per hour, gusts 20 miles per hour")
         #expect(p.now.gtkIconName == "weather-few-clouds-symbolic")  // test-detail.c:1033
         #expect(p.now.symbolName == WxConditionSymbol.symbolName(.partlyCloudy, isDay: true))
     }
@@ -356,13 +361,18 @@ import Testing
         #expect(p.now.temperature == "25\(Self.deg)C")  // test-detail.c:1044
         #expect(p.now.feelsLike == "Feels like 24\(Self.deg)")  // test-detail.c:1045
         #expect(p.now.highLow == "High 27\(Self.deg)" + Self.dot + "Low 16\(Self.deg) (from 2 PM)")  // test-detail.c:1046
-        #expect(p.now.wind == "Wind 20 km/h, gusts 32 km/h" + Self.dot + "Humidity 40%")  // test-detail.c:1047
+        #expect(p.now.wind == "Wind 20 km/h, gusts 32 km/h")  // test-detail.c:1047 (humidity moved out)
+        #expect(p.now.humidity == "Humidity 40%")
+        #expect(p.now.windDial.speedText == "20" && p.now.windDial.unitText == "km/h")
+        #expect(p.now.windDial.gustText == "32 km/h")
         vm.show(Self.with(item, units: .imperial))
         p = try #require(Self.page(vm))
         #expect(p.now.temperature == "77\(Self.deg)F")  // test-detail.c:1049
         #expect(p.now.feelsLike == "Feels like 75\(Self.deg)")  // test-detail.c:1050
         #expect(p.now.highLow == "High 81\(Self.deg)" + Self.dot + "Low 61\(Self.deg) (from 2 PM)")  // test-detail.c:1051
-        #expect(p.now.wind == "Wind 12 mph, gusts 20 mph" + Self.dot + "Humidity 40%")  // test-detail.c:1052
+        #expect(p.now.wind == "Wind 12 mph, gusts 20 mph")  // test-detail.c:1052 (humidity moved out)
+        #expect(p.now.humidity == "Humidity 40%")
+        #expect(p.now.windDial.speedText == "12" && p.now.windDial.unitText == "mph")
     }
 
     // C: /detail/now/units-reach-widgets (test-detail.c:1055-1073)
@@ -400,15 +410,18 @@ import Testing
         s.hours[0].gustKmh = 20
         s.hours[1].gustKmh = 20
         let vm = Self.shown(try Self.item(s, Self.ny))
-        #expect(Self.page(vm)?.now.wind == "Wind 12 mph, gusts 12 mph" + Self.dot + "Humidity 40%")  // test-detail.c:1107
+        #expect(Self.page(vm)?.now.wind == "Wind 12 mph, gusts 12 mph")  // test-detail.c:1107 (humidity moved out)
+        #expect(Self.page(vm)?.now.windDial.gustText == "12 mph")  // gust == wind shows (margin 0)
         s.hours[0].gustKmh = 10
         s.hours[1].gustKmh = 10
         vm.show(try Self.item(s, Self.ny))
-        #expect(Self.page(vm)?.now.wind == "Wind 12 mph" + Self.dot + "Humidity 40%")  // test-detail.c:1112
+        #expect(Self.page(vm)?.now.wind == "Wind 12 mph")  // test-detail.c:1112 (humidity moved out)
+        #expect(Self.page(vm)?.now.windDial.gustText == nil)
         s.hours[0].gustKmh = .nan
         s.hours[1].gustKmh = .nan
         vm.show(try Self.item(s, Self.ny))
-        #expect(Self.page(vm)?.now.wind == "Wind 12 mph" + Self.dot + "Humidity 40%")  // test-detail.c:1117
+        #expect(Self.page(vm)?.now.wind == "Wind 12 mph")  // test-detail.c:1117 (humidity moved out)
+        #expect(Self.page(vm)?.now.windDial.gustText == nil)
         s.hours[0].windKmh = .nan
         s.hours[1].windKmh = .nan
         s.hours[0].gustKmh = 30
@@ -416,7 +429,10 @@ import Testing
         s.hours[0].humidityPct = .nan
         s.hours[1].humidityPct = .nan
         vm.show(try Self.item(s, Self.ny))
-        #expect(Self.page(vm)?.now.wind == "Wind " + Self.dash + Self.dot + "Humidity " + Self.dash)  // test-detail.c:1125
+        #expect(Self.page(vm)?.now.wind == "Wind " + Self.dash)  // test-detail.c:1125 (humidity moved out)
+        #expect(Self.page(vm)?.now.humidity == "Humidity " + Self.dash)  // test-detail.c:1125
+        #expect(Self.page(vm)?.now.windDial.gustText == nil)
+        #expect(Self.page(vm)?.now.windDial.accessibilityLabel == "Wind speed unknown")
     }
 
     // C: /detail/now/no-current-conditions (test-detail.c:1128-1153)
@@ -428,7 +444,9 @@ import Testing
         #expect(p.now.condition == "Unknown")  // test-detail.c:1137
         #expect(p.now.iconAccessibilityLabel == "Unknown")
         #expect(p.now.feelsLike == "Feels like " + Self.dash)  // test-detail.c:1138
-        #expect(p.now.wind == "Wind " + Self.dash + Self.dot + "Humidity " + Self.dash)  // test-detail.c:1139
+        #expect(p.now.wind == "Wind " + Self.dash)  // test-detail.c:1139 (humidity moved out)
+        #expect(p.now.humidity == "Humidity " + Self.dash)  // test-detail.c:1139
+        #expect(p.now.windDial.speedText == Self.dash && !p.now.windDial.isCalm)
         #expect(p.clouds.cover == "Cloud cover " + Self.dash + Self.dot + "Unknown")  // test-detail.c:1140
         #expect(p.clouds.sentence == "Cloud cover unknown")  // test-detail.c:1141
         #expect(p.now.gtkIconName == "dialog-question-symbolic")  // test-detail.c:1142
@@ -440,6 +458,70 @@ import Testing
         #expect(Self.page(vm)?.now.temperature == "77\(Self.deg)F")  // test-detail.c:1150
         #expect(Self.page(vm)?.now.condition == "Partly cloudy")  // test-detail.c:1151
         #expect(Self.page(vm)?.now.highLow != nil)  // test-detail.c:1152
+    }
+
+    // Swift-only: the now block's wind dial value (DetailViewModel.NowWind.make).
+    @Test func nowWindUnitsAndRounding() {
+        let mph = DetailViewModel.NowWind.make(windKmh: 24.14, gustKmh: .nan, directionDeg: nil, units: .imperial,
+                                               gustMarginKmh: 0)
+        #expect(mph.speedText == "15" && mph.unitText == "mph" && mph.gustText == nil)
+        #expect(mph.accessibilityLabel == "Wind 15 miles per hour")
+        let kmh = DetailViewModel.NowWind.make(windKmh: 24.5, gustKmh: 40.23, directionDeg: nil, units: .metric,
+                                               gustMarginKmh: 0)
+        #expect(kmh.speedText == "25" && kmh.unitText == "km/h" && kmh.gustText == "40 km/h")  // lround: .5 up
+        #expect(kmh.accessibilityLabel == "Wind 25 kilometers per hour, gusts 40 kilometers per hour")
+        let one = DetailViewModel.NowWind.make(windKmh: 1, gustKmh: .nan, directionDeg: nil, units: .metric,
+                                               gustMarginKmh: 0)
+        #expect(!one.isCalm && one.accessibilityLabel == "Wind 1 kilometer per hour")
+    }
+
+    @Test func nowWindGustMargin() {
+        func gust(_ g: Double) -> String? {
+            DetailViewModel.NowWind.make(windKmh: 20, gustKmh: g, directionDeg: nil, units: .metric,
+                                         gustMarginKmh: 4).gustText
+        }
+        #expect(gust(24) == "24 km/h")  // exactly wind + margin: shown
+        #expect(gust(23.9) == nil)  // just below: hidden
+        #expect(gust(.nan) == nil)
+        #expect(gust(600) == nil)  // out of range
+    }
+
+    @Test func nowWindDirectionCaption() {
+        func dial(_ d: Double?) -> DetailViewModel.NowWind {
+            DetailViewModel.NowWind.make(windKmh: 24.14, gustKmh: 40.23, directionDeg: d, units: .imperial,
+                                         gustMarginKmh: 4)
+        }
+        #expect(dial(31).directionText == "from NNE 31\(Self.deg)")
+        #expect(dial(31).directionDeg == 31)
+        #expect(dial(31).accessibilityLabel == "Wind 15 miles per hour from north-northeast, gusts 25 miles per hour")
+        #expect(dial(359.6).directionText == "from N 0\(Self.deg)")  // rounded, 360 shown as 0
+        #expect(dial(360).directionText == "from N 0\(Self.deg)")
+        #expect(dial(360).directionDeg == 0)
+        #expect(dial(-90).directionText == "from W 270\(Self.deg)")
+        #expect(dial(-90).directionDeg == 270)
+        #expect(dial(202.4).accessibilityLabel.contains(" from south-southwest, "))
+        #expect(dial(nil).directionText == nil && dial(nil).directionDeg == nil)
+        #expect(dial(.nan).directionText == nil && dial(.nan).directionDeg == nil)
+        #expect(dial(nil).accessibilityLabel == "Wind 15 miles per hour, gusts 25 miles per hour")
+    }
+
+    @Test func nowWindCalmAndUnknown() {
+        let calm = DetailViewModel.NowWind.make(windKmh: 0.4, gustKmh: 30, directionDeg: 200, units: .imperial,
+                                                gustMarginKmh: 0)
+        #expect(calm.isCalm)
+        #expect(calm.directionDeg == nil)
+        #expect(calm.directionText == nil)  // never a direction caption for a calm wind
+        #expect(calm.accessibilityLabel == "Wind calm")
+        let edge = DetailViewModel.NowWind.make(windKmh: 0.999, gustKmh: .nan, directionDeg: 90, units: .metric,
+                                                gustMarginKmh: 0)
+        #expect(edge.isCalm && edge.directionText == nil)
+        for kmh in [Double.nan, .infinity, -1, 501] {
+            let unknown = DetailViewModel.NowWind.make(windKmh: kmh, gustKmh: .nan, directionDeg: nil,
+                                                       units: .imperial, gustMarginKmh: 0)
+            #expect(unknown.speedText == Self.dash, "\(kmh)")
+            #expect(!unknown.isCalm, "\(kmh)")
+            #expect(unknown.accessibilityLabel == "Wind speed unknown", "\(kmh)")
+        }
     }
 
     // C: /detail/now/hours-in-the-past (test-detail.c:1155-1166)

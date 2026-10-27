@@ -259,7 +259,7 @@ public enum WxStationNetworks {
     }
 
     /// The FMI parameters requested, in order.
-    public static let fmiParameters = ["t2m", "td", "rh", "ws_10min", "wg_10min", "ri_10min", "r_1h", "n_man", "wawa"]
+    public static let fmiParameters = ["t2m", "td", "rh", "ws_10min", "wg_10min", "ri_10min", "r_1h", "n_man", "wawa", "wd_10min"]
 
     /// FMI observations of the last 30 minutes within the pool radius (multipoint coverage).
     public static func fmiURL(lat: Double, lon: Double, nowS: Int64) -> String {
@@ -273,7 +273,7 @@ public enum WxStationNetworks {
 
     /// SMHI parameters (all stations, latest hour): temperature, dewpoint, humidity, wind, gust,
     /// precipitation, total cloud, present weather.
-    public static let smhiParameters = [1, 39, 6, 4, 21, 7, 16, 13]
+    public static let smhiParameters = [1, 39, 6, 4, 21, 7, 16, 13, 3]
 
     public static func smhiURL(parameter: Int) -> String {
         "https://opendata-download-metobs.smhi.se/api/version/1.0/parameter/\(parameter)"
@@ -287,7 +287,7 @@ public enum WxStationNetworks {
     /// GeoSphere Austria TAWES current 10-minute values of the given (active) stations.
     public static func geosphereCurrentURL(stationIDs: [String]) -> String {
         "https://dataset.api.hub.geosphere.at/v1/station/current/tawes-v1-10min"
-            + "?parameters=TL,TP,RF,FF,FFX,RR&station_ids=" + stationIDs.joined(separator: ",")
+            + "?parameters=TL,TP,RF,FF,DD,FFX,RR&station_ids=" + stationIDs.joined(separator: ",")
     }
 
     /// MeteoSwiss open data (OGD SwissMetNet): the station list, and one station's 10-minute values
@@ -332,6 +332,7 @@ public enum WxStationNetworks {
                 tempC: temp, dewpC: num(r["dewp"]),
                 windKmh: wspd.flatMap { $0 >= 0 ? $0 * 1.852 : nil },
                 gustKmh: num(r["wgst"]).flatMap { $0 >= 0 ? $0 * 1.852 : nil },
+                windDirDeg: windFromDeg(r["wdir"], speed: wspd),  // "VRB" is not a number
                 cloudPct: cloudPct,
                 precipMmH: num(r["precip"]).flatMap { $0 >= 0 ? $0 * 25.4 : nil },
                 wxString: str(r["wxString"]) ?? "")
@@ -405,6 +406,7 @@ public enum WxStationNetworks {
             network: .nwsASOS, id: site.id, name: site.name, lat: site.lat, lon: site.lon,
             elevM: value("elevation")?.v ?? site.elevM, obsTimeS: ts, tempC: temp,
             dewpC: value("dewpoint")?.v, humidityPct: rh, windKmh: kmh("windSpeed"), gustKmh: kmh("windGust"),
+            windDirDeg: windFromDeg(value("windDirection")?.v, speed: kmh("windSpeed")),
             cloudPct: cloudPct, precipMmH: precip, condition: condition,
             reportsPresentWeather: condition != nil)
     }
@@ -440,14 +442,18 @@ public enum WxStationNetworks {
             let firstClass = swobFirstClassProviders.contains(provider)
             let precip: Double? = num(p["pcpn_amt_pst10mts"]).map { max(0.0, $0) * 6.0 }
                 ?? num(p["pcpn_amt_pst1hr"]).map { max(0.0, $0) }
+            // speed and direction from the same averaging window: 2 minutes, else 10 minutes
+            let wind: (kmh: Double, dir: Any?)? =
+                num(p["avg_wnd_spd_10m_pst2mts"]).map { ($0, p["avg_wnd_dir_10m_pst2mts"]) }
+                ?? num(p["avg_wnd_spd_10m_pst10mts"]).map { ($0, p["avg_wnd_dir_10m_pst10mts"]) }
             latest[key] = WxStationObservation(
                 network: .ecccSWOB, id: str(p["tc_id-value"]) ?? key, name: name, lat: lat, lon: lon,
                 elevM: coords.count >= 3 ? num(coords[2]) : nil, obsTimeS: ts, tempC: temp,
                 dewpC: num(p["dwpt_temp"]).flatMap { $0 <= temp + 0.5 ? $0 : nil },
                 humidityPct: num(p["rel_hum"]).flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
-                windKmh: (num(p["avg_wnd_spd_10m_pst2mts"]) ?? num(p["avg_wnd_spd_10m_pst10mts"]))
-                    .flatMap { $0 >= 0 ? $0 : nil },
+                windKmh: wind.flatMap { $0.kmh >= 0 ? $0.kmh : nil },
                 gustKmh: num(p["max_wnd_spd_10m_pst10mts"]).flatMap { $0 >= 0 ? $0 : nil },
+                windDirDeg: windFromDeg(wind?.dir, speed: wind?.kmh),
                 precipMmH: precip,
                 trust: firstClass ? 1.0 : 0.6, windTrust: firstClass ? 1.0 : 0.35)
         }
@@ -488,6 +494,7 @@ public enum WxStationNetworks {
                 humidityPct: num(r["relh"]).flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
                 windKmh: num(r["sknt"]).flatMap { $0 >= 0 ? $0 * 1.852 : nil },
                 gustKmh: num(r["gust"]).flatMap { $0 >= 0 ? $0 * 1.852 : nil },
+                windDirDeg: windFromDeg(r["drct"], speed: num(r["sknt"])),
                 precipMmH: num(r["phour"]).flatMap { $0 >= 0 ? $0 * 25.4 : nil },
                 trust: trust.temp, windTrust: trust.wind)
         }
@@ -546,12 +553,17 @@ public enum WxStationNetworks {
         let condition = WxPresentWeather.condition(
             text: text?.replacingOccurrences(of: "-", with: " "), tempC: temp,
             wetBulbC: WxStationFusion.wetBulbC(tempC: temp, humidityPct: rh ?? 55), cloudPct: &cloudPct)
+        // speed and direction from the same averaging window: 10 minutes, else 30 minutes
+        let wind: (kmh: Double, dir: Any?)? =
+            num(w["wind_speed_10"]).map { ($0, w["wind_direction_10"]) }
+            ?? num(w["wind_speed_30"]).map { ($0, w["wind_direction_30"]) }
         return WxStationObservation(
             network: .dwdSYNOP, id: source.site.id, name: source.site.name, lat: source.site.lat,
             lon: source.site.lon, elevM: source.site.elevM, obsTimeS: parseISO8601(str(w["timestamp"])),
             tempC: temp, dewpC: num(w["dew_point"]), humidityPct: rh,
-            windKmh: (num(w["wind_speed_10"]) ?? num(w["wind_speed_30"])).flatMap { $0 >= 0 ? $0 : nil },
+            windKmh: wind.flatMap { $0.kmh >= 0 ? $0.kmh : nil },
             gustKmh: (num(w["wind_gust_speed_10"]) ?? num(w["wind_gust_speed_30"])).flatMap { $0 >= 0 ? $0 : nil },
+            windDirDeg: windFromDeg(wind?.dir, speed: wind?.kmh),
             cloudPct: cloudPct,
             precipMmH: num(w["precipitation_10"]).map { max(0.0, $0) * 6.0 } ?? num(w["precipitation_60"]),
             condition: condition, reportsPresentWeather: conditionText != nil)
@@ -618,6 +630,8 @@ public enum WxStationNetworks {
             let lon = site?.lon ?? fold.lon
             guard lat.isFinite, lon.isFinite else { return nil }
             let v = { (k: String) in fold.values[k]?.v }
+            let speed = fold.values["wind_speed"]
+            let dir = fold.values["wind_dir"].flatMap { $0.t == speed?.t ? $0.v : nil }  // same report only
             let rh = v("humidity")
             let weather = v("weather").map { Int($0) }
             let condition = weather.flatMap {
@@ -630,7 +644,8 @@ public enum WxStationNetworks {
                 network: .dmi, id: id, name: site?.name, lat: lat, lon: lon, elevM: site?.elevM,
                 obsTimeS: temp.t, tempC: temp.v, dewpC: v("temp_dew"), humidityPct: rh,
                 windKmh: v("wind_speed").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
-                gustKmh: v("wind_max").flatMap { $0 >= 0 ? $0 * 3.6 : nil }, cloudPct: cloud,
+                gustKmh: v("wind_max").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
+                windDirDeg: windFromDeg(dir, speed: speed?.v), cloudPct: cloud,
                 precipMmH: v("precip_past10min").map { max(0.0, $0) * 6.0 } ?? v("precip_past1h"),
                 condition: condition, reportsPresentWeather: weather != nil,
                 trust: synop ? 1.0 : 0.9)
@@ -693,6 +708,7 @@ public enum WxStationNetworks {
                 dewpC: v("td"), humidityPct: rh,
                 windKmh: v("ws_10min").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
                 gustKmh: v("wg_10min").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
+                windDirDeg: windFromDeg(v("wd_10min"), speed: v("ws_10min")),
                 cloudPct: v("n_man").flatMap { $0 >= 0 && $0 <= 8 ? $0 / 8.0 * 100.0 : nil },
                 precipMmH: v("ri_10min").flatMap { $0 >= 0 ? $0 : nil } ?? v("r_1h").flatMap { $0 >= 0 ? $0 : nil },
                 condition: condition, reportsPresentWeather: wawa != nil)
@@ -733,6 +749,7 @@ public enum WxStationNetworks {
         return folds.values.compactMap { fold in
             guard let temp = fold.values[1] else { return nil }
             let v = { (p: Int) in fold.values[p]?.v }
+            let dir = fold.values[3].flatMap { $0.t == fold.values[4]?.t ? $0.v : nil }  // same report as speed (4)
             let rh = v(6)
             let weather = v(13).map { Int($0) }
             let condition = weather.flatMap {
@@ -743,6 +760,7 @@ public enum WxStationNetworks {
                 network: .smhi, id: fold.site.id, name: fold.site.name, lat: fold.site.lat, lon: fold.site.lon,
                 elevM: fold.site.elevM, obsTimeS: temp.t, tempC: temp.v, dewpC: v(39), humidityPct: rh,
                 windKmh: v(4).flatMap { $0 >= 0 ? $0 * 3.6 : nil }, gustKmh: v(21).flatMap { $0 >= 0 ? $0 * 3.6 : nil },
+                windDirDeg: windFromDeg(dir, speed: v(4)),
                 cloudPct: v(16).flatMap { $0 >= 0 && $0 <= 100 ? $0 : nil },
                 precipMmH: v(7).flatMap { $0 >= 0 ? $0 : nil },
                 condition: condition, reportsPresentWeather: weather != nil,
@@ -767,7 +785,7 @@ public enum WxStationNetworks {
         }
     }
 
-    /// TAWES current values (TL, TP, RF, FF, FFX, RR) of the requested stations.
+    /// TAWES current values (TL, TP, RF, FF, DD, FFX, RR) of the requested stations.
     public static func parseGeoSphereCurrent(_ data: Data, stations: [String: WxStationSite]) -> [WxStationObservation] {
         guard let root = json(data) as? [String: Any], let features = root["features"] as? [[String: Any]],
               let time = parseISO8601((root["timestamps"] as? [Any])?.last.flatMap { str($0) })
@@ -796,6 +814,7 @@ public enum WxStationNetworks {
                 humidityPct: v("RF").flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
                 windKmh: v("FF").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
                 gustKmh: v("FFX").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
+                windDirDeg: windFromDeg(v("DD"), speed: v("FF")),
                 precipMmH: v("RR").map { max(0.0, $0) * 6.0 })
         }
     }
@@ -846,6 +865,7 @@ public enum WxStationNetworks {
                 humidityPct: v("ure200s0").flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
                 windKmh: v("fu3010z0").flatMap { $0 >= 0 ? $0 : nil },
                 gustKmh: v("fu3010z1").flatMap { $0 >= 0 ? $0 : nil },
+                windDirDeg: windFromDeg(v("dkl010z0"), speed: v("fu3010z0")),
                 precipMmH: v("rre150z0").map { max(0.0, $0) * 6.0 })
         }
         return nil
@@ -883,6 +903,14 @@ public enum WxStationNetworks {
             return d
         }
         return nil
+    }
+
+    /// The mean direction the wind blows FROM, degrees true in 0..<360 (360 is north, stored as 0).
+    /// Nil when the paired speed is calm (0) or unknown, the value is not a number (METAR "VRB"),
+    /// or it lies outside 0...360.
+    static func windFromDeg(_ v: Any?, speed: Double?) -> Double? {
+        guard let speed, speed > 0, let deg = num(v), deg >= 0, deg <= 360 else { return nil }
+        return deg == 360 ? 0 : deg
     }
 
     /// A non-empty string from a JSON string or number.

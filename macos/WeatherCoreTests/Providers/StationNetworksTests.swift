@@ -28,6 +28,7 @@ import Testing
         #expect(eham.dewpC == 4)
         #expect(Self.near(eham.windKmh, 24 * 1.852))
         #expect(Self.near(eham.gustKmh, 36 * 1.852))
+        #expect(eham.windDirDeg == 260)
         #expect(Self.near(eham.cloudPct, 44))  // SCT at 4,400 ft
         #expect(eham.obsTimeS == 1_792_958_100)
         #expect(eham.elevM == -2)
@@ -40,6 +41,38 @@ import Testing
         let ehle = try #require(obs.first { $0.id == "EHLE" })
         #expect(ehle.cloudPct == 0)  // CLR
         #expect(WxStationNetworks.parseMETARs(Data()).isEmpty)  // AWC answers an empty body for no airports
+    }
+
+    @Test func metarVariableCalmAndMissingWindHaveNoDirection() throws {
+        // shapes of live aviationweather.gov reports, 2026-10-27
+        let body = """
+            [{"icaoId": "KMDT", "obsTime": 1793120160, "temp": 17.8, "dewp": 7.8, "wdir": "VRB", "wspd": 3,
+              "lat": 40.1962, "lon": -76.7725, "rawOb": "METAR KMDT 271656Z VRB03KT 10SM FEW060 FEW250 18/08 A3035"},
+             {"icaoId": "KNID", "obsTime": 1793120160, "temp": 14.4, "dewp": 2.2, "wdir": 0, "wspd": 0,
+              "lat": 35.688, "lon": -117.69, "rawOb": "METAR KNID 271656Z AUTO 00000KT 10SM CLR 14/02 A3002"},
+             {"icaoId": "KXYZ", "obsTime": 1793120160, "temp": 14.0, "wspd": 5, "lat": 35.0, "lon": -117.0}]
+            """
+        let obs = WxStationNetworks.parseMETARs(Data(body.utf8))
+        let variable = try #require(obs.first { $0.id == "KMDT" })
+        #expect(Self.near(variable.windKmh, 3 * 1.852))
+        #expect(variable.windDirDeg == nil)  // VRB
+        let calm = try #require(obs.first { $0.id == "KNID" })
+        #expect(calm.windKmh == 0)
+        #expect(calm.windDirDeg == nil)  // 00000KT
+        #expect(try #require(obs.first { $0.id == "KXYZ" }).windDirDeg == nil)  // no wdir
+    }
+
+    @Test func windDirectionRules() {
+        #expect(WxStationNetworks.windFromDeg(270, speed: 10) == 270)
+        #expect(WxStationNetworks.windFromDeg(360, speed: 10) == 0)  // north
+        #expect(WxStationNetworks.windFromDeg("90", speed: 10) == 90)
+        #expect(WxStationNetworks.windFromDeg(0, speed: 10) == 0)
+        #expect(WxStationNetworks.windFromDeg(270, speed: 0) == nil)  // calm
+        #expect(WxStationNetworks.windFromDeg(270, speed: nil) == nil)
+        #expect(WxStationNetworks.windFromDeg("VRB", speed: 10) == nil)
+        #expect(WxStationNetworks.windFromDeg(nil, speed: 10) == nil)
+        #expect(WxStationNetworks.windFromDeg(361, speed: 10) == nil)
+        #expect(WxStationNetworks.windFromDeg(-1, speed: 10) == nil)
     }
 
     @Test func coverLayersAndCodes() {
@@ -64,6 +97,7 @@ import Testing
         #expect(obs.dewpC == 11)
         #expect(Self.near(obs.humidityPct, 39.058443699936))
         #expect(Self.near(obs.windKmh, 7.416))  // already km/h
+        #expect(obs.windDirDeg == 140)
         #expect(obs.gustKmh == nil)
         #expect(obs.elevM == 206)
         #expect(obs.condition == .clear)
@@ -84,6 +118,7 @@ import Testing
         #expect(obs.dewpC == nil)  // X: rejected by MADIS QC
         #expect(obs.gustKmh == nil)  // Q: questioned
         #expect(Self.near(obs.windKmh, 18))
+        #expect(obs.windDirDeg == nil)  // no windDirection
         #expect(Self.near(obs.precipMmH, 2))
         #expect(!obs.reportsPresentWeather)  // empty text: no weather information
         let rejected = body.replacingOccurrences(of: "\"value\": 26, \"qualityControl\": \"V\"", with: "\"value\": 26, \"qualityControl\": \"B\"")
@@ -102,6 +137,7 @@ import Testing
         #expect(wta.humidityPct == 34)
         #expect(wta.windKmh == 4.6)
         #expect(wta.gustKmh == 13.6)
+        #expect(wta.windDirDeg == 248)  // the 2-minute mean, like the speed; not the gust direction
         #expect(wta.precipMmH == 0)
         #expect(Self.near(wta.elevM, 72.583))
         #expect(wta.obsTimeS == 1_792_958_640)
@@ -117,13 +153,14 @@ import Testing
             {"features": [{"geometry": {"coordinates": [-73.55, 45.51, 10.0]}, "properties": {
               "stn_nam-value": "Quai 55", "data_pvdr-value": "POM", "msc_id-value": "pom-quai-55",
               "date_tm-value": "2026-10-25T19:40:00.000Z", "air_temp": 16.8, "rel_hum": 40,
-              "avg_wnd_spd_10m_pst10mts": 12.0}}]}
+              "avg_wnd_dir_10m_pst2mts": 90, "avg_wnd_spd_10m_pst10mts": 12.0, "avg_wnd_dir_10m_pst10mts": 200}}]}
             """
         let obs = try #require(WxStationNetworks.parseSWOB(Data(body.utf8)).first)
         #expect(obs.trust == 0.6)
         #expect(obs.windTrust == 0.35)
         #expect(obs.id == "pom-quai-55")
         #expect(obs.windKmh == 12)  // the 10-minute mean when the 2-minute one is missing
+        #expect(obs.windDirDeg == 200)  // direction from the same 10-minute window
     }
 
     // MARK: - IEM
@@ -137,11 +174,13 @@ import Testing
         #expect(Self.near(gauge.dewpC, (51.998272 - 32) * 5 / 9))
         #expect(gauge.humidityPct == 45)
         #expect(Self.near(gauge.windKmh, 1.8248501 * 1.852))
+        #expect(gauge.windDirDeg == 171)
         #expect(gauge.precipMmH == 0)
         #expect(gauge.trust == 0.5 && gauge.windTrust == 0.3)
         #expect(gauge.obsTimeS == WxTime.parseISO8601("2026-10-25T19:00:00Z"))
         let road = try #require(obs.first { $0.id == "ARD30" })
         #expect(road.trust == 0.6 && road.windTrust == 0.35)
+        #expect(road.windDirDeg == 161.16)
         #expect(Self.near(road.gustKmh, 10.115767 * 1.852))
         let crn = try #require(WxStationNetworks.iemTrust(network: "USCRN"))
         #expect(crn.temp == 1.0 && crn.wind == 0.8)
@@ -167,6 +206,7 @@ import Testing
         #expect(obs.humidityPct == 78)
         #expect(obs.windKmh == 16.9)
         #expect(obs.gustKmh == 28.8)
+        #expect(obs.windDirDeg == 230)
         #expect(obs.cloudPct == 63)
         #expect(obs.precipMmH == 0)
         #expect(obs.obsTimeS == 1_792_958_400)
@@ -188,6 +228,22 @@ import Testing
         #expect(!obs.reportsPresentWeather)
         let noTemp = "{\"weather\": {\"timestamp\": \"2026-10-25T20:00:00+00:00\", \"temperature\": null}}"
         #expect(WxStationNetworks.parseBrightSkyCurrent(Data(noTemp.utf8), source: source) == nil)
+    }
+
+    @Test func brightSkyDirectionPairsWithTheSpeedWindow() throws {
+        let body = """
+            {"weather": {"timestamp": "2026-10-25T20:00:00+00:00", "temperature": 9.8, "condition": "dry",
+             "wind_direction_10": 120, "wind_direction_30": 230, "wind_speed_30": 17.3,
+             "wind_gust_direction_10": 220, "wind_gust_speed_10": 28.8,
+             "fallback_source_ids": {"wind_speed_10": 254907}}}
+            """
+        let source = WxStationNetworks.BrightSkySource(
+            id: 1, site: WxStationSite(id: "10384", lat: 52.47, lon: 13.40), distanceKm: 5)
+        let obs = try #require(WxStationNetworks.parseBrightSkyCurrent(Data(body.utf8), source: source))
+        #expect(obs.windKmh == 17.3)
+        #expect(obs.windDirDeg == 230)  // the 30-minute pair, not the 10-minute direction
+        let calm = body.replacingOccurrences(of: "\"wind_speed_30\": 17.3", with: "\"wind_speed_30\": 0")
+        #expect(try #require(WxStationNetworks.parseBrightSkyCurrent(Data(calm.utf8), source: source)).windDirDeg == nil)
     }
 
     // MARK: - DMI
@@ -212,6 +268,8 @@ import Testing
         let drogden = try #require(obs.first { $0.id == "06183" })
         #expect(drogden.reportsPresentWeather)  // weather 100: automatic code 00, "no weather"
         #expect(drogden.condition == nil)
+        #expect(cph.windDirDeg == 218)  // wind_dir of the 20:00 report, not wind_dir_past1h
+        #expect(obs.first { $0.id == "06181" }?.windDirDeg == 0)  // DMI reports north as 360
     }
 
     // MARK: - FMI
@@ -234,6 +292,9 @@ import Testing
         #expect(!sipoo.reportsPresentWeather)  // no present-weather sensor
         let kaisaniemi = try #require(obs.first { $0.id == "100971" })
         #expect(kaisaniemi.precipMmH == 0)
+        #expect(harmaja.windDirDeg == 213)  // wd_10min of the newest row
+        #expect(obs.allSatisfy { ($0.windDirDeg != nil) == ($0.windKmh != nil) })  // NaN speed: no direction
+        #expect(WxStationNetworks.fmiParameters.contains("wd_10min"))
     }
 
     // MARK: - SMHI
@@ -261,6 +322,9 @@ import Testing
         #expect(!alskog.reportsPresentWeather)
         let adelso = try #require(obs.first { $0.id == "97280" })
         #expect(adelso.reportsPresentWeather && adelso.condition == nil)  // 123: rain ended in the past hour
+        #expect(WxStationNetworks.smhiParameters.contains(3))
+        #expect(abisko.windDirDeg == 112)  // parameter 3, same hour as speed (4)
+        #expect(alskog.windDirDeg == 180)
     }
 
     // MARK: - GeoSphere
@@ -281,6 +345,11 @@ import Testing
         #expect(Self.near(enzersdorf.precipMmH, 5.4))  // 0.9 mm in 10 minutes
         #expect(enzersdorf.elevM == 154)
         #expect(enzersdorf.obsTimeS == 1_792_958_400)  // "2026-10-25T20:00+00:00", no seconds
+        #expect(enzersdorf.windDirDeg == 293)  // DD, not DDX
+        #expect(obs.first { $0.id == "11044" }?.windDirDeg == nil)  // DD data [null]
+        let calm = try #require(obs.first { $0.id == "11090" })
+        #expect(calm.windKmh == 0 && calm.windDirDeg == nil)  // calm: DD 300 is dropped
+        #expect(WxStationNetworks.geosphereCurrentURL(stationIDs: ["11035"]).contains("parameters=TL,TP,RF,FF,DD,"))
     }
 
     // MARK: - MeteoSwiss
@@ -301,6 +370,7 @@ import Testing
         #expect(obs.dewpC == 5.7)
         #expect(obs.windKmh == 16.6)
         #expect(obs.gustKmh == 26.6)
+        #expect(obs.windDirDeg == 245)  // dkl010z0 of the same 19:30 row
         #expect(obs.precipMmH == 0)
         #expect(obs.trust == 1)
     }

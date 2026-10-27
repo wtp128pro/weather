@@ -476,46 +476,127 @@ private struct DetailCard<Content: View>: View {
     }
 }
 
-/// The current conditions: hero icon, temperature with unit, condition, feels like, High/Low, wind.
+/// The current conditions: hero icon, temperature with unit, condition, feels like, High/Low,
+/// humidity, and the wind compass dial. The first layout whose ideal width fits wins, so the
+/// pills never wrap and the card is never taller than the one-pill-row card: a 100 pt dial
+/// with its caption on the right; the 72 pt dial beside the temperature with the pills on a
+/// full-width row below (92 pt, then 52 pt hero icon); or, on the narrowest cards, pills that
+/// reflow into rows beside a 72 pt dial captioned underneath.
 private struct NowBlock: View {
     let now: DetailViewModel.Now
 
     var body: some View {
-        HStack(alignment: .center, spacing: 20) {
-            WeatherIconView(
-                assetName: now.iconAssetName,
-                symbolName: now.symbolName,
-                size: 92,
-                shadowRadius: 8
-            )
-            .accessibilityLabel(Text(now.iconAccessibilityLabel))
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 14) {
-                    Text(now.temperature)
-                        .font(.system(size: 60, weight: .thin, design: .rounded))
-                        .foregroundStyle(WeatherTheme.primaryText)
-                        .monospacedDigit()
-                    Text(now.condition)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(WeatherTheme.primaryText)
-                }
-
-                // Crisp white-on-slate pills for feels like, High/Low and wind.
-                HStack(spacing: 10) {
-                    NowMetricChip(iconAsset: "wx-thermometer", symbol: "thermometer.medium", text: now.feelsLike)
-                    if let highLow = now.highLow {
-                        NowMetricChip(iconAsset: nil, symbol: "arrow.up.and.down", text: highLow)
-                    }
-                    NowMetricChip(iconAsset: "wx-wind", symbol: "wind", text: now.wind)
-                }
-            }
-            Spacer(minLength: 0)
+        ViewThatFits(in: .horizontal) {
+            wideRow
+            sideRow(iconSize: 92, spacing: 20)
+            sideRow(iconSize: 52, spacing: 8)
+            compactRow
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .weatherGlassCard(cornerRadius: 22)
+    }
+
+    private var wideRow: some View {
+        HStack(alignment: .center, spacing: 20) {
+            heroIcon(size: 92)
+            VStack(alignment: .leading, spacing: 8) {
+                temperatureLine
+                // Crisp white-on-slate pills for feels like, High/Low and humidity.
+                pillRow(spacing: 10)
+            }
+            Spacer(minLength: 0)
+            WindCompassView(wind: now.windDial, size: .large)
+        }
+    }
+
+    /// The dial shares the temperature line's height; the pills get the full width below.
+    private func sideRow(iconSize: CGFloat, spacing: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 20) {
+            if iconSize > 60 { heroIcon(size: iconSize) }
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: spacing) {
+                    if iconSize <= 60 { heroIcon(size: iconSize) }
+                    temperatureLine
+                    Spacer(minLength: 0)
+                    WindCompassView(wind: now.windDial, size: .side)
+                }
+                pillRow(spacing: iconSize > 60 ? 10 : 8)
+            }
+        }
+    }
+
+    private func pillRow(spacing: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            feelsLikeChip
+            highLowChip
+            humidityChip
+        }
+    }
+
+    private var compactRow: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
+                    heroIcon(size: 52)
+                    temperatureLine
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { feelsLikeChip; highLowChip; humidityChip }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) { feelsLikeChip; highLowChip }
+                        humidityChip
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) { feelsLikeChip; humidityChip }
+                        highLowChip
+                    }
+                    VStack(alignment: .leading, spacing: 6) { feelsLikeChip; highLowChip; humidityChip }
+                }
+            }
+            Spacer(minLength: 0)
+            WindCompassView(wind: now.windDial, size: .compact)
+        }
+    }
+
+    private func heroIcon(size: CGFloat) -> some View {
+        WeatherIconView(
+            assetName: now.iconAssetName,
+            symbolName: now.symbolName,
+            size: size,
+            shadowRadius: size > 60 ? 8 : 5
+        )
+        .accessibilityLabel(Text(now.iconAccessibilityLabel))
+    }
+
+    private var temperatureLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Text(now.temperature)
+                .font(.system(size: 60, weight: .thin, design: .rounded))
+                .foregroundStyle(WeatherTheme.primaryText)
+                .monospacedDigit()
+                .fixedSize()
+            Text(now.condition)
+                .font(.title2.weight(.semibold))
+                .foregroundStyle(WeatherTheme.primaryText)
+        }
+    }
+
+    private var feelsLikeChip: some View {
+        NowMetricChip(iconAsset: "wx-thermometer", symbol: "thermometer.medium", text: now.feelsLike)
+    }
+
+    @ViewBuilder private var highLowChip: some View {
+        if let highLow = now.highLow {
+            NowMetricChip(iconAsset: nil, symbol: "arrow.up.and.down", text: highLow)
+        }
+    }
+
+    @ViewBuilder private var humidityChip: some View {
+        if let humidity = now.humidity {
+            NowMetricChip(iconAsset: "wx-humidity", symbol: "humidity", text: humidity)
+        }
     }
 }
 

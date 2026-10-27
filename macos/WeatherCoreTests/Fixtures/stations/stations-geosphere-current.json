@@ -45,6 +45,13 @@
        4.3
       ]
      },
+     "DD": {
+      "name": "Windrichtung",
+      "unit": "°",
+      "data": [
+       293.0
+      ]
+     },
      "FFX": {
       "name": "Windspitze",
       "unit": "m/s",
@@ -100,6 +107,13 @@
       "unit": "m/s",
       "data": [
        4.6
+      ]
+     },
+     "DD": {
+      "name": "Windrichtung",
+      "unit": "°",
+      "data": [
+       290.0
       ]
      },
      "FFX": {
@@ -159,6 +173,13 @@
        15.2
       ]
      },
+     "DD": {
+      "name": "Windrichtung",
+      "unit": "°",
+      "data": [
+       null
+      ]
+     },
      "FFX": {
       "name": "Windspitze",
       "unit": "m/s",
@@ -216,6 +237,13 @@
        5.8
       ]
      },
+     "DD": {
+      "name": "Windrichtung",
+      "unit": "°",
+      "data": [
+       281.0
+      ]
+     },
      "FFX": {
       "name": "Windspitze",
       "unit": "m/s",
@@ -270,7 +298,14 @@
       "name": "Windgeschwindigkeit",
       "unit": "m/s",
       "data": [
-       2.5
+       0.0
+      ]
+     },
+     "DD": {
+      "name": "Windrichtung",
+      "unit": "°",
+      "data": [
+       300.0
       ]
      },
      "FFX": {

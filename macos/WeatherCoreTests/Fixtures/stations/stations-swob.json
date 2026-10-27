@@ -22,8 +22,11 @@
     "dwpt_temp": 3.8,
     "rel_hum": 43,
     "avg_wnd_spd_10m_pst2mts": 15.1,
+    "avg_wnd_dir_10m_pst2mts": 262,
     "avg_wnd_spd_10m_pst10mts": 14.9,
+    "avg_wnd_dir_10m_pst10mts": 255,
     "max_wnd_spd_10m_pst10mts": 22.0,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -49,8 +52,11 @@
     "dwpt_temp": 2.5,
     "rel_hum": 40,
     "avg_wnd_spd_10m_pst2mts": 14.1,
+    "avg_wnd_dir_10m_pst2mts": 255,
     "avg_wnd_spd_10m_pst10mts": 13.4,
+    "avg_wnd_dir_10m_pst10mts": 250,
     "max_wnd_spd_10m_pst10mts": 17.4,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -76,8 +82,11 @@
     "dwpt_temp": 0.7,
     "rel_hum": 34,
     "avg_wnd_spd_10m_pst2mts": 4.6,
+    "avg_wnd_dir_10m_pst2mts": 248,
     "avg_wnd_spd_10m_pst10mts": 5.2,
+    "avg_wnd_dir_10m_pst10mts": 244,
     "max_wnd_spd_10m_pst10mts": 13.6,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -103,8 +112,11 @@
     "dwpt_temp": 1.9,
     "rel_hum": 35,
     "avg_wnd_spd_10m_pst2mts": 11.2,
+    "avg_wnd_dir_10m_pst2mts": 251,
     "avg_wnd_spd_10m_pst10mts": 11.9,
+    "avg_wnd_dir_10m_pst10mts": 246,
     "max_wnd_spd_10m_pst10mts": 18.6,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -130,8 +142,11 @@
     "dwpt_temp": 3,
     "rel_hum": 39,
     "avg_wnd_spd_10m_pst2mts": 10.5,
+    "avg_wnd_dir_10m_pst2mts": 240,
     "avg_wnd_spd_10m_pst10mts": 11.0,
+    "avg_wnd_dir_10m_pst10mts": 238,
     "max_wnd_spd_10m_pst10mts": 18.8,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -157,8 +172,11 @@
     "dwpt_temp": 2.6,
     "rel_hum": 38,
     "avg_wnd_spd_10m_pst2mts": 9.6,
+    "avg_wnd_dir_10m_pst2mts": 236,
     "avg_wnd_spd_10m_pst10mts": 10.9,
+    "avg_wnd_dir_10m_pst10mts": 233,
     "max_wnd_spd_10m_pst10mts": 18.8,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -184,8 +202,11 @@
     "dwpt_temp": 0.6,
     "rel_hum": 34,
     "avg_wnd_spd_10m_pst2mts": 3.5,
+    "avg_wnd_dir_10m_pst2mts": 244,
     "avg_wnd_spd_10m_pst10mts": 5.6,
+    "avg_wnd_dir_10m_pst10mts": 241,
     "max_wnd_spd_10m_pst10mts": 13.6,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -211,8 +232,11 @@
     "dwpt_temp": 2.8,
     "rel_hum": 41,
     "avg_wnd_spd_10m_pst2mts": 14.6,
+    "avg_wnd_dir_10m_pst2mts": 239,
     "avg_wnd_spd_10m_pst10mts": 13.6,
+    "avg_wnd_dir_10m_pst10mts": 237,
     "max_wnd_spd_10m_pst10mts": 18.1,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -238,8 +262,11 @@
     "dwpt_temp": 1.4,
     "rel_hum": 34,
     "avg_wnd_spd_10m_pst2mts": 13.7,
+    "avg_wnd_dir_10m_pst2mts": 250,
     "avg_wnd_spd_10m_pst10mts": 11.9,
+    "avg_wnd_dir_10m_pst10mts": 245,
     "max_wnd_spd_10m_pst10mts": 18.6,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -265,8 +292,11 @@
     "dwpt_temp": 3.2,
     "rel_hum": 41,
     "avg_wnd_spd_10m_pst2mts": 15.1,
+    "avg_wnd_dir_10m_pst2mts": 247,
     "avg_wnd_spd_10m_pst10mts": 14.9,
+    "avg_wnd_dir_10m_pst10mts": 243,
     "max_wnd_spd_10m_pst10mts": 22.0,
+    "wnd_dir_10m_pst10mts_max_spd": 300,
     "pcpn_amt_pst10mts": 0,
     "pcpn_amt_pst1hr": 0
    }
@@ -290,7 +320,8 @@
     "air_temp": 16.8,
     "dwpt_temp": 2.9,
     "rel_hum": 39,
-    "avg_wnd_spd_10m_pst2mts": 10.1
+    "avg_wnd_spd_10m_pst2mts": 10.1,
+    "avg_wnd_dir_10m_pst2mts": 233
    }
   },
   {
@@ -313,7 +344,9 @@
     "dwpt_temp": 1.8,
     "rel_hum": 35,
     "avg_wnd_spd_10m_pst2mts": 22.3,
+    "avg_wnd_dir_10m_pst2mts": 229,
     "avg_wnd_spd_10m_pst10mts": 20.5,
+    "avg_wnd_dir_10m_pst10mts": 228,
     "pcpn_amt_pst1hr": 0.0
    }
   },
@@ -337,7 +370,9 @@
     "dwpt_temp": 2.9,
     "rel_hum": 38,
     "avg_wnd_spd_10m_pst2mts": 16.6,
+    "avg_wnd_dir_10m_pst2mts": 226,
     "avg_wnd_spd_10m_pst10mts": 16.6,
+    "avg_wnd_dir_10m_pst10mts": 224,
     "pcpn_amt_pst1hr": 0.0
    }
   },
@@ -360,7 +395,8 @@
     "air_temp": 16.2,
     "dwpt_temp": 3.3,
     "rel_hum": 42,
-    "avg_wnd_spd_10m_pst2mts": 10.1
+    "avg_wnd_spd_10m_pst2mts": 10.1,
+    "avg_wnd_dir_10m_pst2mts": 231
    }
   }
  ]

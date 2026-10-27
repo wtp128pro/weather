@@ -116,12 +116,16 @@ public final class DetailViewModel {
         public let feelsLike: String
         /// "High 80° · Low 65°" (+ " (from 2 PM)") of today; nil (hidden) when no day contains "now".
         public let highLow: String?
-        /// "Wind 12 mph, gusts 20 mph · Humidity 40%".
+        /// "Wind 12 mph, gusts 20 mph".
         public let wind: String
         /// The current sky/precipitation condition enum.
         public let conditionCode: WxCondition
         /// Whether it is currently daytime at the place.
         public let isDay: Bool
+        /// The structured wind for the dial (speed, gusts, direction, VoiceOver label).
+        public let windDial: NowWind
+        /// "Humidity 40%"; nil when not supplied.
+        public let humidity: String?
 
         public init(
             symbolName: String,
@@ -133,7 +137,10 @@ public final class DetailViewModel {
             highLow: String?,
             wind: String,
             conditionCode: WxCondition,
-            isDay: Bool
+            isDay: Bool,
+            windDial: NowWind = NowWind.make(windKmh: .nan, gustKmh: .nan, directionDeg: nil, units: .imperial,
+                                             gustMarginKmh: 0),
+            humidity: String? = nil
         ) {
             self.symbolName = symbolName
             self.gtkIconName = gtkIconName
@@ -145,6 +152,8 @@ public final class DetailViewModel {
             self.wind = wind
             self.conditionCode = conditionCode
             self.isDay = isDay
+            self.windDial = windDial
+            self.humidity = humidity
         }
 
         /// Bundled rich multi-color weather icon asset name.
@@ -156,6 +165,82 @@ public final class DetailViewModel {
         public var temperatureValue: Int? {
             guard let degIdx = temperature.firstIndex(of: "\u{00B0}") else { return nil }
             return Int(temperature[..<degIdx])
+        }
+    }
+
+    /// The now block's wind dial (Swift-only; the C app shows only the wind text).
+    public struct NowWind: Sendable, Equatable {
+        /// The speed as a whole number in the place's unit ("15"), rounded like WxFormat.wind; "—" when unknown.
+        public let speedText: String
+        /// "mph" or "km/h".
+        public let unitText: String
+        /// "25 mph" when the gust reaches the wind plus the producer's margin, else nil.
+        public let gustText: String?
+        /// The bearing the wind comes from in [0, 360); nil when unknown or calm.
+        public let directionDeg: Double?
+        /// "from NNE 31°"; nil when unknown or calm.
+        public let directionText: String?
+        /// A known speed below 1 km/h.
+        public let isCalm: Bool
+        /// The VoiceOver sentence, words only: "Wind 15 miles per hour from north-northeast, gusts 25 miles per hour".
+        public let accessibilityLabel: String
+
+        /// Spoken names of WxFormat.compassPoints, index for index.
+        private static let spokenPoints = [
+            "north", "north-northeast", "northeast", "east-northeast",
+            "east", "east-southeast", "southeast", "south-southeast",
+            "south", "south-southwest", "southwest", "west-southwest",
+            "west", "west-northwest", "northwest", "north-northwest",
+        ]
+
+        /// Builds the dial value; the gust shows when it is finite and at least windKmh + gustMarginKmh
+        /// (0 on the forecast path, 4 on the live-station path).
+        public static func make(windKmh: Double, gustKmh: Double, directionDeg: Double?, units: WxUnits,
+                                gustMarginKmh: Double) -> NowWind {
+            let metric = units == .metric
+            let unitText = metric ? "km/h" : "mph"
+            let known = WxLimits.valueInRange(windKmh, 0.0, WxLimits.windMaxKmh)
+            let isCalm = known && windKmh < 1.0
+            // The number part of WxFormat.wind keeps its rounding and range rules.
+            let speedText = known ? number(WxFormat.wind(windKmh, units: units)) : WxFormat.emDash
+            let gustKnown = WxLimits.valueInRange(gustKmh, 0.0, WxLimits.windMaxKmh)
+            let gustShown = gustKnown && gustKmh >= windKmh + gustMarginKmh
+            let gustText = gustShown ? WxFormat.wind(gustKmh, units: units) : nil
+            var direction: (deg: Double, point: String)?
+            if !isCalm, let raw = directionDeg, let point = WxFormat.compassPoint(raw) {
+                let d = raw.truncatingRemainder(dividingBy: 360.0)
+                direction = (d < 0 ? d + 360.0 : d, point)
+            }
+            // Degrees rounded; 359.6 reads "0", not "360".
+            let directionText = direction.map { "from \($0.point) \(Int($0.deg.rounded()) % 360)\u{00B0}" }
+            let label: String
+            if !known {
+                label = "Wind speed unknown"
+            } else if isCalm {
+                label = "Wind calm"
+            } else {
+                var words = "Wind " + spoken(speedText, metric: metric)
+                if let point = direction?.point, let i = WxFormat.compassPoints.firstIndex(of: point) {
+                    words += " from " + spokenPoints[i]
+                }
+                if let gustText {
+                    words += ", gusts " + spoken(number(gustText), metric: metric)
+                }
+                label = words
+            }
+            return NowWind(speedText: speedText, unitText: unitText, gustText: gustText, directionDeg: direction?.deg,
+                           directionText: directionText, isCalm: isCalm, accessibilityLabel: label)
+        }
+
+        /// "15" from "15 mph".
+        private static func number(_ formatted: String) -> String {
+            String(formatted.prefix { $0 != " " })
+        }
+
+        /// "15 miles per hour" / "1 kilometer per hour".
+        private static func spoken(_ number: String, metric: Bool) -> String {
+            let unit = metric ? "kilometer" : "mile"
+            return number + " " + unit + (number == "1" ? "" : "s") + " per hour"
         }
     }
 
@@ -628,8 +713,10 @@ public final class DetailViewModel {
         let windKmh = cur?.windKmh ?? .nan
         let gustKmh = cur?.gustKmh ?? .nan
         let gust = gustKmh.isFinite && gustKmh >= windKmh ? ", gusts " + WxFormat.wind(gustKmh, units: units) : ""
-        let wind = "Wind " + WxFormat.wind(windKmh, units: units) + gust + separator + "Humidity "
-            + WxFormat.percent(cur?.humidityPct ?? .nan)
+        let wind = "Wind " + WxFormat.wind(windKmh, units: units) + gust
+        let windDial = NowWind.make(windKmh: windKmh, gustKmh: gustKmh, directionDeg: nil, units: units,
+                                    gustMarginKmh: 0)
+        let humidity = "Humidity " + WxFormat.percent(cur?.humidityPct ?? .nan)
         let effectiveCond = cur.map(WxConditionSymbol.effectiveHourlyCondition(for:)) ?? condition
         // The icon is drawn from effectiveCond (iconAssetName), so its accessible label names
         // that condition; the visible condition text stays the C label.
@@ -637,7 +724,8 @@ public final class DetailViewModel {
                    iconAccessibilityLabel: WxConditionRules.label(effectiveCond),
                    temperature: WxFormat.temp(cur?.tempC ?? .nan, units: units, withUnit: true), condition: label,
                    feelsLike: "Feels like " + WxFormat.temp(cur?.feelsC ?? .nan, units: units, withUnit: false),
-                   highLow: highLow, wind: wind, conditionCode: effectiveCond, isDay: cur?.isDay ?? true)
+                   highLow: highLow, wind: wind, conditionCode: effectiveCond, isDay: cur?.isDay ?? true,
+                   windDial: windDial, humidity: humidity)
     }
 
     /// refresh_cards, rain part (wx-detail.c:517-536).

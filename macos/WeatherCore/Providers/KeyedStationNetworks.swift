@@ -22,6 +22,13 @@
 import Foundation
 
 extension WxStationNetworks {
+    /// The direction the wind blows FROM, in [0, 360), kept only beside a known non-zero speed:
+    /// nil for a calm or unknown speed, or a value outside 0...360; 360 (north) is stored as 0.
+    static func keyedWindDir(_ deg: Double?, windKmh: Double?) -> Double? {
+        guard let speed = windKmh, speed > 0, let d = deg, d >= 0, d <= 360 else { return nil }
+        return d == 360 ? 0 : d
+    }
+
     // MARK: - AEMET
 
     /// The latest hourly reports (about the last 12 hours) of every AEMET automatic station.
@@ -90,11 +97,13 @@ extension WxStationNetworks {
                 return nil
             }
             let kmh = { (k: String) in num(r[k]).flatMap { $0 >= 0 ? $0 * 3.6 : nil } }
+            let vv = kmh("vv")
             return WxStationObservation(
                 network: .aemet, id: id, name: str(r["ubi"]).map(collapseSpaces), lat: lat, lon: lon,
                 elevM: num(r["alt"]), obsTimeS: entry.t, tempC: temp, dewpC: num(r["tpr"]),
                 humidityPct: num(r["hr"]).flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
-                windKmh: kmh("vv") ?? kmh("vvu"), gustKmh: kmh("vmax") ?? kmh("vmaxu"),
+                windKmh: vv ?? kmh("vvu"), gustKmh: kmh("vmax") ?? kmh("vmaxu"),
+                windDirDeg: keyedWindDir(num(r["dv"]), windKmh: vv),
                 precipMmH: num(r["prec"]).map { max(0.0, $0) })
         }
     }
@@ -127,7 +136,7 @@ extension WxStationNetworks {
     /// The elements asked of Frost: the 10-minute and the hourly forms of the gust and the precipitation
     /// (a station has one or both), every level (the 2 m temperature and the 10 m wind are chosen).
     static let frostElements = [
-        "air_temperature", "relative_humidity", "dew_point_temperature", "wind_speed",
+        "air_temperature", "relative_humidity", "dew_point_temperature", "wind_speed", "wind_from_direction",
         "max(wind_speed_of_gust PT10M)", "max(wind_speed_of_gust PT1H)",
         "sum(precipitation_amount PT10M)", "sum(precipitation_amount PT1H)",
     ]
@@ -220,12 +229,13 @@ extension WxStationNetworks {
             }
             let gust = newer("max(wind_speed_of_gust PT10M)", "max(wind_speed_of_gust PT1H)")
             let precip = newer("sum(precipitation_amount PT10M)", "sum(precipitation_amount PT1H)")
+            let wind = v("wind_speed").flatMap { $0 >= 0 ? $0 * 3.6 : nil }
             return WxStationObservation(
                 network: .frost, id: id, name: site.name, lat: site.lat, lon: site.lon, elevM: site.elevM,
                 obsTimeS: temp.t, tempC: temp.v, dewpC: v("dew_point_temperature"),
                 humidityPct: v("relative_humidity").flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
-                windKmh: v("wind_speed").flatMap { $0 >= 0 ? $0 * 3.6 : nil },
-                gustKmh: gust.flatMap { $0.pick.v >= 0 ? $0.pick.v * 3.6 : nil },
+                windKmh: wind, gustKmh: gust.flatMap { $0.pick.v >= 0 ? $0.pick.v * 3.6 : nil },
+                windDirDeg: keyedWindDir(v("wind_from_direction"), windKmh: wind),
                 precipMmH: precip.map { max(0.0, $0.pick.v) * ($0.key.hasSuffix("PT10M)") ? 6.0 : 1.0) },
                 trust: firstClass ? 1.0 : 0.7, windTrust: firstClass ? 1.0 : 0.4)
         }
@@ -236,9 +246,11 @@ extension WxStationNetworks {
     static let knmiCollection = "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations"
 
     /// The parameters asked of KNMI: 1-minute temperature, humidity and dew point at 1.5 m (some
-    /// platforms report only the 10-minute means), 10-minute mean wind and gust at 10 m, the rain
-    /// gauge's intensity, total cloud cover (okta) and the automatic present weather (WMO 4680).
-    static let knmiParameters = ["ta", "t10", "rh", "rh10", "td", "td10", "ff", "gff", "fx", "rg", "n", "nc", "ww"]
+    /// platforms report only the 10-minute means), 10-minute mean wind, its direction and gust at 10 m,
+    /// the rain gauge's intensity, total cloud cover (okta) and the automatic present weather (WMO 4680).
+    static let knmiParameters = [
+        "ta", "t10", "rh", "rh10", "td", "td10", "ff", "dd", "gff", "fx", "rg", "n", "nc", "ww",
+    ]
 
     /// The 10-minute observations of the stations in a box, over the last hour (a bounded interval:
     /// without one the EDR API returns everything since 2012).
@@ -311,13 +323,14 @@ extension WxStationNetworks {
             let rh = (newest("rh") ?? newest("rh10"))?.v
             let td = (newest("td") ?? newest("td10"))?.v
             let ww = newest("ww").flatMap { Int(exactly: $0.v.rounded(.towardZero)) }
+            let wind = newest("ff").flatMap { $0.v >= 0 ? $0.v * 3.6 : nil }
             let cloud = (newest("n") ?? newest("nc")).flatMap { $0.v >= 0 && $0.v <= 8 ? $0.v / 8.0 * 100.0 : nil }
             return WxStationObservation(
                 network: .knmi, id: id ?? String(format: "%.4f,%.4f", lat, lon), name: site?.name, lat: lat, lon: lon,
                 elevM: site?.elevM, obsTimeS: temp.t, tempC: temp.v, dewpC: td,
                 humidityPct: rh.flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
-                windKmh: newest("ff").flatMap { $0.v >= 0 ? $0.v * 3.6 : nil },
-                gustKmh: (newest("gff") ?? newest("fx")).flatMap { $0.v >= 0 ? $0.v * 3.6 : nil },
+                windKmh: wind, gustKmh: (newest("gff") ?? newest("fx")).flatMap { $0.v >= 0 ? $0.v * 3.6 : nil },
+                windDirDeg: keyedWindDir(newest("dd")?.v, windKmh: wind),
                 cloudPct: cloud, precipMmH: newest("rg").map { max(0.0, $0.v) },
                 condition: ww.flatMap {
                     WxPresentWeather.condition(
@@ -400,6 +413,7 @@ extension WxStationNetworks {
                 dewpC: num(r["td"]).flatMap { $0 > 180 && $0 < 330 ? celsius($0) : nil },
                 humidityPct: num(r["u"]).flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
                 windKmh: kmh("ff"), gustKmh: kmh("raf10") ?? kmh("fxi10"),
+                windDirDeg: keyedWindDir(num(r["dd"]), windKmh: kmh("ff")),
                 precipMmH: num(r["rr_per"]).map { max(0.0, $0) * 10.0 },
                 trust: core ? 1.0 : 0.85, windTrust: core ? 1.0 : 0.6)
         }
@@ -486,7 +500,10 @@ extension WxStationNetworks {
         return WxStationObservation(
             network: .metOffice, id: geohash, name: area, lat: position.lat, lon: position.lon, obsTimeS: t,
             tempC: temp, humidityPct: num(r["humidity"]).flatMap { $0 > 0 && $0 <= 100 ? $0 : nil },
-            windKmh: kmh("wind_speed"), gustKmh: kmh("wind_gust"), cloudPct: weather?.cloudPct,
+            windKmh: kmh("wind_speed"), gustKmh: kmh("wind_gust"),
+            windDirDeg: keyedWindDir(
+                str(r["wind_direction"]).flatMap(WxFormat.compassBearing), windKmh: kmh("wind_speed")),
+            cloudPct: weather?.cloudPct,
             condition: weather?.condition, reportsPresentWeather: weather != nil)
     }
 }

@@ -23,7 +23,7 @@ INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
     <key>CFBundlePackageType</key>
     <string>BNDL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.4.0</string>
+    <string>0.5.0</string>
     <key>CFBundleSignature</key>
     <string>hbwr</string>
     <key>CFBundleVersion</key>

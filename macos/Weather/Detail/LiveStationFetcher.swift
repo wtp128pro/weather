@@ -40,6 +40,9 @@ nonisolated struct LiveStationSnapshot: Sendable, Equatable {
     var windKmh: Double?
     /// Observed wind gusts in km/h.
     var gustKmh: Double?
+    /// Direction the wind blows FROM, degrees true in [0, 360): the fused stations' direction,
+    /// else Open-Meteo's current wind_direction_10m; nil when unknown or calm.
+    var windDirDeg: Double?
     /// Effective visual cloud cover (0...100%), weighted by cloud layer altitude so high
     /// thin cirrus (>= 18,000 ft) does not falsely report 100% overcast.
     var cloudPct: Double?
@@ -173,7 +176,16 @@ nonisolated struct LiveStationSnapshot: Sendable, Equatable {
             ? ", gusts " + WxFormat.wind(liveGustKmh, units: units)
             : ""
         let windString = "Wind " + WxFormat.wind(liveWindKmh, units: units) + gustPart
-            + " \u{00B7} Humidity " + WxFormat.percent(liveHumidity)
+        // Direction only from the live snapshot (the model blend has none); with a fallback speed and
+        // no live direction the dial shows the speed without an arrow.
+        let windDial = DetailViewModel.NowWind.make(
+            windKmh: liveWindKmh,
+            gustKmh: liveGustKmh,
+            directionDeg: windDirDeg,
+            units: units,
+            gustMarginKmh: 4
+        )
+        let humidityText = "Humidity " + WxFormat.percent(liveHumidity)
 
         let updatedNow = DetailViewModel.Now(
             symbolName: entry.symbolName,
@@ -189,7 +201,9 @@ nonisolated struct LiveStationSnapshot: Sendable, Equatable {
             highLow: updatedHighLow,
             wind: windString,
             conditionCode: resolvedCondition,
-            isDay: isDay
+            isDay: isDay,
+            windDial: windDial,
+            humidity: humidityText
         )
 
         // Update Clouds card with observed cloud cover, calibrated lookahead sentence, and station note.
@@ -875,6 +889,8 @@ nonisolated enum LiveStationFetcher {
             }
 
             snapshot.gustKmh = stations.gustKmh ?? omCurrent?.gustKmh
+            // Stations first, Open-Meteo as fallback; angles are never blended or averaged.
+            snapshot.windDirDeg = stations.windDirDeg ?? omCurrent?.windDirDeg
             snapshot.cloudPct = stations.cloudPct ?? omCurrent?.cloudPct
             snapshot.precipMmH = stations.precipMmH ?? omCurrent?.precipMmH
             snapshot.condition = stations.condition ?? omCurrent?.condition
@@ -900,6 +916,7 @@ nonisolated enum LiveStationFetcher {
             snapshot.humidityPct = omCurrent.humidityPct
             snapshot.windKmh = omCurrent.windKmh
             snapshot.gustKmh = omCurrent.gustKmh
+            snapshot.windDirDeg = omCurrent.windDirDeg
             snapshot.cloudPct = omCurrent.cloudPct
             snapshot.precipMmH = omCurrent.precipMmH
             snapshot.condition = omCurrent.condition
@@ -1000,6 +1017,7 @@ nonisolated enum LiveStationFetcher {
         var humidityPct: Double?
         var windKmh: Double?
         var gustKmh: Double?
+        var windDirDeg: Double?
         var cloudPct: Double?
         var upperCloudPct: Double?
         var precipMmH: Double?
@@ -1026,6 +1044,7 @@ nonisolated enum LiveStationFetcher {
             let cloud_cover_high: Double?
             let wind_speed_10m: Double?
             let wind_gusts_10m: Double?
+            let wind_direction_10m: Double?
         }
         struct Hourly: Decodable {
             let time: [Int64]?
@@ -1046,7 +1065,7 @@ nonisolated enum LiveStationFetcher {
 
     private static func fetchOpenMeteoCurrent(lat: Double, lon: Double) async -> OpenMeteoCurrentSnapshot? {
         let urlStr = String(
-            format: "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation&minutely_15=precipitation&forecast_days=2&forecast_minutely_15=9&timeformat=unixtime",
+            format: "https://api.open-meteo.com/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,wind_speed_10m,wind_gusts_10m,wind_direction_10m&hourly=cloud_cover_low,cloud_cover_mid,cloud_cover_high,precipitation&minutely_15=precipitation&forecast_days=2&forecast_minutely_15=9&timeformat=unixtime",
             lat, lon
         )
         // Through StationHTTP like every live request: a bounded wait, a short cache, the app's
@@ -1142,6 +1161,7 @@ nonisolated enum LiveStationFetcher {
                 humidityPct: cur.relative_humidity_2m,
                 windKmh: cur.wind_speed_10m,
                 gustKmh: cur.wind_gusts_10m,
+                windDirDeg: cur.wind_direction_10m,
                 cloudPct: effectiveCloud,
                 upperCloudPct: upperCloud,
                 precipMmH: precipMmH,

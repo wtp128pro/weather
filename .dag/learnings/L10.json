@@ -1,0 +1,15 @@
+{
+  "id": "L10",
+  "trigger": "U09 critique and verification (wave 3): renders at 3 widths (480/700/1000) passed the height check while 560-580 pt grew +20 pt and pills hyphenated at 600 pt.",
+  "lesson": "Layout acceptance checks sampled at a few widths miss bad bands between ViewThatFits tiers.",
+  "how_to_apply": "Require before/after renders as a sweep (e.g. every 20 pt across the supported width range, both backgrounds) and a check that reads every pair present.",
+  "scope": {
+    "applies_to": [
+      "all"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-27_110036_wind-compass-graphic units/U09/critique.md, tools/height_check.py",
+  "since_wave": 1,
+  "promotable": true
+}

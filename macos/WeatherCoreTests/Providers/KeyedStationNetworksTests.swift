@@ -39,16 +39,19 @@ import Testing
         #expect(schiphol.tempC == 12.3 && schiphol.humidityPct == 55 && schiphol.dewpC == 3.5)
         #expect(Self.near(schiphol.windKmh, 11.88 * 3.6) && Self.near(schiphol.gustKmh, 16.25 * 3.6))
         #expect(schiphol.cloudPct == 87.5)  // 7 okta
+        #expect(schiphol.windDirDeg == 0)  // dd 360 is north
         #expect(schiphol.elevM == -3.87 && schiphol.lat == 52.3172 && schiphol.lon == 4.7897)
         #expect(schiphol.reportsPresentWeather && schiphol.condition == nil)  // wawa 1: no weather
         #expect(schiphol.cloudIsCeilometerLimited)
         let deBilt = try #require(obs.first { $0.id == "0-20000-0-06260" })
         #expect(deBilt.condition == .showers)  // wawa 81
         #expect(deBilt.precipMmH == 0.534 && deBilt.cloudPct == 100)
+        #expect(deBilt.windDirDeg == nil && Self.near(deBilt.windKmh, 5.32 * 3.6))  // no dd range
         // without the station list: the position comes from the coverage, no name
         let bare = WxStationNetworks.parseKNMICoverage(try Self.fixture("stations-knmi-cube.json"), stations: [:])
         let voorschoten = try #require(bare.first { $0.id == "0-20000-0-06215" })
         #expect(voorschoten.name == nil && voorschoten.lat == 52.1397 && voorschoten.tempC == 12.0)
+        #expect(voorschoten.windDirDeg == 250)  // the newest dd, beside the newest ff
         #expect(WxStationNetworks.parseKNMICoverage(Data("{}".utf8), stations: [:]).isEmpty)
     }
 
@@ -59,7 +62,7 @@ import Testing
             "https://api.dataplatform.knmi.nl/edr/v1/collections/10-minute-in-situ-meteorological-observations/cube?"))
         #expect(url.contains("bbox=4.400,52.000,5.300,52.700"))
         #expect(url.contains("datetime=2026-10-25T20:10:00Z/2026-10-25T21:20:00Z"))
-        #expect(url.contains("parameter-name=ta,t10,rh,rh10,td,td10,ff,gff,fx,rg,n,nc,ww"))
+        #expect(url.contains("parameter-name=ta,t10,rh,rh10,td,td10,ff,dd,gff,fx,rg,n,nc,ww"))
     }
 
     // MARK: - Met Office
@@ -76,6 +79,7 @@ import Testing
         #expect(exeter.obsTimeS == 1_785_614_400)  // the newest of 48 hours, 2026-08-01T20:00Z
         #expect(exeter.tempC == 16.83 && exeter.humidityPct == 55)
         #expect(Self.near(exeter.windKmh, 2.7 * 3.6) && Self.near(exeter.gustKmh, 6.3 * 3.6))
+        #expect(exeter.windDirDeg == 292.5)  // "WNW"
         #expect(exeter.condition == nil && exeter.cloudPct == 5 && exeter.reportsPresentWeather)  // 0: clear night
         #expect(Self.near(exeter.lat, 50.73760986328125) && Self.near(exeter.lon, -3.4002685546875))
         #expect(exeter.elevM == nil && exeter.dewpC == nil)  // the DEM fills the elevation
@@ -124,6 +128,16 @@ import Testing
         #expect(retiro.obsTimeS == 1_787_655_600 && retiro.tempC == 23.6 && retiro.dewpC == 12.8)
         #expect(retiro.humidityPct == 51 && Self.near(retiro.windKmh, 3.8 * 3.6) && Self.near(retiro.gustKmh, 9.0 * 3.6))
         #expect(retiro.precipMmH == 0)
+        #expect(retiro.windDirDeg == 238)  // dv, the mean's direction; not dmax 246
+        #expect(obs.first { $0.id == "3194Y" }?.windDirDeg == nil)  // no vv, no dv
+        // dv pairs with vv only: a record with the ultrasonic vvu and a dv but no vv keeps
+        // its speed and gets no direction (synthetic record in the recorded payload's keys)
+        let ultrasonic = WxStationNetworks.parseAEMET(Data(#"""
+            [{"idema": "9999U", "lon": -3.677778, "fint": "2026-08-25T11:00:00+0000", "lat": 40.411389,
+              "ubi": "TEST VVU ONLY", "ta": 23.6, "vvu": 4.0, "dv": 120.0, "vmaxu": 9.0}]
+            """#.utf8))
+        #expect(ultrasonic.count == 1 && Self.near(ultrasonic.first?.windKmh, 4.0 * 3.6))
+        #expect(ultrasonic.first?.windDirDeg == nil)  // not 120: vvu is not dv's paired speed
         // the newest of a station's hours, wherever it is in the list
         let fuente = try #require(obs.first { $0.id == "2517A" })
         #expect(fuente.obsTimeS == 1_747_098_000 && fuente.tempC == 8.8 && fuente.humidityPct == 95)
@@ -150,8 +164,12 @@ import Testing
         #expect(Self.near(aigoual.tempC, 10.2) && Self.near(aigoual.dewpC, 10.2) && aigoual.humidityPct == 100)
         #expect(Self.near(aigoual.windKmh, 14.1 * 3.6) && Self.near(aigoual.gustKmh, 20.2 * 3.6))
         #expect(aigoual.trust == 1 && aigoual.windTrust == 1)
+        #expect(aigoual.windDirDeg == 320)
+        // dd 350 is the mean wind's direction, ddraf10 330 the gust's
+        #expect(obs.first { $0.id == "97402240" }?.windDirDeg == 350)
         let tevelave = try #require(obs.first { $0.id == "97401520" })  // temperature and rain only
         #expect(Self.near(tevelave.tempC, 19.9) && tevelave.dewpC == nil && tevelave.windKmh == nil)
+        #expect(tevelave.windDirDeg == nil)
         #expect(tevelave.obsTimeS == 1_792_646_280 && tevelave.precipMmH == 0)
         #expect(tevelave.trust == 0.85 && tevelave.windTrust == 0.6)  // extended network
         let gillot = try #require(obs.first { $0.id == "97418110" })
@@ -175,7 +193,7 @@ import Testing
         let blindern = try #require(obs.first { $0.id == "SN18700" })
         #expect(blindern.tempC == 0.4)  // 2 m, not 10 m; not the parallel sensor's 9.9
         #expect(blindern.obsTimeS == 1_740_554_220 && blindern.humidityPct == 88 && blindern.dewpC == -1.2)
-        #expect(Self.near(blindern.windKmh, 2.4 * 3.6))
+        #expect(Self.near(blindern.windKmh, 2.4 * 3.6) && blindern.windDirDeg == 210)
         #expect(Self.near(blindern.gustKmh, 4.1 * 3.6))  // the 10-minute gust is newer than the hourly one
         #expect(Self.near(blindern.precipMmH, 0.2 * 6))
         #expect(blindern.trust == 1 && blindern.windTrust == 1)
@@ -187,6 +205,56 @@ import Testing
         let url = WxStationNetworks.frostObservationsURL(stationIDs: ["SN18700", "SN18815"])
         #expect(url.contains("sources=SN18700,SN18815&referencetime=latest&maxage=PT3H"))
         #expect(url.contains("max(wind_speed_of_gust%20PT10M)") && !url.contains(" "))
+        #expect(url.contains("wind_speed,wind_from_direction,"))
+    }
+
+    /// A station without the wind_from_direction element parses as before, with no direction.
+    @Test func frostWithoutDirection() throws {
+        let sites = WxStationNetworks.parseFrostSources(try Self.fixture("stations-frost-sources.json"))
+        let byID = Dictionary(sites.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let fixture = try Self.fixture("stations-frost-obs.json")
+        var root = try #require(try JSONSerialization.jsonObject(with: fixture) as? [String: Any])
+        root["data"] = (root["data"] as? [[String: Any]])?.map { item in
+            var item = item
+            item["observations"] = (item["observations"] as? [[String: Any]])?.filter {
+                $0["elementId"] as? String != "wind_from_direction"
+            }
+            return item
+        }
+        let data = try JSONSerialization.data(withJSONObject: root)
+        let blindern = try #require(WxStationNetworks.parseFrostObservations(data, sites: byID).first {
+            $0.id == "SN18700"
+        })
+        #expect(blindern.windDirDeg == nil && Self.near(blindern.windKmh, 2.4 * 3.6) && blindern.tempC == 0.4)
+    }
+
+    /// Met Office's own calm hours report "N" beside 0 m/s; an unknown word is no direction.
+    @Test func metOfficeCalmAndUnknownWords() {
+        func obs(_ speed: String, _ word: String) -> WxStationObservation? {
+            WxStationNetworks.parseMetOfficeStation(Data("""
+                [{"datetime": "2026-08-01T02:00:00Z", "wind_gust": 2.5, "mslp": 1021, "wind_speed": \(speed), \
+                "wind_direction": "\(word)", "weather_code": 0, "humidity": 83, "temperature": 9.25}]
+                """.utf8), geohash: "gcj8ds", area: nil)
+        }
+        #expect(obs("0.0", "N")?.windDirDeg == nil)  // calm
+        #expect(obs("1.3", "N")?.windDirDeg == 0 && obs("1.3", "nnw")?.windDirDeg == 337.5)
+        #expect(obs("1.3", "VRB")?.windDirDeg == nil && obs("1.3", "CALM")?.windDirDeg == nil)
+        #expect(obs("1.3", "")?.windDirDeg == nil && obs("1.3", "NORTH")?.windDirDeg == nil)
+    }
+
+    /// The uniform rule of every keyed parser: no direction beside a calm or unknown speed, none
+    /// outside 0...360, and 360 is north.
+    @Test func keyedWindDirRule() {
+        #expect(WxStationNetworks.keyedWindDir(200, windKmh: 0) == nil)
+        #expect(WxStationNetworks.keyedWindDir(200, windKmh: nil) == nil)
+        #expect(WxStationNetworks.keyedWindDir(nil, windKmh: 10) == nil)
+        #expect(WxStationNetworks.keyedWindDir(-1, windKmh: 10) == nil)
+        #expect(WxStationNetworks.keyedWindDir(361, windKmh: 10) == nil)
+        #expect(WxStationNetworks.keyedWindDir(360, windKmh: 10) == 0)
+        #expect(WxStationNetworks.keyedWindDir(0, windKmh: 10) == 0)
+        #expect(WxStationNetworks.keyedWindDir(359.5, windKmh: 10) == 359.5)
+        // non-numeric vendor values never become a direction
+        #expect(WxStationNetworks.keyedWindDir(WxStationNetworks.num("VRB"), windKmh: 10) == nil)
     }
 
     // MARK: - Keys, credits, coverage

@@ -1220,7 +1220,7 @@
    "properties": {
     "parameterId": "wind_dir",
     "created": "2026-10-25T20:01:28.136149Z",
-    "value": 238.1,
+    "value": 360.0,
     "observed": "2026-10-25T20:00:00Z",
     "stationId": "06181"
    }

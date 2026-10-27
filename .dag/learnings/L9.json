@@ -1,0 +1,15 @@
+{
+  "id": "L9",
+  "trigger": "U04 verifier report (wave 2): it sent the user's email from the session context in a User-Agent header to api.weather.gov while re-opening a vendor source.",
+  "lesson": "Verifier/executor subagents told to 're-open a vendor source' may fill an API's contact-info User-Agent with the user's email from session context.",
+  "how_to_apply": "Put an explicit privacy rule in every guide/brief that sends agents to external APIs: generic User-Agent, no personal data in URLs/headers/payloads; grep run artifacts for the address afterwards.",
+  "scope": {
+    "applies_to": [
+      "all"
+    ],
+    "expiry": "project"
+  },
+  "evidence": "run 2026-10-27_110036_wind-compass-graphic DECISIONS.md D8",
+  "since_wave": 1,
+  "promotable": true
+}

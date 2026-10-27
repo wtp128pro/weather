@@ -220,4 +220,32 @@ import Testing
         #expect(WxStationCatalog.load(path: path) == c)
         #expect(WxStationCatalog.load(path: dir.appending("missing.json").path).records.isEmpty)
     }
+
+    @Test func oldCatalogWithoutWindDirectionStillLoads() throws {
+        let dir = try TemporaryDirectory("station-catalog-wind")
+        let path = dir.appending("stations.json").path
+        var o = Self.obs("A", .dmi, t: Self.nightS)
+        o.windKmh = 12
+        o.windDirDeg = 250
+        var c = WxStationCatalog()
+        c.recordFetch([o], coverage: Self.coverage(.dmi), nowS: Self.nightS)
+        c.save(path: path)
+        #expect(WxStationCatalog.load(path: path).records["dmi:A"]?.lastObservation?.windDirDeg == 250)
+        // a file written before windDirDeg existed: strip the key everywhere and reload
+        func strip(_ x: Any) -> Any {
+            if let d = x as? [String: Any] {
+                return d.filter { $0.key != "windDirDeg" }.mapValues(strip)
+            }
+            if let a = x as? [Any] { return a.map(strip) }
+            return x
+        }
+        let json = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path)))
+        let old = try JSONSerialization.data(withJSONObject: strip(json))
+        #expect(!String(decoding: old, as: UTF8.self).contains("windDirDeg"))
+        try old.write(to: URL(fileURLWithPath: path))
+        let loaded = WxStationCatalog.load(path: path)
+        let obs = try #require(loaded.records["dmi:A"]?.lastObservation)
+        #expect(obs.windDirDeg == nil)
+        #expect(obs.windKmh == 12)
+    }
 }

@@ -629,7 +629,7 @@ import Testing
     @Test func aboutFieldsVerbatim() throws {
         // C: /window/sources/about-dialog (show_about, src/ui/wx-window.c:672-678)
         #expect(AboutInfo.programName == "Neginato Mezora")  // wx-window.c:672
-        #expect(AboutInfo.version == "0.4.0")  // MARKETING_VERSION (C: WX_APP_VERSION, src/ui/meson.build:52)
+        #expect(AboutInfo.version == "0.5.0")  // MARKETING_VERSION (C: WX_APP_VERSION, src/ui/meson.build:52)
         #expect(AboutInfo.comments
                 == "Weather forecasts from several free sources, with the rain you can expect and when.")  // wx-window.c:673-675
         #expect(Array(AboutInfo.copyright.utf8)

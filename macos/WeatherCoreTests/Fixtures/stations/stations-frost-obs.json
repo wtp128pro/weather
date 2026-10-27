@@ -72,6 +72,22 @@
      }
     },
     {
+     "elementId": "wind_from_direction",
+     "value": 210,
+     "unit": "degrees",
+     "timeOffset": "PT0H",
+     "timeResolution": "PT10M",
+     "timeSeriesId": 0,
+     "performanceCategory": "C",
+     "exposureCategory": "1",
+     "qualityCode": 2,
+     "level": {
+      "levelType": "height_above_ground",
+      "unit": "m",
+      "value": 10
+     }
+    },
+    {
      "elementId": "max(wind_speed_of_gust PT10M)",
      "value": 4.1,
      "unit": "m/s",

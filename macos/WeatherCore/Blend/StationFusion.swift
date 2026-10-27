@@ -99,6 +99,8 @@ public struct WxStationObservation: Sendable, Equatable, Codable {
     public var humidityPct: Double?
     public var windKmh: Double?
     public var gustKmh: Double?
+    /// Direction the wind blows FROM, degrees true in [0, 360); nil when unreported, variable or calm.
+    public var windDirDeg: Double?
     /// Observed cloud cover, %. For a ceilometer-limited report this is the cover below ~12,000 ft.
     public var cloudPct: Double?
     /// Precipitation rate, mm/h.
@@ -125,6 +127,7 @@ public struct WxStationObservation: Sendable, Equatable, Codable {
         network: WxStationNetwork, id: String, name: String? = nil, lat: Double, lon: Double,
         elevM: Double? = nil, obsTimeS: Int64? = nil, tempC: Double, dewpC: Double? = nil,
         humidityPct: Double? = nil, windKmh: Double? = nil, gustKmh: Double? = nil,
+        windDirDeg: Double? = nil,
         cloudPct: Double? = nil, precipMmH: Double? = nil, wxString: String? = nil,
         condition: WxCondition? = nil, reportsPresentWeather: Bool? = nil,
         cloudIsCeilometerLimited: Bool? = nil, trust: Double = 1.0, windTrust: Double? = nil
@@ -141,6 +144,7 @@ public struct WxStationObservation: Sendable, Equatable, Codable {
         self.humidityPct = humidityPct
         self.windKmh = windKmh
         self.gustKmh = gustKmh
+        self.windDirDeg = windDirDeg
         self.cloudPct = cloudPct
         self.precipMmH = precipMmH
         self.wxString = wxString
@@ -158,6 +162,9 @@ public struct WxStationBlend: Sendable, Equatable {
     public var humidityPct: Double?
     public var windKmh: Double?
     public var gustKmh: Double?
+    /// Speed-weighted circular (u/v) mean of the stations' FROM directions, degrees in [0, 360);
+    /// nil when no station reports one, the wind is calm, or the directions cancel out.
+    public var windDirDeg: Double?
     public var cloudPct: Double?
     public var precipMmH: Double?
     public var condition: WxCondition?
@@ -210,6 +217,10 @@ public enum WxStationFusion {
     static let tauSkyS = 900.0
     /// Gust excess (RMS over the pool) below this is not reported as a gust, km/h.
     static let minGustExcessKmh = 3.5
+    /// A fused wind direction needs a weighted resultant of at least this, km/h (calm otherwise)…
+    static let minDirResultantKmh = 1.0
+    /// …and at least this fraction of the weighted mean speed (else the directions cancel out).
+    static let minDirSteadiness = 0.25
 
     // MARK: - Search geometry
 
@@ -268,6 +279,7 @@ public enum WxStationFusion {
             if site.windKmh == nil, let wind = obs.windKmh {
                 site.windKmh = wind
                 site.gustKmh = obs.gustKmh
+                site.windDirDeg = obs.windDirDeg  // speed and direction always from one report
                 site.windTrust = obs.windTrust
             }
             site.precipMmH = site.precipMmH ?? obs.precipMmH
@@ -418,6 +430,9 @@ public enum WxStationFusion {
 
         var temp = Accumulator(), dewp = Accumulator(), wind = Accumulator()
         var gustExcessSq = Accumulator(), cloud = Accumulator(), precip = Accumulator()
+        // FROM-direction vector components and the speed of the stations that report a direction,
+        // all with the wind weight; directionless stations stay out so they cannot bias it.
+        var windU = Accumulator(), windV = Accumulator(), dirSpeed = Accumulator()
         var dist = Accumulator(), age = Accumulator()
         for c in pool {
             let w = c.spatialWeight
@@ -435,6 +450,16 @@ public enum WxStationFusion {
                 wind.add(v, wWind)
                 if let g = c.obs.gustKmh, g.isFinite, g > v {
                     gustExcessSq.add((g - v) * (g - v), wWind)
+                }
+                if v == 0 {  // calm is a zero vector (D6): its weight counts, it adds no u/v
+                    windU.add(0, wWind)
+                    windV.add(0, wWind)
+                    dirSpeed.add(0, wWind)
+                } else if let d = c.obs.windDirDeg, d.isFinite, d >= 0, d <= 360 {
+                    let rad = d * .pi / 180.0
+                    windU.add(v * sin(rad), wWind)
+                    windV.add(v * cos(rad), wWind)
+                    dirSpeed.add(v, wWind)
                 }
             }
             if let raw = c.obs.cloudPct, raw.isFinite {
@@ -455,6 +480,7 @@ public enum WxStationFusion {
             let excess = sqrt(sq)
             return excess >= minGustExcessKmh ? u + excess : nil
         }()
+        let windDirDeg = circularMeanDeg(u: windU.mean, v: windV.mean, meanSpeed: dirSpeed.mean)
         let cloudPct = cloud.mean
         var precipMmH = precip.mean
 
@@ -488,7 +514,7 @@ public enum WxStationFusion {
         }
 
         return WxStationBlend(
-            tempC: tempC, humidityPct: humidity, windKmh: windKmh, gustKmh: gustKmh,
+            tempC: tempC, humidityPct: humidity, windKmh: windKmh, gustKmh: gustKmh, windDirDeg: windDirDeg,
             cloudPct: cloudPct, precipMmH: precipMmH, condition: condition,
             stationID: nearest.obs.id, stationName: nearest.obs.name, stationDistanceKm: nearest.distKm,
             effectiveDistanceKm: dist.mean ?? nearest.distKm,
@@ -628,6 +654,20 @@ public enum WxStationFusion {
         let s = values.sorted()
         let mid = s.count / 2
         return s.count % 2 == 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2.0
+    }
+
+    /// The direction of a mean FROM-vector (ū = mean of speed·sin, v̄ = mean of speed·cos), degrees
+    /// in [0, 360); nil when calm (resultant < minDirResultantKmh) or when the directions are too
+    /// spread or opposed (resultant < minDirSteadiness × mean speed). Never an average of degrees.
+    static func circularMeanDeg(u: Double?, v: Double?, meanSpeed: Double?) -> Double? {
+        guard let u, let v, let meanSpeed else { return nil }
+        let resultant = (u * u + v * v).squareRoot()
+        guard resultant.isFinite, resultant >= minDirResultantKmh,
+              resultant >= minDirSteadiness * meanSpeed else { return nil }
+        var deg = atan2(u, v) * 180.0 / .pi
+        if deg < 0 { deg += 360.0 }
+        // -1e-15 + 360 rounds to 360, and atan2 may give -0.0: both are north, 0.
+        return deg >= 360.0 || deg == 0 ? 0 : deg
     }
 
     /// A weighted mean that ignores non-positive weights.

@@ -29,13 +29,13 @@ import Testing
         _ network: WxStationNetwork = .metar, id: String, km: Double, bearing: Double = 0,
         tempC: Double, ageS: Int64 = 0, nowS: Int64 = nightS, elevM: Double? = nil,
         dewpC: Double? = nil, humidityPct: Double? = nil, windKmh: Double? = nil, gustKmh: Double? = nil,
-        cloudPct: Double? = nil, precipMmH: Double? = nil, wx: String? = nil, condition: WxCondition? = nil
+        windDirDeg: Double? = nil, cloudPct: Double? = nil, precipMmH: Double? = nil, wx: String? = nil, condition: WxCondition? = nil
     ) -> WxStationObservation {
         let p = offset(km, bearing)
         return WxStationObservation(
             network: network, id: id, name: id, lat: p.lat, lon: p.lon, elevM: elevM, obsTimeS: nowS - ageS,
             tempC: tempC, dewpC: dewpC, humidityPct: humidityPct, windKmh: windKmh, gustKmh: gustKmh,
-            cloudPct: cloudPct, precipMmH: precipMmH, wxString: wx, condition: condition)
+            windDirDeg: windDirDeg, cloudPct: cloudPct, precipMmH: precipMmH, wxString: wx, condition: condition)
     }
 
     static func blend(
@@ -299,5 +299,98 @@ import Testing
         #expect(abs(b.tempC - 16.9) < 0.1)
         #expect(b.effectiveAgeS < 600)
         #expect(b.condition == .partlyCloudy)  // the METAR reported no weather; its sky decides
+    }
+
+    // MARK: - Wind direction (speed-weighted circular mean)
+
+    /// Smallest angle between two bearings, degrees in [0, 180].
+    static func angDiff(_ a: Double, _ b: Double) -> Double {
+        let d = abs((a - b).truncatingRemainder(dividingBy: 360))
+        return min(d, 360 - d)
+    }
+
+    /// Two equally weighted METARs 5 km east and west of the target.
+    static func pair(_ a: (Double?, Double?), _ b: (Double?, Double?)) -> WxStationBlend? {
+        blend([obs(id: "E", km: 5, bearing: 90, tempC: 10, windKmh: a.0, windDirDeg: a.1),
+               obs(id: "W", km: 5, bearing: 270, tempC: 10, windKmh: b.0, windDirDeg: b.1)])
+    }
+
+    @Test func directionWrapsAroundNorth() throws {
+        // 350° and 10° are both northerlies: the mean is 0°, never the arithmetic 180°
+        let d = try #require(Self.pair((20, 350), (20, 10))?.windDirDeg)
+        #expect(Self.angDiff(d, 0) < 0.5)
+        #expect(d >= 0 && d < 360)
+        let d2 = try #require(Self.pair((20, 300), (20, 60))?.windDirDeg)
+        #expect(Self.angDiff(d2, 0) < 0.5)
+        #expect(Self.angDiff(d2, 180) > 179)
+    }
+
+    @Test func directionIsSpeedWeighted() throws {
+        // u = 20·sin(-10°) + 10·sin(10°), v = 30·cos(10°): atan2 gives -3.36°, i.e. 356.64°
+        let d = try #require(Self.pair((20, 350), (10, 10))?.windDirDeg)
+        #expect(abs(d - 356.64) < 0.1)
+    }
+
+    @Test func opposingOrSpreadWindsHaveNoDirection() throws {
+        let opposing = try #require(Self.pair((15, 90), (15, 270)))
+        #expect(opposing.windDirDeg == nil)
+        #expect(opposing.windKmh != nil)  // the speed is still fused
+        // three equal winds 120° apart cancel as well
+        let spread = try #require(Self.blend([
+            Self.obs(id: "A", km: 5, bearing: 0, tempC: 10, windKmh: 15, windDirDeg: 0),
+            Self.obs(id: "B", km: 5, bearing: 120, tempC: 10, windKmh: 15, windDirDeg: 120),
+            Self.obs(id: "C", km: 5, bearing: 240, tempC: 10, windKmh: 15, windDirDeg: 240),
+        ]))
+        #expect(spread.windDirDeg == nil)
+    }
+
+    @Test func calmHasNoDirection() throws {
+        #expect(try #require(Self.pair((0, 0), (0, 0))).windDirDeg == nil)
+        // a resultant below 1 km/h is calm even when the directions agree
+        #expect(try #require(Self.pair((0.6, 90), (0.6, 90))).windDirDeg == nil)
+        #expect(try #require(Self.pair((5, 90), (5, 90))).windDirDeg.map { Self.angDiff($0, 90) < 0.5 } == true)
+    }
+
+    @Test func mostlyCalmPoolHasNoDirection() throws {
+        // calm reports are zero vectors: 3 km/h from 200° among three calm sites is a 0.75 km/h resultant
+        let o = try #require(Self.blend([
+            Self.obs(id: "A", km: 5, bearing: 0, tempC: 10, windKmh: 3, windDirDeg: 200),
+            Self.obs(id: "B", km: 5, bearing: 90, tempC: 10, windKmh: 0),
+            Self.obs(id: "C", km: 5, bearing: 180, tempC: 10, windKmh: 0),
+            Self.obs(id: "D", km: 5, bearing: 270, tempC: 10, windKmh: 0),
+        ]))
+        #expect(o.windDirDeg == nil)
+        #expect(o.windKmh.map { $0 > 0 && $0 < 1 } == true)  // speed is still fused (about 0.75)
+    }
+
+    @Test func directionOnlyFromStationsThatReportOne() throws {
+        let none = try #require(Self.pair((15, nil), (25, nil)))
+        #expect(none.windDirDeg == nil)
+        #expect(none.windKmh != nil)
+        // a faster station without direction neither biases nor dilutes the one bearing
+        let one = try #require(Self.pair((10, 200), (40, nil)))
+        #expect(one.windDirDeg.map { Self.angDiff($0, 200) < 0.01 } == true)
+        // a direction without a speed, or an invalid one, is not used
+        #expect(try #require(Self.pair((nil, 200), (15, nil))).windDirDeg == nil)
+        #expect(try #require(Self.pair((15, -1), (15, .nan))).windDirDeg == nil)
+        #expect(try #require(Self.pair((15, 360), (15, nil))).windDirDeg == 0)
+    }
+
+    @Test func sameSiteMergeTakesSpeedAndDirectionTogether() {
+        let old = Self.obs(id: "OLD", km: 5, tempC: 10, ageS: 1200, windKmh: 20, gustKmh: 35, windDirDeg: 90)
+        let fresh = Self.obs(.iemMesonet, id: "NEW", km: 5.2, tempC: 10.5, windKmh: 10)
+        let m = WxStationFusion.mergeSameSite([old, fresh], nowS: Self.nightS)
+        #expect(m.count == 1 && m[0].windKmh == 10 && m[0].windDirDeg == nil)
+        let freshNoWind = Self.obs(.iemMesonet, id: "NEW", km: 5.2, tempC: 10.5)
+        let m2 = WxStationFusion.mergeSameSite([freshNoWind, old], nowS: Self.nightS)
+        #expect(m2.count == 1 && m2[0].windKmh == 20 && m2[0].gustKmh == 35 && m2[0].windDirDeg == 90)
+    }
+
+    @Test func circularMeanNormalisesToZeroThroughThreeSixty() {
+        #expect(WxStationFusion.circularMeanDeg(u: -0.0, v: 10, meanSpeed: 10) == 0)
+        #expect(WxStationFusion.circularMeanDeg(u: -1e-15, v: 10, meanSpeed: 10) == 0)
+        #expect(WxStationFusion.circularMeanDeg(u: -10, v: 0, meanSpeed: 10) == 270)
+        #expect(WxStationFusion.circularMeanDeg(u: nil, v: nil, meanSpeed: nil) == nil)
+        #expect(WxStationFusion.circularMeanDeg(u: 2, v: 0, meanSpeed: 10) == nil)  // 20% < 25%
     }
 }
