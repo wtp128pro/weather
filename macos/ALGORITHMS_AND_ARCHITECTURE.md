@@ -428,7 +428,17 @@ For observation age $\Delta t_i$ (a report without a time counts as $20\text{ mi
 W_{\text{time},i}^{(\text{var})} = \exp\!\left(-\frac{\Delta t_i}{\tau_{\text{var}}}\right), \qquad \tau_{\text{temp}} = 2700\text{ s},\quad \tau_{\text{wind}} = 1200\text{ s},\quad \tau_{\text{sky/precip}} = 900\text{ s}
 ```
 
-Wind is further weighted by $\text{windTrust}_i / \text{trust}_i$ (many road-weather and hydrological sites measure wind well below 10 m). The gust is the mean wind plus the weighted RMS gust excess, reported only when that excess is at least $3.5\text{ km/h}$. Present weather comes from the nearest site that codes weather, within $38\text{ km}$ and $90\text{ min}$ (its "no weather" counts; sites that never code weather are skipped). An automated station's ceilometer sees only low cloud: its "mostly clear" report ($`< 25\%`$) under substantial model cloud aloft ($`> 30\%`$) is combined with that cloud by random overlap (§8.1).
+Wind is further weighted by $\text{windTrust}_i / \text{trust}_i$ (many road-weather and hydrological sites measure wind well below 10 m). The gust is the mean wind plus the weighted RMS gust excess, reported only when that excess is at least $3.5\text{ km/h}$. Wind direction is fused as a vector, never as an average of degrees (§6.4.1 below). Present weather comes from the nearest site that codes weather, within $38\text{ km}$ and $90\text{ min}$ (its "no weather" counts; sites that never code weather are skipped). An automated station's ceilometer sees only low cloud: its "mostly clear" report ($`< 25\%`$) under substantial model cloud aloft ($`> 30\%`$) is combined with that cloud by random overlap (§8.1).
+
+#### 6.4.1 Wind Direction as a Speed-Weighted Vector Mean
+
+Each report with speed $V_i > 0$ and a direction $\theta_i$ (the bearing the wind blows **from**) contributes the vector $V_i(\sin\theta_i, \cos\theta_i)$ with the wind weight $w_i$ above. A calm report ($V_i = 0$) is a zero vector whose weight still counts; a moving report without a direction is left out. With $\bar u$, $\bar v$ and $\bar V$ the weighted means of $V_i\sin\theta_i$, $V_i\cos\theta_i$ and $V_i$ over those reports:
+
+```math
+\theta = \mathrm{atan2}(\bar u, \bar v) \bmod 360^\circ, \qquad R = \sqrt{\bar u^2 + \bar v^2}
+```
+
+$\theta$ is reported only when $R \ge 1\text{ km/h}$ (otherwise the air is calm) and $`R \ge 0.25\,\bar V`$ (otherwise the directions are too spread or opposed), so $350^\circ$ and $10^\circ$ fuse to $0^\circ$, never $180^\circ$. A site's speed and direction always come from the same report (the same-site merge copies them together), and each network's direction is read from the same averaging window as its speed. In the "now" card the stations' direction falls back to Open-Meteo's current `wind_direction_10m`; with neither, no arrow is drawn. Directions stay out of the hourly forecast blend and its cache.
 
 ### 6.5 Robust Buddy Check (Median Absolute Deviation)
 

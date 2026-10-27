@@ -9,8 +9,8 @@
 //    GeoSphere Austria and MeteoSwiss in Europe), tested against each other (leave-one-out
 //    cross-validation into the persistent station catalog's health) and blended by
 //    WxStationFusion (WeatherCore) with the same 3D anisotropic kernel, Shepard de-clustering
-//    and MAD buddy check in every country. Fuses temperature, dewpoint/humidity, wind speed &
-//    gusts, altitude-weighted cloud cover, present weather (rain, thunderstorm, snow, fog,
+//    and MAD buddy check in every country. Fuses temperature, dewpoint/humidity, wind speed,
+//    direction (a vector mean) & gusts, altitude-weighted cloud cover, present weather (rain, thunderstorm, snow, fog,
 //    drizzle) and precipitation rate. A close, fresh blend also teaches the place's local
 //    forecast bias (WxLocalBias, through AppModel).
 // 2. US EPA AirNow / State DEP ArcGIS FeatureServer (services.arcgis.com/cJ9YHowT8TU7DUyn):

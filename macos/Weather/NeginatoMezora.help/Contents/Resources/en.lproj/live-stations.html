@@ -84,6 +84,7 @@ W          = W_horiz(d) * W_vert(Δz) * trust * health</code></pre>
 <ul>
     <li><strong>Angular de-clustering (Shepard, 1968):</strong> stations clustered along the same compass bearing from the place share an angular shadow penalty <code>W_dir = 1 / (1 + shadow)</code>, so one dense cluster cannot outvote the other directions.</li>
     <li><strong>Freshness:</strong> weights decay with the age of the report, with time constants of 45 minutes for temperature, 20 minutes for wind and 15 minutes for the weather.</li>
+    <li><strong>Wind direction:</strong> averaged as a vector, never as a number of degrees: each station adds its speed in the direction the wind comes from, calm stations count as zero, and stations that report no direction are left out. No direction is given when the result is under 1 km/h or under a quarter of the mean speed (winds too spread or opposed); the "now" card then uses Open-Meteo's current direction, or draws no arrow.</li>
     <li><strong>Outlier control (Rousseeuw &amp; Croux, 1993):</strong> when at least 3 stations report, a sensor more than <code>3σ</code> from the median (σ = 1.4826 × MAD, at least 1.5 °C) is down-weighted by <code>(3σ / r)²</code>, so real contrasts of up to 4.5 °C are never penalised.</li>
     <li><strong>Short-range bias decay (Glahn &amp; Lowry, 1972):</strong> the observed temperature difference from the forecast fades out over the first 6 forecast hours: <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
 </ul>

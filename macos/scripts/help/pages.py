@@ -449,7 +449,7 @@ PAGE_BODIES: dict[str, str] = {
     <li>Paste the key in Settings › Stations › Met Office and click Save.</li>
 </ol>
 <ul>
-    <li><strong>You get:</strong> hourly reports of about 150 UK land stations: temperature, humidity, wind and gusts, and the Met Office weather type (which also gives the condition and cloud). The service names stations by area, so a station shows as, for example, "Leeds".</li>
+    <li><strong>You get:</strong> hourly reports of about 150 UK land stations: temperature, humidity, wind (speed and direction) and gusts, and the Met Office weather type (which also gives the condition and cloud). The service names stations by area, so a station shows as, for example, "Leeds".</li>
     <li><strong>Limits:</strong> the free plan allows <strong>360 calls a day</strong> (reset at 00:00 UTC). The app reads at most the 3 nearest stations of a place, each at most once an hour, and looks up which stations are nearest once a week; places close together share stations. A handful of UK places far apart fit in the limit; with more, the limit can be reached late in the day (orange status), and the stations return after midnight UTC.</li>
     <li><strong>Credit:</strong> "Powered by Met Office data", as the DataHub licence requires.</li>
     <li>The old Met Office DataPoint service was retired on 1 December 2025. The Met Office also publishes keyless open data on AWS, but it arrives 1–2 hours late, has no gusts, and is licensed CC BY-SA, so the app uses the DataHub instead.</li>
@@ -463,7 +463,7 @@ PAGE_BODIES: dict[str, str] = {
     <li>Paste the key in Settings › Stations › KNMI and click Save.</li>
 </ol>
 <ul>
-    <li><strong>You get:</strong> 10-minute reports of KNMI's automatic stations, about 50 of which measure temperature: temperature, humidity, dew point, wind and gusts, rain, cloud cover and present weather.</li>
+    <li><strong>You get:</strong> 10-minute reports of KNMI's automatic stations, about 50 of which measure temperature: temperature, humidity, dew point, wind (speed and direction) and gusts, rain, cloud cover and present weather.</li>
     <li><strong>Limits:</strong> free, also for commercial use, and the key does not expire. 1,000 requests an hour; the app makes about 7 an hour per area.</li>
     <li><strong>Credit:</strong> "Source: KNMI", linked to the dataset (CC BY 4.0). KNMI asks apps to make clear that they changed the data; the credits line says the station data are quality-checked and blended.</li>
 </ul>
@@ -475,7 +475,7 @@ PAGE_BODIES: dict[str, str] = {
     <li>Paste the client ID in Settings › Stations › MET Norway (Frost) and click Save. Do not paste the secret.</li>
 </ol>
 <ul>
-    <li><strong>You get:</strong> the latest reports of MET Norway's stations and of partner stations (for example the Norwegian road authority): temperature, humidity, dew point, wind and gusts, and rain. MET Norway's own stations count fully; partner stations count 70%, and their wind 40%, because their siting varies.</li>
+    <li><strong>You get:</strong> the latest reports of MET Norway's stations and of partner stations (for example the Norwegian road authority): temperature, humidity, dew point, wind (speed and direction) and gusts, and rain. MET Norway's own stations count fully; partner stations count 70%, and their wind 40%, because their siting varies.</li>
     <li><strong>Limits:</strong> free, with no fixed quota; MET Norway asks for no more than about one request a second on average. The app makes at most 2 requests per place every 5 minutes, and keeps the station list for a day.</li>
     <li><strong>Credit:</strong> "Data from The Norwegian Meteorological Institute" (NLOD 2.0 and CC BY 4.0).</li>
 </ul>
@@ -488,7 +488,7 @@ PAGE_BODIES: dict[str, str] = {
     <li>Copy the key, paste it in Settings › Stations › Météo-France and click Save. The row shows the key's expiry date.</li>
 </ol>
 <ul>
-    <li><strong>You get:</strong> 6-minute reports of about 2,000 stations across France: temperature, humidity, dew point, wind and gusts, and rain. The main network counts fully; the extended network (partner and secondary stations) 85%, and its wind 60%. These reports have no cloud cover or present weather.</li>
+    <li><strong>You get:</strong> 6-minute reports of about 2,000 stations across France: temperature, humidity, dew point, wind (speed and direction) and gusts, and rain. The main network counts fully; the extended network (partner and secondary stations) 85%, and its wind 60%. These reports have no cloud cover or present weather.</li>
     <li><strong>Limits:</strong> free; 100 requests a minute. The app reads at most one 6-minute package of all of France every 6 minutes (the newest one at least 10 minutes old, so that it is complete), plus the station list once a day.</li>
     <li><strong>Renewals:</strong> the key expires on the date you chose (the app shows it); the <strong>subscription</strong> must be renewed every 2 years under <strong>My APIs › Renew</strong>.</li>
     <li><strong>Credit:</strong> "Source: Météo-France" with the date of the data (Licence Ouverte / Etalab 2.0 asks for both), for example <em>Source: Météo-France, data of 25 Oct 14:06 UTC</em>.</li>
@@ -502,7 +502,7 @@ PAGE_BODIES: dict[str, str] = {
     <li>Paste the key in Settings › Stations › AEMET and click Save. The row shows when it expires.</li>
 </ol>
 <ul>
-    <li><strong>You get:</strong> hourly reports of about 830 automatic stations across Spain (including the Balearic and Canary Islands): temperature, humidity, dew point, wind and gusts, and rain. AEMET publishes each hour's reports about half an hour after the hour.</li>
+    <li><strong>You get:</strong> hourly reports of about 830 automatic stations across Spain (including the Balearic and Canary Islands): temperature, humidity, dew point, wind (speed and direction) and gusts, and rain. AEMET publishes each hour's reports about half an hour after the hour.</li>
     <li><strong>Limits:</strong> free; 40 requests a minute. The app reads all of Spain with at most 2 requests every 15 minutes.</li>
     <li><strong>Every 3 months:</strong> AEMET keys expire 3 months after they are issued, and there is no limit on renewals. Request a new key the same way and use <strong>Replace…</strong>. Older keys issued without an expiry date are being phased out: since 15 October 2026 AEMET refuses them more and more often, until they stop working altogether.</li>
     <li><strong>Credit:</strong> "Source: AEMET" with the date of the data (AEMET's legal notice asks for both), for example <em>Source: AEMET, data of 25 Oct 14:00 UTC</em>.</li>
@@ -605,6 +605,7 @@ W          = W_horiz(d) * W_vert(Δz) * trust * health</code></pre>
 <ul>
     <li><strong>Angular de-clustering (Shepard, 1968):</strong> stations clustered along the same compass bearing from the place share an angular shadow penalty <code>W_dir = 1 / (1 + shadow)</code>, so one dense cluster cannot outvote the other directions.</li>
     <li><strong>Freshness:</strong> weights decay with the age of the report, with time constants of 45 minutes for temperature, 20 minutes for wind and 15 minutes for the weather.</li>
+    <li><strong>Wind direction:</strong> averaged as a vector, never as a number of degrees: each station adds its speed in the direction the wind comes from, calm stations count as zero, and stations that report no direction are left out. No direction is given when the result is under 1 km/h or under a quarter of the mean speed (winds too spread or opposed); the "now" card then uses Open-Meteo's current direction, or draws no arrow.</li>
     <li><strong>Outlier control (Rousseeuw &amp; Croux, 1993):</strong> when at least 3 stations report, a sensor more than <code>3σ</code> from the median (σ = 1.4826 × MAD, at least 1.5 °C) is down-weighted by <code>(3σ / r)²</code>, so real contrasts of up to 4.5 °C are never penalised.</li>
     <li><strong>Short-range bias decay (Glahn &amp; Lowry, 1972):</strong> the observed temperature difference from the forecast fades out over the first 6 forecast hours: <code>ΔT(t) = ΔT_0 * exp(-Δt / 3.5h)</code>.</li>
 </ul>
